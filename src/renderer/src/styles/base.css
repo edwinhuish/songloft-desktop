@@ -577,6 +577,10 @@ a {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* 钉死在侧栏最底部。「我的歌单」那一段是内容高度，不会自己撑满侧栏，剩下的空间
+     原先就白白留在底部区**下面** —— 于是「设置 / 收起侧栏」悬在半空、下面空一大截。
+     auto 外边距把这截余量全部收在底部区上方，它就永远贴着底边。 */
+  margin-top: auto;
   padding-top: 10px;
   border-top: 1px solid var(--line-1);
 }
