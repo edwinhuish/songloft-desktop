@@ -55,7 +55,7 @@ jobs:
     outputs:
       tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # 要能解析出标签本身（还要判断标签指向的提交是否含最新 package.json），
           # 默认的浅克隆拿不到。
@@ -66,7 +66,7 @@ jobs:
       # pnpm 版本取自 package.json 的 packageManager，这里不重复声明版本号
       - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -129,14 +129,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event.inputs.tag || github.ref }}
 
       - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -150,7 +150,7 @@ jobs:
         run: pnpm run ${{ matrix.script }}
 
       - name: 上传产物
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.platform }}
           # 构建成功却一个文件都没有，说明平台配置写错了 —— 这种情况要报错而不是忽略。
@@ -173,13 +173,13 @@ jobs:
     steps:
       # fetch-depth: 0 —— 生成发布说明要能跑 `git log <前一个标签>..<当前标签>`，也要能
       # 解析出前一个标签；默认的浅克隆（fetch-depth: 1）两条都拿不到。
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: 下载三平台产物
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: dist-*
           path: artifacts
@@ -300,7 +300,7 @@ jobs:
       # 产物同时存档 30 天，防止 Release 被误删后无从追溯
       - name: 归档产物
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-assets
           retention-days: 30

@@ -32,10 +32,10 @@ jobs:
     name: check（类型 / Lint / 格式 / 单测）
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # pnpm 版本由 package.json 的 packageManager 字段决定，这里不再重复声明
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -50,9 +50,10 @@ jobs:
     #   且 libasound2 还没改名成 libasound2t64（24.04 起改名，直接 apt install 会失败）。
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
+
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -69,7 +70,7 @@ jobs:
       - run: pnpm run e2e
       - name: 失败时把截图与日志带出来
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-artifacts
           path: .e2e
@@ -81,9 +82,9 @@ jobs:
     needs: check
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
