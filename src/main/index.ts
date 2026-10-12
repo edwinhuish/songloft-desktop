@@ -152,6 +152,39 @@ function attachWindowHandlers(window: BrowserWindow): void {
     event.preventDefault()
     window.hide()
   })
+
+  // ── 进程级异常：不能让用户对着一个白窗口，也不能陷入重载死循环 ──────────
+  // 渲染进程崩掉（OOM / GPU 驱动）后 Chromium 不会自行恢复，重新加载是最直白的兜底；
+  // 但连续崩溃必须有闸门 —— 反复 reload 比白窗口更糟，这里退化成「只记日志」。
+  let lastCrashReloadAt = 0
+  const CRASH_RELOAD_COOLDOWN_MS = 30_000
+
+  window.webContents.on('render-process-gone', (_event, details) => {
+    console.error(`[main] 渲染进程退出：${details.reason}（exitCode=${details.exitCode}）`)
+    if (details.reason === 'clean-exit') return
+    if (Date.now() - lastCrashReloadAt < CRASH_RELOAD_COOLDOWN_MS) {
+      console.error('[main] 短时间内重复退出，放弃自动重载，请看上方日志')
+      return
+    }
+    lastCrashReloadAt = Date.now()
+    console.warn('[main] 正在重新加载界面')
+    window.webContents.reload()
+  })
+
+  // 卡死**不**自动重载：那会把用户正在做的事直接丢掉，只留日志等它自己缓过来
+  window.on('unresponsive', () => {
+    console.warn('[main] 界面无响应，等待其自行恢复')
+  })
+  window.on('responsive', () => {
+    console.warn('[main] 界面已恢复响应')
+  })
+
+  // file:// 加载失败（产物损坏、路径不对）时只剩白屏，至少要留下可查的日志。
+  // -3 是 ABORTED（正常的导航取消），不算错误。
+  window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    if (errorCode === -3) return
+    console.error(`[main] 页面加载失败：${errorDescription}（${errorCode}）${validatedURL}`)
+  })
 }
 
 // ────────────────────────────────── IPC ──────────────────────────────────
