@@ -1,0 +1,231 @@
+# 开发指南
+
+面向**人**的开发说明。
+
+同一份事实的另一种版本是 [`../AGENTS.md`](../AGENTS.md) —— 面向 AI 编码代理，侧重「改哪里、
+别踩哪个坑」；那些雷区的**因果推导**（为什么桌面身份不能以 `.desktop` 结尾、图标渲染为什么
+会静默丢渐变、歌词为什么会丢行…）只在 AGENTS.md 里，本文只给结论与出处，不重复论证。
+
+功能清单与「与上游 Flutter 版的差异」见 [`../README.md`](../README.md)。
+
+---
+
+## 1. 环境要求
+
+| 项 | 要求 | 说明 |
+|---|---|---|
+| Node.js | **>= 22.12.0** | 主进程与渲染层都用 ES2023+；端到端巡检依赖全局 `WebSocket` |
+| pnpm | 12.x | `package.json` 的 `packageManager` 已锁 `pnpm@12.4.1` |
+| Songloft 后端 | 默认 `http://localhost:58091` | 本仓库**不含后端**。默认管理员 `admin` / `admin` |
+
+后端没起来时应用不会崩，会停在「服务器连接失败」的登录页并给出可操作的提示。
+
+> 构建环境若导出 `ELECTRON_RUN_AS_NODE=1`（部分 agent / CI 的 shell 会这么干），Electron 会
+> 退化成纯 Node，主进程一启动就崩。本地跑脚本或调试时记得 `env -u ELECTRON_RUN_AS_NODE`。
+
+---
+
+## 2. 快速开始
+
+```bash
+pnpm install              # postinstall 会拉 Electron 二进制
+pnpm dev                  # 开发（渲染层 HMR）
+
+pnpm run check            # ★ 提交前必跑：typecheck + lint + format:check + test
+pnpm run build            # 产出 out/（main + preload + renderer）
+pnpm run e2e              # 端到端 UI 巡检（起 mock 后端 + 截图 + 断言）
+pnpm run pack:linux       # 打 deb / AppImage / tar.gz 到 release/
+pnpm run verify:package   # 校验打包产物的桌面集成项
+pnpm run icons            # 由 build/icon.svg 生成全套图标 + 托盘图
+pnpm run audit            # 依赖安全公告（刻意不进 check 的必过路径）
+```
+
+### 脚本一览
+
+| 脚本 | 作用 |
+|---|---|
+| `dev` | electron-vite 开发服务器，渲染层 HMR |
+| `build` | 先 `typecheck` 再 `electron-vite build`，产物在 `out/` |
+| `typecheck` | 分别检查主进程侧（`tsconfig.node.json`）与渲染层侧（`tsconfig.web.json`） |
+| `test` | vitest，覆盖 `src/shared` 与 `src/renderer/src/lib` 里的纯函数 |
+| `lint` / `format` | ESLint flat config / Prettier |
+| `audit` | `pnpm audit --audit-level=high`（安全公告会随时新增，不挡构建） |
+| `icons` | 从 `build/icon.svg` 渲染全套尺寸 + 托盘图，并断言渐变没丢 |
+| `pack:*` | electron-builder 打包，输出到 `release/`（目前只有 Linux 目标） |
+| `verify:package` | 校验 `.desktop` 文件名、`StartupWMClass`、AppArmor profile、托盘资源等 |
+| `e2e` | 端到端巡检，见第 6 节 |
+
+---
+
+## 3. 目录结构
+
+```
+src/
+├─ main/          Electron 主进程（Node 环境，唯一持有系统权限的地方）
+│  ├─ index.ts        生命周期、窗口创建后的监听装配、安全策略与 CSP、setDesktopName、userData 覆盖
+│  ├─ windows.ts      BrowserWindow 构造（contextIsolation / sandbox / nodeIntegration）
+│  ├─ media-keys.ts   媒体键（globalShortcut 兜底；优先走 Media Session 自动映射）
+│  ├─ store.ts        本地持久化：设置 / 凭据 / 服务器列表（JSON，落在 userData）
+│  ├─ probe.ts        后端探测与封面取字节（本地解码，避免为它关掉 webSecurity）
+│  ├─ tray.ts         托盘图标与菜单
+│  └─ app-menu.ts     应用菜单（窗口无边框、看不到菜单栏，但它提供全局加速键）
+├─ preload/        contextBridge 白名单 —— 渲染层唯一的对外通道（window.songloft）
+├─ shared/         两侧共用的**纯代码**，无副作用、可直接单测
+│  ├─ types.ts        后端数据模型（Song / Playlist / Facet…）
+│  ├─ ipc.ts          IPC 频道常量 + 跨进程传输的类型 + 默认设置
+│  ├─ bridge.ts       window.songloft 的接口定义（白名单的唯一事实源）
+│  ├─ lyric.ts        歌词四路合并 + 解析 + 当前行/逐字定位
+│  └─ links.ts        对外 URL 常量（本仓库 / 上游）
+└─ renderer/       React 19 + zustand
+   ├─ api/           client.ts（fetch 封装）/ endpoints.ts（端点清单，来自上游 Flutter 实现）
+   ├─ state/         useAuth / usePlayer / usePlaylists / useSettings / useUi / useToasts
+   ├─ pages/         10 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
+   │                 Recent / Folders / Search / Settings / Login
+   ├─ components/    Sidebar / TitleBar / SongTable / PlayerBar / LyricsView / CommandPalette /
+   │                 Panel / ContextMenu / Modal / Toasts / SelectionBar / …
+   ├─ hooks/         useSongList / usePlaylistSongs / useAsync
+   ├─ lib/           url / color / accent / format / concurrency
+   └─ styles/        tokens.css / base.css / components.css / index.css
+```
+
+技术栈版本表见 [`../AGENTS.md`](../AGENTS.md) 第 2 节。
+
+---
+
+## 4. 架构与数据流
+
+1. **渲染层是「不可信的」**，所有系统能力经 `preload` 白名单（`window.songloft`）转出，
+   注册在 `src/shared/bridge.ts`，实现在 `src/preload/index.ts`，由 `ipcRenderer.invoke` 落到主进程。
+2. **IPC 频道名一律用 `IPC` 常量**（`@shared/ipc`），不要写字符串字面量 —— 先加常量再接线。
+3. **播放**走 `HTMLAudioElement` + **Media Session API**。Chromium 会把它自动映射成 Linux 的
+   MPRIS / Windows 的 SMTC / macOS 的 Now Playing，**不需要**为每个平台写原生桥。
+   键盘媒体键另走 `globalShortcut` 兜底。
+4. **媒体地址带 `access_token` 查询参数**（`lib/url.ts`）：封面/音频是交给 `img` / `audio`
+   直接请求的，走不了带 `Authorization` 头的 fetch 封装。
+5. **封面取主色由主进程代取字节**（`cover:extract`）：渲染层直接读跨域 `canvas` 会污染画布。
+6. **持久化只在主进程**（`store.ts`）：设置（本地偏好）/ 凭据（token）/ 服务器列表。
+   渲染层启动时拉一次，之后靠 IPC 读写。
+
+- **为什么 `store.ts` 用「临时文件 + rename」落盘**：避免掉电/崩溃留下半截 JSON 把配置读挂。
+- **为什么 CSP 只在打包态注入**：开发态要连 HMR 的 websocket 与 react-refresh 的内联脚本，
+  套上 CSP 会直接打断热更新 —— 这里是刻意的取舍。
+
+---
+
+## 5. 安全模型
+
+| 措施 | 设置 | 为什么 |
+|---|---|---|
+| 上下文隔离 | `contextIsolation: true` | 渲染层拿不到 preload 的作用域 |
+| 沙箱 | `sandbox: true` | preload 也跑在沙箱里（因此 preload 产物必须是 CJS） |
+| Node 集成 | `nodeIntegration: false` | 渲染层没有 `require` / `process` |
+| 渲染层禁 import | ESLint 规则拦 `electron` / `node:fs` / `node:child_process` | 防止依赖被随手引进渲染层 |
+| CSP | **仅打包态**注入 | 开发态要连 HMR 的 websocket 与 react-refresh 内联脚本，套 CSP 会打断热更新 |
+| 导航围栏 | 所有外部链接交给 `shell.openExternal` | 窗口本身不允许被导航到外部页面 |
+| 权限请求 | 一律拒绝 | 播放器不需要麦克风/摄像头/通知/地理位置 |
+| 自签证书 | 只对当前 session 放开校验 | 自建后端常用自签证书，但不能全局降低校验 |
+| 封面取色 | 主进程代取字节 | 直接在渲染层 canvas 读跨域封面会污染画布 |
+
+---
+
+## 6. 打包与 Linux 桌面集成
+
+Linux 侧有几个会**静默失败**（不报错，但产物在用户机器上是坏的）的点。完整因果推导见
+[`../AGENTS.md`](../AGENTS.md) 第 8 节，这里只列结论：
+
+1. **`.desktop` 文件名 / `StartupWMClass` / `setDesktopName()` 是同一个身份的三处写法。**
+   本项目身份 = `io.github.edwinhuish.songloft-desktop`，四处取值必须一致：
+
+   | 位置 | 值 |
+   |---|---|
+   | `package.json` → `desktopName` | `io.github.edwinhuish.songloft-desktop` |
+   | `src/main/index.ts` → `app.setDesktopName()` | `io.github.edwinhuish.songloft-desktop` |
+   | `electron-builder.yml` → `appId` / `StartupWMClass` | `io.github.edwinhuish.songloft-desktop` |
+   | 安装后的 `.desktop` 文件名 | `io.github.edwinhuish.songloft-desktop.desktop` |
+
+   ⚠️ **身份刻意不以 `.desktop` 结尾**。若身份自己也以 `.desktop` 结尾（历史上的
+   `com.songloft.desktop` 正好踩中），「文件名 → 身份」会多削一层，只能靠「多写一层后缀」抵消
+   —— 而这三种写法**看起来都对、构建也不报错**。改回旧形态前先读 AGENTS.md 8.1。
+
+   对不上的症状不只是图标：GNOME 50 起这个身份还会被拿去 `xdg-desktop-portal` 换
+   `globalShortcut` 授权，对不上时门户直接拒绝、**错误不会冒到应用层**。
+
+   **改上面四处中的任何一处，必须同时改其余几处，并重跑 `pnpm run verify:package`。**
+
+2. **AppImage 的 AppArmor profile 要单独提供。** deb 那份由 electron-builder 内建生成并自动安装，
+   AppImage 没有安装步骤，必须靠 `extraResources` 带上（`build/apparmor-profile`）。
+3. **托盘图标不能指望 `build/` 进包。** `buildResources` 不参与打包，运行期要读的真实文件
+   必须写进 `extraResources`（`build/icon-source.png` → `resources/tray.png`）；开发态读
+   `build/tray-256.png`。
+4. **图标渲染会静默丢渐变。** ImageMagick 渲 SVG 时渐变可能整体变黑白且退出码为 0。
+   `scripts/make-icons.sh` 因此改走 Chrome 渲染、并在渲染后用**色相直方图**断言至少 3 个色相族
+   （另有灰度图反向验证，确保断言本身有效）。
+5. **AppImage 的 FUSE2 依赖。** Ubuntu 24.04+ 起 `libfuse2` 改名 `libfuse2t64`，用
+   `toolsets.appimage: '1.0.3'` 换成静态 runtime，彻底去掉这个依赖。
+
+> 当前只有 Linux x64 的打包目标（deb / AppImage / tar.gz）。Windows / macOS 的目标、签名与
+> 公证尚未落地 —— 新增时除了 `electron-builder.yml` 的 `win:` / `mac:` 段，还要一并处理
+> `.ico` / `.icns` 图标（`scripts/make-icons.sh` 目前只产 PNG）与 macOS 的窗口形态。
+
+---
+
+## 7. 测试
+
+### 单元测试
+
+```bash
+pnpm test
+```
+
+覆盖 `src/shared` 与 `src/renderer/src/lib` 里的纯函数。目前最要紧的一批用例锁的是
+`lyric.ts` 的一个**静默丢行**缺陷：后端返回的四路歌词里，`lxlyric`（逐字）常常只覆盖副歌，
+而早先的实现是 `base = wordSource ?? main` —— 一旦有逐字歌词就整份换掉主歌词，于是主歌词里
+其余的行被**整行丢弃**，界面上表现为「歌词莫名其妙少几句」，且没有任何报错。
+
+同一批用例还覆盖了时间戳对齐：原先用「按 20ms 分桶」匹配，`12.000` 与 `12.010` 会分别落进
+相邻两桶、恰好跨桶边界就漏配。现在改成单调游标 + 容差内最近邻。
+
+`url.test.ts` 锁的是「请求到底打到哪个地址」：token 有没有带上并正确编码、追加参数该用
+`?` 还是 `&`、外链 CDN 的地址不能被我们改 query（可能带签名）、`track` 与 `format` 不能同时出现。
+
+### 端到端巡检
+
+```bash
+pnpm run e2e
+```
+
+`scripts/e2e/` 下是一个最小 mock 后端 + 基于 CDP 的驱动器：起一个**隔离的**虚拟显示
+（不会抢你的焦点、也不会动你的真实配置），启动构建产物，用**真实 DOM 交互**逐个界面点击、
+截图并**断言**。产物在 `.e2e/`（已 gitignore）。
+
+为什么断言而不是只截图：上面那个歌词丢行缺陷就是「截图看着正常、实际少了几行」的典型。
+巡检因此断言歌词面板必须出现 10 行（mock 的主歌词 10 行、逐字源只覆盖 4 行），
+并断言曲库的类型筛选真的收敛了行数（43 → 41 → 0）、流派分面的**卡片文字**确实换成了流派名
+（卡片数同为 5，只数个数区分不出「有没有点中 chip」）。
+
+一次完整巡检覆盖 **22 个界面状态**，全部截图的汇总见 [`e2e-walkthrough.png`](e2e-walkthrough.png)。
+
+---
+
+## 8. 开发约定
+
+* 提交前至少跑 `pnpm run check`（类型 + lint + 格式 + 单测）；动了界面再加 `pnpm run e2e`，
+  动了打包配置再加 `pnpm run pack:linux` + `pnpm run verify:package`。
+* 渲染层**不得**直接 `import electron` / `node:fs` / `node:child_process`，能力一律经 `preload`
+  白名单（`window.songloft`）转出 —— ESLint 会拦，理由见上面「安全模型」。
+* 纯逻辑（歌词解析、URL 拼接等）放 `src/shared/`，两侧共用且可直接单测。
+* **代码风格**：Prettier 说了算（`printWidth: 100`、无分号、单引号）。`pnpm run format` 一键修，
+  不要为了让 `format:check` 通过而加 `prettier-ignore`。
+* **注释与文档用中文**，且解释「**为什么**」而不是复述代码。
+* **不要为了通过 lint 而写 `eslint-disable`**：先判断规则是不是在指出真问题。
+
+---
+
+## 9. 相关文档
+
+| 文档 | 内容 |
+|---|---|
+| [`../README.md`](../README.md) | 这是什么、有哪些功能、与上游 Flutter 版的差异 |
+| [`../AGENTS.md`](../AGENTS.md) | 面向 AI 编码代理的项目说明：架构地图、命令、约定、雷区 |
+| [`electron-migration-evaluation.md`](electron-migration-evaluation.md) | 换栈评估报告：10 条技术路线横向对比与结论 |
+| [`../NOTICE`](../NOTICE) | 第三方组件署名与编解码器许可说明 |

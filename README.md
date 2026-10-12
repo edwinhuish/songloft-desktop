@@ -2,13 +2,120 @@
 
 > 本仓库：<https://github.com/edwinhuish/songloft-desktop>
 
-[Songloft](https://github.com/songloft-org/songloft-player)（Flutter 客户端 + Go 后端）的 **Electron 桌面客户端**。
-Songloft 本身是「客户端 + 自建 Go 后端」的结构：后端管曲库与标签，客户端只做展示与播放。
-本仓库是客户端的**桌面端重写版**，只考虑 Windows / macOS / Linux 桌面，不承载移动端与 Web 端。
+[Songloft](https://github.com/songloft-org/songloft-player) 的 **Electron 桌面客户端**。
 
-> 换栈的完整取舍（性能、体积、跨平台一致性、开发效率、生态、维护成本，以及 Tauri / Wails /
-> Flutter / Qt / Avalonia / Compose Multiplatform / 全原生 / uni-app x / Lynx 的横向对比）
-> 见 [`docs/electron-migration-evaluation.md`](docs/electron-migration-evaluation.md)。
+Songloft 是「客户端 + 自建 Go 后端」的结构：后端管曲库、标签与转码，客户端只做展示与播放。
+本仓库重写的是**客户端**，只面向 Windows / macOS / Linux 桌面，不含移动端与 Web 端，
+也**不含后端**（后端见 [songloft-org/songloft](https://github.com/songloft-org/songloft)）。
+
+> **为什么换成 Electron**：完整的选型论证（性能、体积、跨平台一致性、开发效率、生态与维护
+> 成本，以及 vs Tauri / Wails / Qt / Avalonia / Compose Multiplatform / 全原生 等 10 条技术
+> 路线的横向对比）见 [`docs/electron-migration-evaluation.md`](docs/electron-migration-evaluation.md)。
+
+---
+
+## 功能
+
+### 曲库与检索
+
+- 服务端分页 + 无限滚动；按类型（本地 / 电台）与歌手、专辑、流派、语种、风格分面筛选，7 种排序
+- 关键词搜索；`Ctrl+K` 命令面板（命令 / 歌曲 / 歌单混合检索）
+- 多选与批量操作（播放、入队、加入歌单、收藏、移除、删除），支持「全选当前筛选结果」
+- 文件夹浏览：按目录树逐层进入
+
+### 歌单与收藏
+
+- 歌单创建 / 编辑 / 删除、封面、置顶、可见性；`position` 排序下可拖拽重排
+- 把歌曲行直接拖到侧栏歌单即可加入
+- 收藏与最近播放（本机记录，最多 200 条）
+
+### 播放
+
+- 播放 / 暂停 / 上一首 / 下一首；顺序、列表循环、单曲循环、随机四种模式
+- 播放队列：任意来源入队、拖拽重排、双击跳转、清空；**跨重启恢复**（且不会自动出声）
+- 原唱 / 伴奏音轨切换（后端提供多音轨时）
+- 音量与静音、音质上限、后端响度归一化
+- **系统媒体控件**：通过 Media Session 交给 Chromium 自动映射到 Linux 的 MPRIS、Windows 的
+  SMTC、macOS 的 Now Playing，不需要为每个平台写原生桥；键盘媒体键另有兜底
+
+### 歌词
+
+- 四路歌词合并（主歌词 / 翻译 / 罗马音 / 逐字），逐字高亮，点击任意一行直接跳转过去
+- 翻译与罗马音可单独开关，字号可调
+
+### 曲库维护
+
+- 扫描（带进度与取消）、重新导入、音乐根目录与排除目录
+- 清理失效歌曲、重复歌曲检测（音频指纹）
+
+### 外观与桌面集成
+
+- 亮色 / 暗色 / 跟随系统；强调色可**跟随封面取主色**做整页联动；界面密度、玻璃质感可调
+- 无边框窗口 + 自绘标题栏（双击最大化）、窗口尺寸记忆、单实例运行
+- 托盘菜单（当前曲目、播放控制、显示 / 隐藏窗口、退出），可选「关闭到托盘」
+- 多服务器管理与自签证书开关；登录令牌可查看与吊销
+
+---
+
+## 安装与运行
+
+需要自建一个 Songloft 后端（默认 `http://localhost:58091`，默认管理员 `admin` / `admin`）。
+首次启动在登录页填写后端地址；自签证书可在设置里单独放开。后端没起来时应用不会崩，
+会停在带可操作提示的登录页。
+
+Linux x64 提供三种形态：
+
+| 形态 | 适用 |
+|---|---|
+| `.deb` | Debian / Ubuntu |
+| `AppImage` | 免安装，双击即用 |
+| `.tar.gz` | 解压即用，适合自行放置 |
+
+**目前没有自动更新**，升级需要手动替换。自行构建的方式见 [`docs/development.md`](docs/development.md)。
+
+---
+
+## 平台支持现状
+
+代码是按三平台（Windows / macOS / Linux）写的，但**当前只交付 Linux x64**：打包配置里只有
+Linux 目标，Windows / macOS 的安装包、代码签名与公证尚未落地，也尚未在这两个平台上做过验证
+—— 例如 macOS 上无边框窗口的窗口控制仍在右上角，与系统惯例不符。
+
+---
+
+## 与上游 Flutter 版的差异
+
+### 已对齐
+
+曲库浏览（类型 / 分面 / 排序 / 无限滚动）、歌单增删改与拖拽重排、收藏、最近播放、文件夹浏览、
+逐字歌词与点击跳转、播放队列、命令面板、扫描与重复检测、设置项、亮暗主题、多服务器与令牌管理。
+
+### 尚未实现
+
+| 能力 | 说明 |
+|---|---|
+| `jsplugin` 插件系统 | 上游约 6,100 行，是最大的能力缺口。上游把 JS 当扩展语言、宿主却是 Dart；换到 Electron 后宿主本身就是 JS，插件有机会在桌面端与移动端复用 |
+| 均衡器 | 上游直接给 libmpv 设音频滤镜；本端可用 Web Audio 的 `BiquadFilterNode` 实现 |
+| 无缝播放 / 淡入淡出 | 上游由 mpv 提供；`HTMLAudioElement` 不原生支持 gapless |
+| DLNA 投送 | 上游约 989 行 |
+| 桌面歌词悬浮窗 | 上游约 690 行 |
+| 迷你播放器 | 上游播放器有桌面 / 移动 / 迷你三种形态 |
+| Bundle 本地模式 | 上游可内嵌 Go 后端（桌面端以子进程拉起 `songloft-server`），免服务器、启动即自动登录。**本端只支持连接远程后端** |
+| 歌曲元数据编辑、手动指定歌词、添加网络歌曲 | 后端端点已写进客户端，界面入口尚未做 |
+| 自动更新 / 崩溃上报 | 上游设置里有「升级」入口；本端升级需手动替换安装包，也没有崩溃上报 |
+| 多语言界面 | 上游有中 / 英 / 西三语（约 22,941 行本地化产物），本端界面目前只有中文 |
+
+### 工程与实现上的差异
+
+| 维度 | 上游 Flutter 版 | 本版本 |
+|---|---|---|
+| 交付平台 | 六端（含移动端与 Web） | 仅桌面三平台，当前实际交付 Linux x64 |
+| 音频链路 | 横跨 8 个包 + libmpv 原生库 + 每平台一套系统媒体桥 | `HTMLAudioElement` + Media Session，解码在 Chromium 内部 |
+| 界面渲染 | 自带 Skia / Impeller | 自带 Chromium，三平台同一渲染引擎 |
+| 安装体积 | deb 声明安装体积 100 MB | 实测安装后 284 MB、deb 95.4 MiB、AppImage 111.8 MiB —— 约 2.8 倍；内存仍是明显劣势 |
+| 插件宿主 | Dart 宿主跑 JS 插件，需要跨语言桥 | 宿主本身就是 JS（插件系统尚未实现） |
+
+体积与内存的实测口径见 [`docs/electron-migration-evaluation.md`](docs/electron-migration-evaluation.md) 第 3.1 节。
 
 ---
 
@@ -16,201 +123,16 @@ Songloft 本身是「客户端 + 自建 Go 后端」的结构：后端管曲库�
 
 | 文档 | 内容 |
 |---|---|
-| [`AGENTS.md`](AGENTS.md) | 面向 AI 编码代理的通用说明（也适合新人上手）：架构地图、命令、约定、雷区 |
-| [`docs/electron-migration-evaluation.md`](docs/electron-migration-evaluation.md) | 换栈评估报告：10 条技术路线横向对比与结论 |
+| [`docs/development.md`](docs/development.md) | 开发指南：环境要求、命令、目录结构、架构、安全模型、打包要点、测试 |
+| [`AGENTS.md`](AGENTS.md) | 面向 AI 编码代理的项目说明（架构地图、约定、雷区） |
+| [`docs/electron-migration-evaluation.md`](docs/electron-migration-evaluation.md) | 换栈评估报告：10 条技术路线的横向对比与结论 |
+| [`NOTICE`](NOTICE) | 随产物分发的第三方组件署名与编解码器许可说明 |
 | [`docs/e2e-walkthrough.png`](docs/e2e-walkthrough.png) | 端到端巡检覆盖的 22 个界面状态汇总图 |
-
----
-
-## 环境要求
-
-| 项 | 要求 | 说明 |
-|---|---|---|
-| Node.js | **>= 22.12.0** | 渲染层与主进程都用 ES2023+；E2E 巡检依赖全局 `WebSocket` |
-| pnpm | 12.x | `packageManager` 已锁 `pnpm@12.4.1` |
-| Songloft 后端 | 默认 `http://localhost:58091` | 本仓库**不含后端**。默认管理员 `admin` / `admin` |
-
-后端没起来时应用不会崩，会停在「服务器连接失败」的登录页并给出可操作的提示。
-
----
-
-## 快速开始
-
-```bash
-pnpm install          # 会通过 postinstall 拉取 Electron 二进制
-pnpm dev              # 开发（HMR）
-
-pnpm run check        # 类型 + lint + 格式 + 单测，提交前跑这个
-pnpm run build        # 产出 out/（主进程 + preload + 渲染层）
-pnpm run pack:linux   # 打 deb / AppImage / tar.gz 到 release/
-pnpm run verify:package   # 校验打包产物里的桌面集成项
-pnpm run e2e          # 端到端 UI 巡检（起 mock 后端 + 截图 + 断言）
-```
-
-### 脚本一览
-
-| 脚本 | 作用 |
-|---|---|
-| `dev` | electron-vite 开发服务器，渲染层 HMR |
-| `build` | 先 `typecheck` 再 `electron-vite build`，产物在 `out/` |
-| `typecheck` | 分别检查主进程侧（`tsconfig.node.json`）与渲染层侧（`tsconfig.web.json`） |
-| `test` | vitest，覆盖 `src/shared` 里的纯函数（歌词解析等） |
-| `lint` / `format` | ESLint flat config / Prettier |
-| `icons` | 从 `build/icon.svg` 渲染全套尺寸 + 托盘图，并断言渐变没丢（见下） |
-| `pack:*` | electron-builder 打包，输出到 `release/` |
-| `verify:package` | 校验 `.desktop` 文件名、`StartupWMClass`、AppArmor profile、托盘资源等 |
-| `e2e` | 端到端巡检，见「测试」一节 |
-
----
-
-## 架构
-
-```
-src/
-├─ main/        Electron 主进程（Node 环境，唯一有系统权限的地方）
-├─ preload/     contextBridge，唯一的渲染层↔主进程通道
-├─ shared/      两侧共用的纯代码：类型、IPC 频道常量、歌词解析
-└─ renderer/    React 19 + zustand 的界面层
-```
-
-### 安全模型
-
-渲染层被当作**不可信**对待，所有系统能力都要经 `preload` 白名单转出：
-
-| 措施 | 设置 | 为什么 |
-|---|---|---|
-| 上下文隔离 | `contextIsolation: true` | 渲染层拿不到 preload 的作用域 |
-| 沙箱 | `sandbox: true` | preload 也跑在沙箱里（因此 preload 产物必须是 CJS） |
-| Node 集成 | `nodeIntegration: false` | 渲染层没有 `require` / `process` |
-| 渲染层禁 import | ESLint 规则拦 `electron` / `node:fs` / `node:child_process` | 防止依赖被随手引进渲染层 |
-| CSP | **仅打包态**注入 | 开发态要连 HMR 的 websocket 与 react-refresh 内联脚本，套 CSP 会打断热更新 |
-| 导航围栏 | 所有外部链接交给 `shell.openExternal` | 窗口本身不允许被导航到外部页面 |
-| 自签证书 | 只对当前 session 放开校验 | 自建后端常用自签证书，但不能全局降低校验 |
-| 封面取色 | 主进程代取字节 | 直接在渲染层 canvas 读跨域封面会污染画布 |
-
-媒体播放走 `HTMLAudioElement` + **Media Session API**：Chromium 会把它自动映射成 Linux 的
-MPRIS、Windows 的 SMTC、macOS 的 Now Playing，不需要为每个平台写一套原生桥。键盘媒体键另走
-`globalShortcut` 兜底。
-
----
-
-## Linux 打包要点
-
-几个会**静默失败**（不报错，但产物在用户机器上是坏的）的点：
-
-1. **`.desktop` 文件名 / `StartupWMClass` / `setDesktopName()` 是同一个身份的三处写法。**
-   任一处对不上，GNOME 下图标会静默回落成占位齿轮。权威口径来自 Electron 文档：
-
-   > `app.setDesktopName(name)` — `name` 是 `.desktop` 的**文件名**，必须与安装后 `.desktop`
-   > 文件的文件名一致；`.desktop` 后缀可省。**这个名称去掉 `.desktop` 后缀就是应用身份**，
-   > 在 Wayland 下作为 XDG 的 `app_id`、X11 下作为 `WM_CLASS`。
-
-   本项目三处取值（身份 = `io.github.edwinhuish.songloft-desktop`）：
-
-   | 位置 | 值 | 含义 |
-   |---|---|---|
-   | `package.json` → `desktopName` | `io.github.edwinhuish.songloft-desktop` | **应用身份**（反域名形态） |
-   | `src/main/index.ts` → `app.setDesktopName()` | `io.github.edwinhuish.songloft-desktop` | 同上 |
-   | `electron-builder.yml` → `StartupWMClass` | `io.github.edwinhuish.songloft-desktop` | 同上 |
-   | 安装后的 `.desktop` 文件名 | `io.github.edwinhuish.songloft-desktop.desktop` | 身份 + `.desktop` |
-
-   ⚠️ **为什么身份刻意不以 `.desktop` 结尾。** 文件名与身份之间是「**去掉结尾那层 `.desktop`**」的
-   关系，而 electron-builder 的算术是固定的（`getDesktopFileName()` 削掉一层、`FpmTarget`
-   拼装时再补一层）。若身份**自己也以 `.desktop` 结尾**（例如 `com.songloft.desktop`），
-   这一步就会多削一层，只能靠「多写一层后缀」抵消：
-
-   | `desktopName` | 落地的文件名 | 文件名去掉扩展名 = 身份 | 结论 |
-   |---|---|---|---|
-   | `com.songloft.desktop` | `com.songloft.desktop` | `com.songloft` | ❌ 身份被吃掉了应用段 |
-   | `com.songloft.desktop.desktop` | `com.songloft.desktop.desktop` | `com.songloft.desktop` | ✅ 但配置里出现重复后缀 |
-
-   两种写法**看起来都"以 `.desktop` 结尾"**、`StartupWMClass` 也都对、构建更不报错 ——
-   所以本仓库直接改用反域名形态 `io.github.edwinhuish.songloft-desktop`，**三类取值完全一致、
-   没有重复后缀**，这一整类歧义就不存在了。
-
-   之所以不能只当"外观问题"：从 GNOME 50 起这个身份还会被拿去 `xdg-desktop-portal` 换
-   `globalShortcut` 授权，身份对不上时门户直接拒绝、**错误不会冒到应用层**（Electron #52218）
-   —— 本项目的媒体键兜底正好走这条路。
-
-   `pnpm run verify:package` 会把上面这几项连同 postinst 引用的 AppArmor profile 一起断言掉。
-2. **AppImage 的 AppArmor profile 要单独提供。** deb 那份由 electron-builder 内建生成并自动安装，
-   AppImage 没有安装步骤，必须靠 `extraResources` 带上（`build/apparmor-profile`）。
-3. **托盘图标不能指望 `build/` 进包。** `buildResources` 不参与打包，运行期要读的真实文件
-   必须写进 `extraResources`（`build/icon-source.png` → `resources/tray.png`）。
-4. **图标渲染会静默丢渐变。** ImageMagick 渲 SVG 时渐变可能整体变黑白且退出码为 0。
-   `scripts/make-icons.sh` 因此改走 Chrome 渲染、并在渲染后用色相直方图断言至少 3 个色相族
-   （还做了灰度图反向验证，确保断言本身有效）。
-5. **AppImage 的 FUSE2 依赖。** Ubuntu 24.04+ 起 `libfuse2` 改名 `libfuse2t64`，
-   用 `toolsets.appimage: '1.0.3'` 换成静态 runtime，彻底去掉这个依赖。
-
-> 构建环境若导出 `ELECTRON_RUN_AS_NODE=1`（部分 agent / CI 的 shell 会这么干），Electron 会
-> 退化成纯 Node，主进程一启动就崩。本地跑脚本或调试时记得 `env -u ELECTRON_RUN_AS_NODE`。
-
----
-
-## 测试
-
-### 单元测试
-
-```bash
-pnpm test
-```
-
-覆盖 `src/shared` 里的纯函数。目前最要紧的一批用例锁的是 `lyric.ts` 的一个**静默丢行**缺陷：
-后端返回的四路歌词里，`lxlyric`（逐字）常常只覆盖副歌，而早先的实现是
-`base = wordSource ?? main` —— 一旦有逐字歌词就整份换掉主歌词，于是主歌词里其余的行被
-**整行丢弃**，界面上表现为「歌词莫名其妙少几句」，且没有任何报错。
-
-同一批用例还覆盖了时间戳对齐：原先用「按 20ms 分桶」匹配，`12.000` 与 `12.010` 会分别落进
-相邻两桶、恰好跨桶边界就漏配。现在改成单调游标 + 容差内最近邻。
-
-### 端到端巡检
-
-```bash
-pnpm run e2e
-```
-
-`scripts/e2e/` 下是一个最小 mock 后端 + 基于 CDP 的驱动器：起一个**隔离的**虚拟显示
-（不会抢你的焦点、也不会动你的真实配置），启动构建产物，用**真实 DOM 交互**逐个界面点击、
-截图并**断言**。产物在 `.e2e/`（已 gitignore）。
-
-为什么断言而不是只截图：上面那个歌词丢行缺陷就是「截图看着正常、实际少了几行」的典型。
-巡检因此断言歌词面板必须出现 10 行（mock 的主歌词 10 行、逐字源只覆盖 4 行），
-并断言曲库的类型筛选真的收敛了行数（43 → 41 → 0）、流派分面的**卡片文字**确实换成了流派名
-（卡片数同为 5，只数个数区分不出「有没有点中 chip」）。
-
-一次完整巡检覆盖 **22 个界面状态**，全部截图的汇总见 [`docs/e2e-walkthrough.png`](docs/e2e-walkthrough.png)。
-
----
-
-## 与上游 Flutter 版的能力差异
-
-已对齐：曲库浏览（类型 / 分面 / 排序 / 无限滚动）、歌单增删改与拖拽重排、收藏、最近播放、
-文件夹浏览、逐字歌词与点击跳转、播放队列、命令面板、扫描与重复检测、设置项。
-
-尚未实现（换栈后需要重新做，建议按此顺序排期）：
-
-| 能力 | 备注 |
-|---|---|
-| `jsplugin` 插件系统 | 上游约 6,100 行。**这是换栈唯一可能产生溢出收益的地方**：上游把 JS 当扩展语言、宿主却是 Dart，换成 Electron 后宿主本身就是 JS，插件有机会在移动端与桌面端复用 |
-| 均衡器 | 可用 Web Audio 的 `BiquadFilterNode` 实现 |
-| 无缝播放 / 淡入淡出 | Chromium 的 `HTMLAudioElement` 不原生支持 gapless，需要预解码或 Web Audio 拼接 |
-| DLNA 投送 | 生态空白，建议先 spike 再决定 |
-| 桌面歌词 | 需要额外的透明置顶窗口 |
-
----
-
-## 开发约定
-
-* 提交前至少跑 `pnpm run check`（类型 + lint + 格式 + 单测）；动了界面再加 `pnpm run e2e`，
-  动了打包配置再加 `pnpm run verify:package`。
-* 渲染层**不得**直接 `import electron` / `node:fs` / `node:child_process`，能力一律经 `preload`
-  白名单（`window.songloft`）转出 —— ESLint 会拦，理由见上面「安全模型」。
-* 纯逻辑（歌词解析、URL 拼接等）放 `src/shared/`，两侧共用且可直接单测。
-* 面向 AI 编码代理的完整说明（目录职责、命令、雷区、验证方式）见 [`AGENTS.md`](AGENTS.md)。
 
 ---
 
 ## 许可
 
-Apache-2.0。上游 [songloft-player](https://github.com/songloft-org/songloft-player) 亦为 Apache-2.0。
+Apache-2.0，正文见 [`LICENSE`](LICENSE)。上游
+[songloft-player](https://github.com/songloft-org/songloft-player) 亦为 Apache-2.0。
+随产物分发的第三方组件、以及 Chromium 内置编解码器需要自行确认的许可事项，见 [`NOTICE`](NOTICE)。
