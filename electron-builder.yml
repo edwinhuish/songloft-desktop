@@ -36,7 +36,13 @@ linux:
     - target: tar.gz
       arch: [x64]
   executableName: songloft-desktop
-  icon: build/icon-source.png
+  # ★ 指**目录**（scripts/make-icons.sh 生成的 16…512 全套），不要指单张母版：
+  #   electron-builder 会把目录里每个文件按它自己声明的尺寸投进
+  #   usr/share/icons/hicolor/<size>/apps/<executableName>.png。
+  #   给它单张 1024×1024 时，AppImage 里就只会出现 hicolor/1024x1024/ 这一个目录 ——
+  #   而 hicolor 的 index.theme **没有声明** 1024x1024，于是「条目里的 Icon=」这一步会静默
+  #   查不到任何文件（桌面集成工具照搬这套目录结构也一样查不到）。全部尺寸都落在声明过的目录里。
+  icon: build/icons
   category: AudioVideo
   synopsis: 插件化、无广告的免费音乐播放器
   description: >-

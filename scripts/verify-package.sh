@@ -141,6 +141,49 @@ check_desktop_file() { # $1=.desktop 路径 $2=说明；Exec 值经 $DESKTOP_EXE
   DESKTOP_EXEC="$exec_val"
 }
 
+# ★ 图标这条链要断就断两处，都得断言（症状都只是「任务栏里一个齿轮」，
+#   构建 / 装包 / 启动全程不报错）：
+#     1) 条目里的 Icon= 必须能在 hicolor 里找到**同名**文件（改名 / 换图标目录即漂移）；
+#     2) 那些文件所在的尺寸目录必须是图标主题**声明过**的 —— hicolor 的 index.theme 只列到
+#        512x512，只带一个 1024x1024 的产物在这一步会静默查不到（真实踩过：AppImage 只带
+#        hicolor/1024x1024，桌面集成工具照搬过去也一样查不到，所以 linux.icon 指了 build/icons 目录）。
+check_icon_link() { # $1=.desktop 路径 $2=icons 根目录 $3=说明
+  local name hits line size declared='' count undeclared=0
+  name="$(desktop_key "$1" Icon)"
+  if [ -z "$name" ]; then
+    bad "$3 没有 Icon=，无法核对图标是否真的存在"
+    return 0
+  fi
+
+  hits="$(find "$2" -path "*/hicolor/*/apps/$name.png" 2>/dev/null)"
+  if [ -z "$hits" ]; then
+    bad "$3 Icon=$name 在 $2 下找不到同名 png —— 任务栏会回落成占位齿轮"
+    return 0
+  fi
+  count="$(printf '%s\n' "$hits" | wc -l | tr -d ' ')"
+
+  # 尺寸断言以本机 hicolor 的声明清单为准；没有这份 index.theme 就只报个数（拿不到基准就不猜）
+  if [ -f /usr/share/icons/hicolor/index.theme ]; then
+    declared="$(sed -n 's/^Directories=//p' /usr/share/icons/hicolor/index.theme | tr -d '\r')"
+  fi
+
+  while IFS= read -r line; do
+    size="$(basename "$(dirname "$(dirname "$line")")")"
+    if [ -n "$declared" ]; then
+      case ",$declared," in
+        *",$size/apps,"*) ;;
+        *)
+          undeclared=$((undeclared + 1))
+          bad "$3 图标落在 hicolor/$size/apps/，但 index.theme 没有声明这个尺寸目录 —— 主题查不到（静默）"
+          ;;
+      esac
+    fi
+  done <<<"$hits"
+
+  [ "$undeclared" -eq 0 ] \
+    && good "$3 Icon=$name 命中 $count 个尺寸的 hicolor 图标，尺寸目录均已被声明"
+}
+
 # ────────────────────────────────── deb ──────────────────────────────────
 DEB="$(find "$DIST" -maxdepth 1 -name '*.deb' | head -1)"
 if [ -z "$DEB" ]; then
@@ -173,6 +216,7 @@ else
     [ -n "$ICONS" ] \
       && good "hicolor 图标已安装（$(printf '%s\n' "$ICONS" | wc -l | tr -d ' ') 个尺寸）" \
       || bad "usr/share/icons/hicolor 下缺少 $EXECUTABLE.png"
+    check_icon_link "$DESKTOP_FILE" "$WORK/deb/usr/share/icons" 'deb'
   fi
 
   # 4) extraResources：build/ 不进包，运行期要读的图标必须另投一份。
@@ -253,12 +297,14 @@ else
       && good "resources/apparmor/$EXECUTABLE 在包里" \
       || bad "resources/apparmor/$EXECUTABLE 缺失（AppImage 首次运行要手动装 profile）"
 
-    # AppImage 顶层的 .desktop 会被 AppRun 装到用户目录
+    # AppImage 顶层的 .desktop 是给集成工具看的（GNOME 看不到挂载点里的它，
+    # 运行期靠 src/main/desktop-entry.ts 自建一份用户级条目）
     AI_DESKTOP="$(find "$APPDIR" -maxdepth 1 -name '*.desktop' | head -1)"
     if [ -z "$AI_DESKTOP" ]; then
       bad "AppImage 内没有 .desktop"
     else
       check_desktop_file "$AI_DESKTOP" 'AppImage'
+      check_icon_link "$AI_DESKTOP" "$APPDIR/usr/share/icons" 'AppImage'
     fi
   fi
 fi
