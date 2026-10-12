@@ -25,7 +25,6 @@ import {
   IconMaximize,
   IconMenu,
   IconMinimize,
-  IconQueue,
   IconRestore,
   IconSearch,
   IconSettings
@@ -101,17 +100,12 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
       key: 'playlists',
       label: '歌单',
       icon: <IconListMusic size={16} />,
-      onClick: () => navigate({ name: 'playlists' })
-    },
-    {
-      key: 'my-playlists',
-      label: '我的歌单',
-      icon: <IconQueue size={16} />,
       /**
-       * 二级菜单 = 歌单名单本身。它就是「跳到某个歌单」的一条捷径，所以点名字直接进，
-       * 不再经过歌单列表页。空的时候给一条不可点的说明，而不是弹一个空框 ——
-       * 空框会让人以为是坏了。
+       * 「双面」项：悬浮列出歌单名单（跳到某个歌单的捷径），单击进歌单列表页 ——
+       * 想直奔某个歌单还是想先看总览，两种意图都不必再绕一步。
+       * 名单为空时给一条不可点的说明，而不是弹一个空框 —— 空框会让人以为是坏了。
        */
+      onClick: () => navigate({ name: 'playlists' }),
       children: myPlaylists.length
         ? myPlaylists.map((playlist) => ({
             key: `playlist-${playlist.id}`,
@@ -119,7 +113,7 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
             icon: <Cover coverUrl={playlist.cover_url} width={48} size={20} radius={4} />,
             onClick: () => navigate({ name: 'playlist', id: playlist.id })
           }))
-        : [{ key: 'my-playlists-empty', label: '还没有歌单', disabled: true }]
+        : [{ key: 'playlists-empty', label: '还没有歌单', disabled: true }]
     },
     {
       key: 'favorites',

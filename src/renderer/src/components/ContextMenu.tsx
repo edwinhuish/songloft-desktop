@@ -21,7 +21,13 @@ export interface MenuItem {
   header?: boolean
   /** 渲染成分隔线 */
   separator?: boolean
-  /** 二级菜单。有它就说明这一项不是叶子：点它只展开，不关掉整份菜单 */
+  /**
+   * 二级菜单：悬浮即展开。
+   *
+   * 带 children 的项**同时带 onClick** 时是「双面」的 —— 悬浮看二级菜单、单击执行动作
+   * 并关掉整份菜单（折叠菜单里的「歌单」就是这种：悬浮列歌单，点进歌单页）；
+   * 不带 onClick 的则纯粹是展开用的父项，点它只展开。
+   */
   children?: MenuItem[]
 }
 
@@ -204,15 +210,16 @@ function MenuPanel({
               data-variant={item.variant ?? 'default'}
               data-expanded={expanded}
               disabled={item.disabled}
-              // 悬浮即展开；点一下也展开（触屏 / 手快时 hover 来不及），两者等价
               onPointerEnter={openSub}
               onClick={(event) => {
-                if (subItems.length > 0) {
-                  openSub(event)
+                // 有动作就先执行动作（如「歌单」进歌单页）。只有二级菜单的父项才是
+                // 「点一下也展开」—— 触屏与手快时 hover 来不及，总得留个入口
+                if (item.onClick) {
+                  onClose()
+                  item.onClick()
                   return
                 }
-                onClose()
-                item.onClick?.()
+                if (subItems.length > 0) openSub(event)
               }}
             >
               {item.icon}
