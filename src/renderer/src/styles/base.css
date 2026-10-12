@@ -322,6 +322,14 @@ a {
   gap: 2px;
 }
 
+/* 导航区（首页…最近播放）与「我的歌单」区之间的分隔线。
+   展开态也需要：两段的间距只有 .sidebar 的 gap 那 6px，扫一眼分不清「最近播放」
+   和下面那串歌单是同一级、还是两件事。折叠态更是必须 —— 标题淡出、加号退出后
+   只剩一列图标，没有这条线就完全看不出分组边界。 */
+.nav-group + .nav-group {
+  border-top: 1px solid var(--line-1);
+}
+
 .nav-label {
   font-size: 11px;
   font-weight: 600;
@@ -455,13 +463,6 @@ a {
   justify-content: center;
   padding: 0;
   gap: 0;
-}
-
-/* 折叠态：菜单区与「我的歌单」区之间补一条分隔线。展开态靠分组标题（「我的歌单」
-   领着右侧的「+」）就已经把两段分开了，折叠态标题淡出、加号退出，不补一条线就只剩
-   一列图标，看不出分组边界在哪。 */
-.sidebar[data-collapsed='true'] .nav-group + .nav-group {
-  border-top: 1px solid var(--line-1);
 }
 
 .sidebar[data-collapsed='true'] .nav-section-head {

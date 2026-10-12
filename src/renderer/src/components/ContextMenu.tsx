@@ -26,7 +26,15 @@ interface MenuState {
   x: number
   y: number
   items: MenuItem[]
-  show: (x: number, y: number, items: MenuItem[]) => void
+  /**
+   * 打开这个菜单的元素（可选）。给「点同一个按钮 = 收起」这种下拉留的。
+   *
+   * 下面「点哪里都关」的监听挂在 **window 捕获阶段**，比被点元素自己的 onClick 还早，
+   * 于是按钮根本读不到「菜单此刻开着」，收起逻辑永远做不出来（点一次：先被关、再被
+   * onClick 打开，看起来像点不掉）。认下这个元素，这一次判断交还给按钮。
+   */
+  anchor: HTMLElement | null
+  show: (x: number, y: number, items: MenuItem[], anchor?: HTMLElement | null) => void
   hide: () => void
 }
 
@@ -35,8 +43,9 @@ export const useContextMenu = create<MenuState>((set) => ({
   x: 0,
   y: 0,
   items: [],
-  show: (x, y, items) => set({ open: true, x, y, items }),
-  hide: () => set({ open: false, items: [] })
+  anchor: null,
+  show: (x, y, items, anchor = null) => set({ open: true, x, y, items, anchor }),
+  hide: () => set({ open: false, items: [], anchor: null })
 }))
 
 /** 从鼠标事件直接打开菜单（自动取坐标并阻止默认菜单） */
@@ -47,7 +56,7 @@ export function openMenuFromEvent(event: React.MouseEvent | MouseEvent, items: M
 }
 
 export function ContextMenuHost(): React.JSX.Element | null {
-  const { open, x, y, items, hide } = useContextMenu()
+  const { open, x, y, items, anchor, hide } = useContextMenu()
   const ref = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState({ left: x, top: y })
 
@@ -65,21 +74,39 @@ export function ContextMenuHost(): React.JSX.Element | null {
   useEffect(() => {
     if (!open) return
     const close = (): void => hide()
+    /**
+     * 「点别处就关」。用捕获阶段是为了抢在被点元素的 onClick 之前收掉菜单。
+     *
+     * ★ 但**菜单自己**与**触发器**上的按下不能算「别处」：
+     *   前者的点击要留给菜单项自己的 onClick（它会 hide 后再执行动作）；
+     *   后者的点击要留给按钮去判断是收起还是重新展开。
+     *
+     * ★ 为什么不能靠「在菜单根节点上 stopPropagation」来拦：这个监听在捕获阶段的
+     *   window 上，比事件走到任何元素都早，stopPropagation 拦不住它。菜单会在
+     *   pointerdown 时就被卸载，于是随后 pointerup 派发的 click 找不到目标元素而
+     *   **整个消失** —— 症状是菜单项点不动、不报错、也点不到菜单底下的东西（在真实
+     *   Chromium 上复现过）。所以这里只能在监听内部把这两处放行。
+     */
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (ref.current?.contains(target) || anchor?.contains(target)) return
+      hide()
+    }
     const onKey = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') hide()
     }
-    // 捕获阶段监听：让「点任何地方都关」优先于被点元素的 onClick
-    window.addEventListener('pointerdown', close, true)
+    window.addEventListener('pointerdown', onPointerDown, true)
     window.addEventListener('resize', close)
     window.addEventListener('blur', close)
     window.addEventListener('keydown', onKey)
     return () => {
-      window.removeEventListener('pointerdown', close, true)
+      window.removeEventListener('pointerdown', onPointerDown, true)
       window.removeEventListener('resize', close)
       window.removeEventListener('blur', close)
       window.removeEventListener('keydown', onKey)
     }
-  }, [open, hide])
+  }, [open, hide, anchor])
 
   if (!open) return null
 
@@ -89,7 +116,6 @@ export function ContextMenuHost(): React.JSX.Element | null {
       className="context-menu"
       role="menu"
       style={{ left: position.left, top: position.top }}
-      onPointerDown={(event) => event.stopPropagation()}
     >
       {items.map((item) => {
         if (item.separator) return <hr key={item.key} />

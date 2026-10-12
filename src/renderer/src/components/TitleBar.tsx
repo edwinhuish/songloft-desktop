@@ -16,13 +16,21 @@
 import { useEffect, useState } from 'react'
 
 import {
+  IconClock,
   IconClose,
+  IconFolder,
+  IconHeart,
+  IconHome,
+  IconLibrary,
+  IconListMusic,
   IconMaximize,
+  IconMenu,
   IconMinimize,
   IconRestore,
   IconSearch,
   IconSettings
 } from './Icons'
+import { useContextMenu, type MenuItem } from './ContextMenu'
 import { useUi } from '@/state/useUi'
 import { usePlayer } from '@/state/usePlayer'
 import { displayArtist } from '@/lib/format'
@@ -36,6 +44,8 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   const [state, setState] = useState({ maximized: false, fullscreen: false, focused: true })
   const setPaletteOpen = useUi((s) => s.setPaletteOpen)
   const navigate = useUi((s) => s.navigate)
+  /** 只为把 aria-expanded 说出来：读的是宿主的真实状态，而不是本地另存一份 */
+  const navMenuOpen = useContextMenu((s) => s.open)
   const song = usePlayer((s) =>
     s.cursor >= 0 && s.cursor < s.order.length ? s.queue[s.order[s.cursor]] : null
   )
@@ -60,11 +70,91 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
     void window.songloft.window.toggleMaximize()
   }
 
+  /**
+   * 折叠菜单（LOGO 右侧那个按钮）的菜单项：按「浏览 → 收藏与历史 → 设置」排，
+   * 文件夹紧跟曲库（它们是同一件事的两种切法）。只放「去哪儿」不放管理动作。
+   *
+   * 复用 ContextMenuHost 而不是自己造一个下拉：宿主已经处理了贴边翻转、Esc、失焦关闭，
+   * 再造一份就是两份要同步维护的行为。代价是必须把触发器一起传进去 —— 见 ContextMenu.tsx
+   * 里 anchor 的说明（不传的话「再点一次收起」做不出来）。
+   */
+  const navMenuItems = (): MenuItem[] => [
+    {
+      key: 'home',
+      label: '首页',
+      icon: <IconHome size={16} />,
+      onClick: () => navigate({ name: 'home' })
+    },
+    {
+      key: 'library',
+      label: '曲库',
+      icon: <IconLibrary size={16} />,
+      onClick: () => navigate({ name: 'library' })
+    },
+    {
+      key: 'folders',
+      label: '文件夹',
+      icon: <IconFolder size={16} />,
+      onClick: () => navigate({ name: 'folders', path: '' })
+    },
+    {
+      key: 'playlists',
+      label: '歌单',
+      icon: <IconListMusic size={16} />,
+      onClick: () => navigate({ name: 'playlists' })
+    },
+    {
+      key: 'favorites',
+      label: '我喜欢',
+      icon: <IconHeart size={16} />,
+      onClick: () => navigate({ name: 'favorites' })
+    },
+    {
+      key: 'recent',
+      label: '最近播放',
+      icon: <IconClock size={16} />,
+      onClick: () => navigate({ name: 'recent' })
+    },
+    {
+      key: 'settings',
+      label: '设置',
+      icon: <IconSettings size={16} />,
+      onClick: () => navigate({ name: 'settings', section: 'appearance' })
+    }
+  ]
+
+  const toggleNavMenu = (event: React.MouseEvent<HTMLButtonElement>): void => {
+    const menu = useContextMenu.getState()
+    // 宿主对「点触发器」刻意不关（anchor），所以这里读到的仍是开着 → 收起
+    if (menu.open) {
+      menu.hide()
+      return
+    }
+    const rect = event.currentTarget.getBoundingClientRect()
+    menu.show(rect.left, rect.bottom + 6, navMenuItems(), event.currentTarget)
+  }
+
   return (
     <header className="titlebar" onDoubleClick={handleDoubleClick}>
       <div className="titlebar-brand">
         <img src="./icon.png" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />
         <span>Songloft</span>
+        {/* 折叠菜单入口。未登录时藏起来：菜单项全是登录之后才存在的去处。
+            它落在拖拽区（.titlebar-brand）里面，全靠 base.css 的
+            `.titlebar button { -webkit-app-region: no-drag }` 才点得动。 */}
+        {!solo ? (
+          <button
+            type="button"
+            className="icon-btn"
+            title="导航菜单"
+            aria-label="导航菜单"
+            aria-haspopup="menu"
+            aria-expanded={navMenuOpen}
+            onClick={toggleNavMenu}
+          >
+            <IconMenu size={17} />
+          </button>
+        ) : null}
       </div>
 
       <div className="titlebar-center">
@@ -81,29 +171,15 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
 
       <div className="titlebar-actions">
         {!solo ? (
-          <>
-            <button
-              type="button"
-              className="win-btn"
-              title="搜索与命令（Ctrl+K）"
-              aria-label="打开命令面板"
-              onClick={() => setPaletteOpen(true)}
-            >
-              <IconSearch size={15} />
-            </button>
-            {/* 设置入口挪到标题栏，与窗口按钮共用一套尺寸和 hover —— 侧栏底部因此
-                只剩「收起侧栏」一件事。拖动区对标题栏里的所有 button 都设了 no-drag
-                （见 base.css 的 .titlebar button），所以它照样点得动 */}
-            <button
-              type="button"
-              className="win-btn"
-              title="设置"
-              aria-label="设置"
-              onClick={() => navigate({ name: 'settings', section: 'appearance' })}
-            >
-              <IconSettings size={15} />
-            </button>
-          </>
+          <button
+            type="button"
+            className="win-btn"
+            title="搜索与命令（Ctrl+K）"
+            aria-label="打开命令面板"
+            onClick={() => setPaletteOpen(true)}
+          >
+            <IconSearch size={15} />
+          </button>
         ) : null}
         <button
           type="button"

@@ -40,6 +40,12 @@ const exactly = (n) => Object.assign((v) => v === n, { label: `=${n}` })
 const atLeast = (n) => Object.assign((v) => v >= n, { label: `>=${n}` })
 /** 上限：几何偏差这类量只需要"不超过"，用 = 会把亚像素舍入变成假失败 */
 const atMost = (n) => Object.assign((v) => v <= n, { label: `<=${n}` })
+/** 断言数组与给定序列**逐项相等**（元素与顺序都要对，用于钉住菜单项的顺序） */
+const equals = (...want) =>
+  Object.assign(
+    (v) => Array.isArray(v) && v.length === want.length && want.every((x, i) => v[i] === x),
+    { label: `=[${want.join(' > ')}]` }
+  )
 /** 断言数组里每一项都包含某个子串（用于区分"哪个分面"） */
 const containsAll = (...names) =>
   Object.assign(
@@ -113,6 +119,8 @@ window.__t = {
    * 不能改用个数断言："当前筛选"那一行里还有一个同为 .chip 的「清空全部」按钮。
    */
   chipTitles: () => [...document.querySelectorAll('.chip')].map((e) => (e.textContent || '').trim()),
+  /** 折叠菜单里各项的文字。**顺序也是断言的一部分**（见 equals），所以不能用集合比 */
+  menuTitles: () => [...document.querySelectorAll('.context-menu button')].map((e) => (e.textContent || '').trim()),
   counts: () => ({
     rows: document.querySelectorAll('.song-row').length,
     cards: document.querySelectorAll('.card').length,
@@ -133,7 +141,8 @@ window.__t = {
     // 折叠侧栏的居中偏差（px），回归"封面被 auto 外边距顶到左边"
     offCenter: window.__t.offCenter(),
     cardTitles: window.__t.cardTitles(),
-    chipTitles: window.__t.chipTitles()
+    chipTitles: window.__t.chipTitles(),
+    menuItems: window.__t.menuTitles()
   })
 };
 'ready'
@@ -267,44 +276,51 @@ const STEPS = [
   ['10-playlist-detail', "window.__t.click('.nav-item', '深夜写码')", 2200, { rows: atLeast(1) }],
   ['11-folders', "window.__t.click('.nav-item', '文件夹')", 2000, { folderRows: exactly(5) }],
   ['12-recent', "window.__t.click('.nav-item', '最近播放')", 2400, { rows: exactly(10) }],
-  ['13-favorites', "window.__t.click('.nav-item', '我喜欢的')", 2400, { rows: exactly(6) }],
+  ['13-favorites', "window.__t.click('.nav-item', '我喜欢')", 2400, { rows: exactly(6) }],
 
-  // ── 设置四页 ───────────────────────────────────────────────────────────
-  // 设置入口已从侧栏挪到标题栏（在「搜索与命令」与「最小化」之间），按 aria-label 点
-  ['14-settings-appearance', "window.__t.clickLabel('设置')", 1600],
+  // ── 折叠菜单 → 设置四页 ────────────────────────────────────────────────
+  // 标题栏 LOGO 右侧的折叠按钮。断言用 equals 而不是 containsAll：菜单项的**顺序**
+  // 也是需求的一部分，集合比会把「顺序错了」放过。
   [
-    '15-settings-playback',
+    '14-nav-menu',
+    "window.__t.clickLabel('导航菜单')",
+    900,
+    { menuItems: equals('首页', '曲库', '文件夹', '歌单', '我喜欢', '最近播放', '设置') }
+  ],
+  ['15-settings-appearance', "window.__t.click('.context-menu button', '设置')", 1600],
+  [
+    '16-settings-playback',
     "window.__t.click('.settings-nav button', '播放')",
     1800,
     { switches: atLeast(1) }
   ],
   [
-    '16-settings-library',
+    '17-settings-library',
     "window.__t.click('.settings-nav button', '曲库')",
     2200,
     { switches: atLeast(2) }
   ],
-  ['17-settings-server', "window.__t.click('.settings-nav button', '服务器')", 1600],
+  ['18-settings-server', "window.__t.click('.settings-nav button', '服务器')", 1600],
 
   // ── 播放 / 面板 ────────────────────────────────────────────────────────
-  ['18-playing', "window.__t.click('.nav-item', '曲库')", 2400],
+  ['19-playing', "window.__t.click('.nav-item', '曲库')", 2400],
   // 双击歌曲行 = 开始播放并打开面板，页签就落在「正在播放」，歌词在这一页里。
   // 断言必须在这一步做：下一行会把页签切走。
   [
-    '19-now-playing-panel',
+    '20-now-playing-panel',
     "window.__t.dbl('.song-row')",
     2600,
     { lyricLines: exactly(10), lyricWords: atLeast(20) }
   ],
   [
-    '20-queue-panel',
+    '21-queue-panel',
     'window.__t.click(\'button[aria-label="播放队列"]\')',
     1400,
     { queueItems: atLeast(1) }
   ],
   // 控制栏的页签在「已激活」时再点一次 = 收起面板（不是什么都不做）
   [
-    '21-panel-closed',
+    '22-panel-closed',
     'window.__t.click(\'button[aria-label="播放队列"]\')',
     1400,
     { panel: exactly(0) }
@@ -314,13 +330,13 @@ const STEPS = [
   // 放在命令面板之前：面板的 Escape 绑在它自己的输入框上，从 window 派发关不掉，
   // 先折叠就不会让它盖在侧栏截图上。
   [
-    '22-sidebar-collapsed',
+    '23-sidebar-collapsed',
     "window.__t.click('.sidebar-foot .nav-item', '收起侧栏')",
     1600,
     { offCenter: atMost(1) }
   ],
   [
-    '23-command-palette',
+    '24-command-palette',
     "window.__t.key('k', { ctrlKey: true })",
     1400,
     { paletteItems: atLeast(1) }

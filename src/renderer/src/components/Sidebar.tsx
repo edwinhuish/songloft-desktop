@@ -32,12 +32,15 @@ export function Sidebar(): React.JSX.Element {
   const { route, navigate, sidebarCollapsed, toggleSidebar } = useUi()
   /**
    * 折叠态只剩图标，名字改由全局浮层交代（见 Tooltip.tsx：浮层必须渲染到滚动容器之外，
-   * 否则会被歌单列表的 overflow 剪掉）；展开态文字可见，留 title 兜底截断。
+   * 否则会被歌单列表的 overflow 剪掉）；展开态文字就摆在那儿，**什么都不挂**。
+   *
+   * 展开态刻意不用 `title` 兜底：那是浏览器自带的黑框，出现时机与停留时长都不受控
+   * （鼠标挪开之后它还可能挂一会儿），和这套浮层语言是两回事。
    */
   const tip = (label: string): React.ComponentProps<'button'> =>
     sidebarCollapsed
       ? { onMouseEnter: (event) => showTip(event, label), onMouseLeave: hideTip }
-      : { title: label }
+      : {}
   const { playlists, load, create } = usePlaylists()
   const { patch } = useSettings()
   const push = useToasts((s) => s.push)
@@ -64,6 +67,8 @@ export function Sidebar(): React.JSX.Element {
 
   return (
     <nav className="sidebar" data-collapsed={sidebarCollapsed} aria-label="主导航">
+      {/* 顺序与左上角折叠菜单一致（浏览在前、收藏与历史居中）。
+          ★ 侧栏刻意**没有**设置项：设置只在折叠菜单里，两处各留一份入口只会漂移 */}
       <div className="nav-group">
         <button
           type="button"
@@ -76,10 +81,12 @@ export function Sidebar(): React.JSX.Element {
           <span className="nav-text">首页</span>
         </button>
 
+        {/* 文件夹占了自己的位置，就不再算「曲库」的一部分 —— 否则进文件夹页时
+            这里和下面那项会同时高亮 */}
         <button
           type="button"
           className="nav-item"
-          aria-current={route.name === 'library' || route.name === 'folders'}
+          aria-current={isActive('library')}
           onClick={() => navigate({ name: 'library' })}
           {...tip('曲库')}
         >
@@ -90,23 +97,12 @@ export function Sidebar(): React.JSX.Element {
         <button
           type="button"
           className="nav-item"
-          aria-current={isActive('favorites')}
-          onClick={() => navigate({ name: 'favorites' })}
-          {...tip('我喜欢的音乐')}
+          aria-current={isActive('folders')}
+          onClick={() => navigate({ name: 'folders', path: '' })}
+          {...tip('文件夹')}
         >
-          <IconHeart size={18} filled={route.name === 'favorites'} />
-          <span className="nav-text">我喜欢的</span>
-        </button>
-
-        <button
-          type="button"
-          className="nav-item"
-          aria-current={isActive('recent')}
-          onClick={() => navigate({ name: 'recent' })}
-          {...tip('最近播放')}
-        >
-          <IconClock size={18} />
-          <span className="nav-text">最近播放</span>
+          <IconFolder size={18} />
+          <span className="nav-text">文件夹</span>
         </button>
 
         <button
@@ -124,12 +120,23 @@ export function Sidebar(): React.JSX.Element {
         <button
           type="button"
           className="nav-item"
-          aria-current={isActive('folders')}
-          onClick={() => navigate({ name: 'folders', path: '' })}
-          {...tip('文件夹浏览')}
+          aria-current={isActive('favorites')}
+          onClick={() => navigate({ name: 'favorites' })}
+          {...tip('我喜欢')}
         >
-          <IconFolder size={18} />
-          <span className="nav-text">文件夹</span>
+          <IconHeart size={18} filled={route.name === 'favorites'} />
+          <span className="nav-text">我喜欢</span>
+        </button>
+
+        <button
+          type="button"
+          className="nav-item"
+          aria-current={isActive('recent')}
+          onClick={() => navigate({ name: 'recent' })}
+          {...tip('最近播放')}
+        >
+          <IconClock size={18} />
+          <span className="nav-text">最近播放</span>
         </button>
       </div>
 

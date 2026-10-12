@@ -230,6 +230,13 @@ export const IconTrash = (p: IconProps) => (
   </Svg>
 )
 
+/** 折叠菜单的触发器（标题栏 LOGO 右侧）：三条横线比任何图标都更少歧义地表示「这里有菜单」 */
+export const IconMenu = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 6.5h16M4 12h16M4 17.5h16" />
+  </Svg>
+)
+
 export const IconMore = (p: IconProps) => (
   <SvgFill {...p}>
     <circle cx="5.5" cy="12" r="1.6" />
