@@ -45,7 +45,7 @@ const MODE_LABEL: Record<PlayMode, string> = {
 
 export function PlayerBar(): React.JSX.Element {
   const player = usePlayer()
-  const { panelOpen, panelTab, togglePanel, setPanelTab } = useUi()
+  const { panelOpen, panelTab, togglePanel } = useUi()
   const favoriteIds = usePlaylists((s) => s.favoriteIds)
   const toggleFavorite = usePlaylists((s) => s.toggleFavorite)
   const [scrub, setScrub] = useState<number | null>(null)
@@ -244,7 +244,7 @@ export function PlayerBar(): React.JSX.Element {
           data-active={panelOpen && panelTab === 'now-playing'}
           title="歌词面板"
           aria-label="歌词面板"
-          onClick={() => setPanelTab('now-playing')}
+          onClick={() => togglePanel('now-playing')}
         >
           <IconLyrics size={17} />
         </button>
@@ -255,7 +255,7 @@ export function PlayerBar(): React.JSX.Element {
           data-active={panelOpen && panelTab === 'queue'}
           title="播放队列"
           aria-label="播放队列"
-          onClick={() => setPanelTab('queue')}
+          onClick={() => togglePanel('queue')}
         >
           <IconQueue size={17} />
         </button>

@@ -126,6 +126,10 @@ window.__t = {
     lyricWords: document.querySelectorAll('.lyric-word').length,
     // 命令面板：条目数，用于确认 Ctrl+K 真的渲染出了可选项
     paletteItems: document.querySelectorAll('.palette-item').length,
+    // 播放队列条目数
+    queueItems: document.querySelectorAll('.queue-item').length,
+    // 面板关闭时整个不渲染，所以数个数就是「开没开」
+    panel: document.querySelectorAll('.panel').length,
     // 折叠侧栏的居中偏差（px），回归"封面被 auto 外边距顶到左边"
     offCenter: window.__t.offCenter(),
     cardTitles: window.__t.cardTitles(),
@@ -284,14 +288,27 @@ const STEPS = [
 
   // ── 播放 / 面板 ────────────────────────────────────────────────────────
   ['18-playing', "window.__t.click('.nav-item', '曲库')", 2400],
-  ['19-now-playing-panel', "window.__t.dbl('.song-row')", 1800],
+  // 双击歌曲行 = 开始播放并打开面板，页签就落在「正在播放」，歌词在这一页里。
+  // 断言必须在这一步做：下一行会把页签切走。
   [
-    '20-lyrics-panel',
-    'window.__t.click(\'button[aria-label="歌词面板"]\')',
+    '19-now-playing-panel',
+    "window.__t.dbl('.song-row')",
     2600,
     { lyricLines: exactly(10), lyricWords: atLeast(20) }
   ],
-  ['21-queue-panel', 'window.__t.click(\'button[aria-label="播放队列"]\')', 1200],
+  [
+    '20-queue-panel',
+    'window.__t.click(\'button[aria-label="播放队列"]\')',
+    1400,
+    { queueItems: atLeast(1) }
+  ],
+  // 控制栏的页签在「已激活」时再点一次 = 收起面板（不是什么都不做）
+  [
+    '21-panel-closed',
+    'window.__t.click(\'button[aria-label="播放队列"]\')',
+    1400,
+    { panel: exactly(0) }
+  ],
   // 折叠成图标条后，图标与歌单封面必须仍然居中。带计数的项曾因 .nav-count 的
   // auto 外边距吃掉整行自由空间而整体左偏，且**只在折叠态**出现 —— 不断言就会静默复发。
   // 放在命令面板之前：面板的 Escape 绑在它自己的输入框上，从 window 派发关不掉，
