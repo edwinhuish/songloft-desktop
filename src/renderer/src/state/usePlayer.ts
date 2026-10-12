@@ -577,6 +577,10 @@ export const usePlayer = create<PlayerState>((set, get) => {
           queue: valid,
           order,
           cursor,
+          // ★ 上下文也要一并还原：它标着「这个队列是从哪儿播起来的」，
+          //   Panel 的「来自歌单/歌手」徽标、以及后续 /songs/{id}/played 的上报都读它。
+          //   只恢复 lastQueue/lastQueueIndex 而丢掉这一项，等于每次重启都忘了来源。
+          context: settings.lastQueueContext,
           // 不自动播放：恢复会话时突然出声是很糟的体验
           playing: false,
           currentTime: 0,
