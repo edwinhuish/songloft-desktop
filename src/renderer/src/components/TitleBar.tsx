@@ -37,8 +37,23 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
     return window.songloft.on.windowState(setState)
   }, [])
 
+  /**
+   * 双击标题栏空白处 = 最大化/还原。
+   *
+   * 为什么要在 JS 里补一手：拖拽区（`-webkit-app-region: drag`）在 Windows 上会被
+   * 当成非客户区交给系统处理，事件根本送不到页面；Linux 上则不会自动最大化。两边都
+   * 给同一个入口才有一致行为 —— 系统处理过的事件不会冒到这里，所以不会重复切换。
+   *
+   * 落在窗口按钮上的双击要排除：那些按钮是 no-drag 区，本来就能收到事件，
+   * 「双击最小化按钮」不该顺带把窗口最大化。
+   */
+  const handleDoubleClick = (event: React.MouseEvent<HTMLElement>): void => {
+    if ((event.target as HTMLElement).closest('button')) return
+    void window.songloft.window.toggleMaximize()
+  }
+
   return (
-    <header className="titlebar">
+    <header className="titlebar" onDoubleClick={handleDoubleClick}>
       <div className="titlebar-brand">
         <img src="./icon.png" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />
         <span>Songloft</span>
