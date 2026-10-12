@@ -223,3 +223,13 @@ export const usePlaylists = create<PlaylistState>((set, get) => ({
     await get().setFavorite(song.id, !get().favoriteIds.has(song.id))
   }
 }))
+
+/**
+ * 「我的歌单」：用户自己建的普通歌单。
+ *
+ * ★ 侧栏与标题栏折叠菜单都用它 —— 同一个名单出现两处，不共用过滤条件的话迟早各自漂移
+ *   （电台收藏与后端打上 built_in 标签的内置歌单都不进导航）。
+ */
+export function regularPlaylists(playlists: Playlist[]): Playlist[] {
+  return playlists.filter((p) => p.type === 'normal' && !p.labels.includes('built_in'))
+}

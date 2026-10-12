@@ -121,6 +121,12 @@ window.__t = {
   chipTitles: () => [...document.querySelectorAll('.chip')].map((e) => (e.textContent || '').trim()),
   /** 折叠菜单里各项的文字。**顺序也是断言的一部分**（见 equals），所以不能用集合比 */
   menuTitles: () => [...document.querySelectorAll('.context-menu button')].map((e) => (e.textContent || '').trim()),
+  /** 最靠后那一层菜单的条目 —— 二级菜单（如「我的歌单」）要单独看这一层 */
+  lastMenuTitles: () => {
+    const panels = [...document.querySelectorAll('.context-menu')];
+    const last = panels[panels.length - 1];
+    return last ? [...last.querySelectorAll('button')].map((e) => (e.textContent || '').trim()) : [];
+  },
   counts: () => ({
     rows: document.querySelectorAll('.song-row').length,
     cards: document.querySelectorAll('.card').length,
@@ -144,7 +150,8 @@ window.__t = {
     offCenter: window.__t.offCenter(),
     cardTitles: window.__t.cardTitles(),
     chipTitles: window.__t.chipTitles(),
-    menuItems: window.__t.menuTitles()
+    menuItems: window.__t.menuTitles(),
+    subMenuItems: window.__t.lastMenuTitles()
   })
 };
 'ready'
@@ -295,49 +302,59 @@ const STEPS = [
   ['13-recent', "window.__t.click('.nav-item', '最近播放')", 2400, { rows: exactly(10) }],
   ['14-favorites', "window.__t.click('.nav-item', '我喜欢')", 2400, { rows: exactly(6) }],
 
-  // ── 折叠菜单 → 设置四页 ────────────────────────────────────────────────
+  // ── 折叠菜单 → 二级菜单 → 设置四页 ─────────────────────────────────────
   // 标题栏 LOGO 右侧的折叠按钮。断言用 equals 而不是 containsAll：菜单项的**顺序**
   // 也是需求的一部分，集合比会把「顺序错了」放过。「文件夹」不在菜单里 —— 它是曲库页的标签。
   [
     '15-nav-menu',
     "window.__t.clickLabel('导航菜单')",
     900,
-    { menuItems: equals('首页', '曲库', '歌单', '我喜欢', '最近播放', '设置') }
+    { menuItems: equals('首页', '曲库', '歌单', '我的歌单', '我喜欢', '最近播放', '设置') }
   ],
-  ['16-settings-appearance', "window.__t.click('.context-menu button', '设置')", 1600],
+  // 「我的歌单」的二级菜单 = 那份歌单名单。这里同样用 equals：断言的是名单内容与顺序，
+  // 只数个数的话「混进电台收藏之类的非普通歌单」也可能碰巧一样多。
   [
-    '17-settings-playback',
+    '16-nav-my-playlists',
+    "window.__t.click('.context-menu button', '我的歌单')",
+    700,
+    // 顺序 = store 的顺序（置顶的「深夜写码」在最前，其余按后端给的 position 次序）
+    { subMenuItems: equals('深夜写码', '我喜欢的音乐', '通勤路上') }
+  ],
+  // 二级菜单开着也不影响接着点上一层的项（设置入口就在那儿）
+  ['17-settings-appearance', "window.__t.click('.context-menu button', '设置')", 1600],
+  [
+    '18-settings-playback',
     "window.__t.click('.settings-nav button', '播放')",
     1800,
     { switches: atLeast(1) }
   ],
   [
-    '18-settings-library',
+    '19-settings-library',
     "window.__t.click('.settings-nav button', '曲库')",
     2200,
     { switches: atLeast(2) }
   ],
-  ['19-settings-server', "window.__t.click('.settings-nav button', '服务器')", 1600],
+  ['20-settings-server', "window.__t.click('.settings-nav button', '服务器')", 1600],
 
   // ── 播放 / 面板 ────────────────────────────────────────────────────────
-  ['20-playing', "window.__t.click('.nav-item', '曲库')", 2400],
+  ['21-playing', "window.__t.click('.nav-item', '曲库')", 2400],
   // 双击歌曲行 = 开始播放并打开面板，页签就落在「正在播放」，歌词在这一页里。
   // 断言必须在这一步做：下一行会把页签切走。
   [
-    '21-now-playing-panel',
+    '22-now-playing-panel',
     "window.__t.dbl('.song-row')",
     2600,
     { lyricLines: exactly(10), lyricWords: atLeast(20) }
   ],
   [
-    '22-queue-panel',
+    '23-queue-panel',
     'window.__t.click(\'button[aria-label="播放队列"]\')',
     1400,
     { queueItems: atLeast(1) }
   ],
   // 控制栏的页签在「已激活」时再点一次 = 收起面板（不是什么都不做）
   [
-    '23-panel-closed',
+    '24-panel-closed',
     'window.__t.click(\'button[aria-label="播放队列"]\')',
     1400,
     { panel: exactly(0) }
@@ -347,13 +364,13 @@ const STEPS = [
   // 放在命令面板之前：面板的 Escape 绑在它自己的输入框上，从 window 派发关不掉，
   // 先折叠就不会让它盖在侧栏截图上。
   [
-    '24-sidebar-collapsed',
+    '25-sidebar-collapsed',
     "window.__t.click('.sidebar-foot .nav-item', '收起侧栏')",
     1600,
     { offCenter: atMost(1) }
   ],
   [
-    '25-command-palette',
+    '26-command-palette',
     "window.__t.key('k', { ctrlKey: true })",
     1400,
     { paletteItems: atLeast(1) }

@@ -20,7 +20,7 @@ import {
   IconPlus
 } from './Icons'
 import { openMenuFromEvent } from './ContextMenu'
-import { usePlaylists } from '@/state/usePlaylists'
+import { regularPlaylists, usePlaylists } from '@/state/usePlaylists'
 import { useSettings } from '@/state/useSettings'
 import { useUi } from '@/state/useUi'
 import { useToasts } from '@/state/useToasts'
@@ -49,9 +49,7 @@ export function Sidebar(): React.JSX.Element {
     void load()
   }, [load])
 
-  const regularPlaylists = playlists.filter(
-    (p) => p.type === 'normal' && !p.labels.includes('built_in')
-  )
+  const regular = regularPlaylists(playlists)
   const count = playlists.length
 
   const isActive = (name: string, extra?: (r: typeof route) => boolean): boolean => {
@@ -144,7 +142,7 @@ export function Sidebar(): React.JSX.Element {
         </div>
 
         <div className="sidebar-playlists">
-          {regularPlaylists.length === 0 ? (
+          {regular.length === 0 ? (
             <div className="nav-empty">
               还没有歌单
               <br />
@@ -152,7 +150,7 @@ export function Sidebar(): React.JSX.Element {
             </div>
           ) : null}
 
-          {regularPlaylists.map((playlist) => (
+          {regular.map((playlist) => (
             <button
               key={playlist.id}
               type="button"

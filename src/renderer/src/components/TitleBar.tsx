@@ -25,13 +25,16 @@ import {
   IconMaximize,
   IconMenu,
   IconMinimize,
+  IconQueue,
   IconRestore,
   IconSearch,
   IconSettings
 } from './Icons'
 import { useContextMenu, type MenuItem } from './ContextMenu'
+import { Cover } from './primitives'
 import { useUi } from '@/state/useUi'
 import { usePlayer } from '@/state/usePlayer'
+import { regularPlaylists, usePlaylists } from '@/state/usePlaylists'
 import { displayArtist } from '@/lib/format'
 
 export interface TitleBarProps {
@@ -45,6 +48,9 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   const navigate = useUi((s) => s.navigate)
   /** 只为把 aria-expanded 说出来：读的是宿主的真实状态，而不是本地另存一份 */
   const navMenuOpen = useContextMenu((s) => s.open)
+  const playlists = usePlaylists((s) => s.playlists)
+  // 与侧栏「我的歌单」用同一个过滤器，两处名单不会各自漂移
+  const myPlaylists = regularPlaylists(playlists)
   const song = usePlayer((s) =>
     s.cursor >= 0 && s.cursor < s.order.length ? s.queue[s.order[s.cursor]] : null
   )
@@ -96,6 +102,24 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
       label: '歌单',
       icon: <IconListMusic size={16} />,
       onClick: () => navigate({ name: 'playlists' })
+    },
+    {
+      key: 'my-playlists',
+      label: '我的歌单',
+      icon: <IconQueue size={16} />,
+      /**
+       * 二级菜单 = 歌单名单本身。它就是「跳到某个歌单」的一条捷径，所以点名字直接进，
+       * 不再经过歌单列表页。空的时候给一条不可点的说明，而不是弹一个空框 ——
+       * 空框会让人以为是坏了。
+       */
+      children: myPlaylists.length
+        ? myPlaylists.map((playlist) => ({
+            key: `playlist-${playlist.id}`,
+            label: playlist.name,
+            icon: <Cover coverUrl={playlist.cover_url} width={48} size={20} radius={4} />,
+            onClick: () => navigate({ name: 'playlist', id: playlist.id })
+          }))
+        : [{ key: 'my-playlists-empty', label: '还没有歌单', disabled: true }]
     },
     {
       key: 'favorites',

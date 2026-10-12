@@ -1194,6 +1194,18 @@ select.input option {
   color: var(--danger);
 }
 
+/* 展开着二级菜单的那一项：指针已经在子菜单上了，父项不能看着像没选中 */
+.context-menu button[data-expanded='true'] {
+  background: var(--surface-3);
+}
+
+/* 二级菜单的箭头：顶到最右，与文字之间留出自由空间 */
+.context-menu .menu-arrow {
+  margin-left: auto;
+  flex: none;
+  color: var(--text-4);
+}
+
 .context-menu hr {
   margin: 5px 8px;
   border: none;
