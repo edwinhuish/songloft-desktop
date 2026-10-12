@@ -68,7 +68,9 @@ export async function fetchCoverAccent(absoluteUrl: string): Promise<string | nu
  * 依赖调用方传进来的已拼地址：这里不 import url/useAuth，避免循环依赖
  * （usePlayer → accent → useAuth → ... ）。
  */
-export async function fetchCoverAccentFor(absoluteUrl: string | null | undefined): Promise<string | null> {
+export async function fetchCoverAccentFor(
+  absoluteUrl: string | null | undefined
+): Promise<string | null> {
   if (!absoluteUrl) return null
   if (!/^https?:\/\//i.test(absoluteUrl)) return null
   return fetchCoverAccent(absoluteUrl)

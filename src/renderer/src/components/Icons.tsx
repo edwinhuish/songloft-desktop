@@ -11,7 +11,11 @@ export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'children'> {
   size?: number
 }
 
-function Svg({ size = 18, children, ...rest }: IconProps & { children: React.ReactNode }): React.JSX.Element {
+function Svg({
+  size = 18,
+  children,
+  ...rest
+}: IconProps & { children: React.ReactNode }): React.JSX.Element {
   return (
     <svg
       width={size}
@@ -32,7 +36,11 @@ function Svg({ size = 18, children, ...rest }: IconProps & { children: React.Rea
 }
 
 /** 实心变体：播放/暂停这类需要视觉重量的按钮 */
-function SvgFill({ size = 18, children, ...rest }: IconProps & { children: React.ReactNode }): React.JSX.Element {
+function SvgFill({
+  size = 18,
+  children,
+  ...rest
+}: IconProps & { children: React.ReactNode }): React.JSX.Element {
   return (
     <svg
       width={size}

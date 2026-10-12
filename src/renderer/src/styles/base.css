@@ -95,7 +95,11 @@ a {
   /* 主题光晕：随封面主色变化的极淡背景，让界面不呆板 */
   background:
     radial-gradient(120% 80% at 12% -10%, var(--accent-softer), transparent 60%),
-    radial-gradient(90% 70% at 100% 0%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 55%),
+    radial-gradient(
+      90% 70% at 100% 0%,
+      color-mix(in srgb, var(--accent) 6%, transparent),
+      transparent 55%
+    ),
     var(--bg-0);
   transition: background var(--dur-3) var(--ease);
 }
@@ -280,7 +284,9 @@ a {
   color: var(--text-2);
   border-radius: var(--r-sm);
   cursor: pointer;
-  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
 }
 
 .win-btn:hover {
@@ -345,7 +351,9 @@ a {
   font-weight: 520;
   text-align: left;
   cursor: pointer;
-  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
 }
 
 .nav-item:hover {
@@ -452,7 +460,9 @@ a {
   outline: none;
   user-select: text;
   cursor: text;
-  transition: border-color var(--dur-1) var(--ease), background var(--dur-1) var(--ease);
+  transition:
+    border-color var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease);
 }
 
 .search-field input::placeholder {
@@ -505,7 +515,9 @@ a {
   font-weight: 540;
   cursor: pointer;
   white-space: nowrap;
-  transition: background var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
 }
 
 .segmented button:hover {

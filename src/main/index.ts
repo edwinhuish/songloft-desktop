@@ -9,7 +9,14 @@
 
 import { BrowserWindow, app, ipcMain, session, shell } from 'electron'
 
-import { IPC, type AppInfo, type AppSettings, type MediaCommand, type ServerEntry, type TraySnapshot } from '@shared/ipc'
+import {
+  IPC,
+  type AppInfo,
+  type AppSettings,
+  type MediaCommand,
+  type ServerEntry,
+  type TraySnapshot
+} from '@shared/ipc'
 import { installAppMenu } from './app-menu'
 import { registerMediaKeys } from './media-keys'
 import { fetchCoverBytes, probeServer } from './probe'
@@ -18,13 +25,27 @@ import { createTray, destroyTray, render as renderTray } from './tray'
 import { createMainWindow } from './windows'
 
 /**
- * ★ GNOME / Wayland 是按窗口 app_id 去找**同名 .desktop** 的。
- *   这个值必须同时等于 package.json 的 desktopName、electron-builder.yml 的
- *   linux.desktop.entry.StartupWMClass，以及产物 .desktop 的文件名词干 —— 四处同源，
- *   否则 Dock 上会显示成一个通用占位图标，且和已固定的启动器图标不合并。
- *   scripts/verify-package.sh 会做这个断言。
+ * ★ Linux 桌面集成身份（Wayland 的 app_id / X11 的 WM_CLASS）。
+ *
+ *   权威口径：app.setDesktopName(name) 的 name 是 **.desktop 的文件名**；而 name **去掉结尾
+ *   那层 .desktop** 才是应用身份 —— GNOME / Dock 就是拿这个身份去找同名条目，并把窗口与
+ *   已固定的启动器图标合并。
+ *
+ *   身份取反域名形态 io.github.edwinhuish.songloft-desktop，**刻意不以 `.desktop` 结尾**。
+ *   若身份本身以 `.desktop` 结尾（例如 com.songloft.desktop），"去掉一层后缀"就会把它削成
+ *   另一个名字，必须靠多写一层后缀来抵消，极易看错且错法完全静默 —— 详见 electron-builder.yml。
+ *
+ *   于是三处取值是（身份不以 `.desktop` 结尾，所以不必"多写一层后缀"）：
+ *     package.json → desktopName             = 身份
+ *     本行入参（setDesktopName）              = 身份
+ *     electron-builder.yml → StartupWMClass   = 身份
+ *     产物 .desktop 文件名                     = 身份 + ".desktop"
+ *
+ *   对不上的症状是静默的：图标回落成占位齿轮；GNOME 50 起 xdg-desktop-portal 还会拒绝用该
+ *   身份申请的 globalShortcut 授权，而错误不会冒到应用层。
+ *   scripts/verify-package.sh 会断言这一组关系。
  */
-app.setDesktopName('com.songloft.desktop.desktop')
+app.setDesktopName('io.github.edwinhuish.songloft-desktop')
 
 /**
  * 允许把配置目录挪走。两个用途：
@@ -132,7 +153,11 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.credentialsGet, (_event, url: string) => store.getCredentials(url))
   ipcMain.handle(
     IPC.credentialsSet,
-    (_event, url: string, creds: { accessToken: string; refreshToken: string; expiresIn: number }) => {
+    (
+      _event,
+      url: string,
+      creds: { accessToken: string; refreshToken: string; expiresIn: number }
+    ) => {
       store.setCredentials(url, creds)
     }
   )

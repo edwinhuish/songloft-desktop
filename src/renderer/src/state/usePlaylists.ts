@@ -37,7 +37,11 @@ interface PlaylistState {
 
   load: (options?: { silent?: boolean; includeHidden?: boolean }) => Promise<void>
   loadFavorites: () => Promise<void>
-  create: (payload: { type: PlaylistType; name: string; description?: string }) => Promise<Playlist | null>
+  create: (payload: {
+    type: PlaylistType
+    name: string
+    description?: string
+  }) => Promise<Playlist | null>
   rename: (id: number, payload: { name?: string; description?: string }) => Promise<void>
   remove: (id: number, deleteSongs: boolean) => Promise<void>
   uploadCover: (id: number, file: File) => Promise<void>
@@ -207,7 +211,11 @@ export const usePlaylists = create<PlaylistState>((set, get) => ({
         else next.add(songId)
         return { favoriteIds: next }
       })
-      toast(favorited ? '收藏失败' : '取消收藏失败', 'error', error instanceof Error ? error.message : undefined)
+      toast(
+        favorited ? '收藏失败' : '取消收藏失败',
+        'error',
+        error instanceof Error ? error.message : undefined
+      )
     }
   },
 

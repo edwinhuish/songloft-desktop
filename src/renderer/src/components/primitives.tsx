@@ -49,7 +49,14 @@ export function Cover({
       style={{ width: size, height: size, borderRadius: round ? '50%' : radius }}
     >
       {showImage ? (
-        <img src={src} alt={alt} loading="lazy" decoding="async" onError={() => setFailed(true)} draggable={false} />
+        <img
+          src={src}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          onError={() => setFailed(true)}
+          draggable={false}
+        />
       ) : (
         <IconMusic size={typeof size === 'number' ? Math.max(16, size * 0.34) : 26} />
       )}
@@ -112,7 +119,7 @@ export function Slider({
     onCommit?.(ratio * max)
   }
 
-  const percent = Math.max(0, Math.min(100, ((fillRatio ?? (max > 0 ? value / max : 0)) * 100)))
+  const percent = Math.max(0, Math.min(100, (fillRatio ?? (max > 0 ? value / max : 0)) * 100))
 
   return (
     <div
@@ -169,7 +176,12 @@ export interface EmptyStateProps {
   action?: React.ReactNode
 }
 
-export function EmptyState({ icon, title, description, action }: EmptyStateProps): React.JSX.Element {
+export function EmptyState({
+  icon,
+  title,
+  description,
+  action
+}: EmptyStateProps): React.JSX.Element {
   return (
     <div className="empty">
       <div className="empty-icon">{icon ?? <IconMusic size={26} />}</div>
@@ -182,7 +194,13 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
 
 /* ─────────────────────────────── 骨架 ─────────────────────────────── */
 
-export function SongRowsSkeleton({ rows = 12, columns = 5 }: { rows?: number; columns?: number }): React.JSX.Element {
+export function SongRowsSkeleton({
+  rows = 12,
+  columns = 5
+}: {
+  rows?: number
+  columns?: number
+}): React.JSX.Element {
   // 列数必须跟着真实表走：否则骨架的行高/间距和真表对不上，加载完成时会「跳」一下
   const widths = ['10%', '34%', '70%', '60%', '18%']
   return (

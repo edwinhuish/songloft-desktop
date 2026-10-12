@@ -77,7 +77,10 @@ export function render(deps: TrayDeps, snapshot: TraySnapshot): void {
         enabled: false
       },
       { type: 'separator' },
-      { label: snapshot.playing ? '暂停' : '播放', click: () => deps.onCommand({ kind: 'play-pause' }) },
+      {
+        label: snapshot.playing ? '暂停' : '播放',
+        click: () => deps.onCommand({ kind: 'play-pause' })
+      },
       { label: '上一首', click: () => deps.onCommand({ kind: 'previous' }) },
       { label: '下一首', click: () => deps.onCommand({ kind: 'next' }) },
       { type: 'separator' },

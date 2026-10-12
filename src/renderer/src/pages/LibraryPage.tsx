@@ -13,7 +13,15 @@ import { useCallback, useMemo, useState } from 'react'
 
 import type { FacetField, Song, SongType } from '@shared/types'
 import { FACET_LABELS } from '@shared/types'
-import { IconClose, IconFolderOpen, IconPlay, IconRefresh, IconSearch, IconSparkle, IconUpload } from '@/components/Icons'
+import {
+  IconClose,
+  IconFolderOpen,
+  IconPlay,
+  IconRefresh,
+  IconSearch,
+  IconSparkle,
+  IconUpload
+} from '@/components/Icons'
 import { CardGridSkeleton, Cover, EmptyState } from '@/components/primitives'
 import { SelectionBar } from '@/components/SelectionBar'
 import { LIBRARY_COLUMNS, SongTable, type SongSort } from '@/components/SongTable'
@@ -67,7 +75,10 @@ export function LibraryPage(): React.JSX.Element {
     [browseField]
   )
 
-  const activeFilters = Object.entries(filters).filter(([, v]) => Boolean(v)) as [FacetField, string][]
+  const activeFilters = Object.entries(filters).filter(([, v]) => Boolean(v)) as [
+    FacetField,
+    string
+  ][]
   const selectedSongs = useMemo(
     () => selection.map((i) => list.songs[i]).filter((s): s is Song => Boolean(s)),
     [selection, list.songs]
@@ -95,7 +106,9 @@ export function LibraryPage(): React.JSX.Element {
     }
   }, [list])
 
-  const totalForBar = selectAllIds ? selectAllIds : selection.map((i) => list.songs[i]?.id).filter((x): x is number => x != null)
+  const totalForBar = selectAllIds
+    ? selectAllIds
+    : selection.map((i) => list.songs[i]?.id).filter((x): x is number => x != null)
 
   return (
     <div className="page">
@@ -202,7 +215,12 @@ export function LibraryPage(): React.JSX.Element {
         <div className="chip-row" style={{ marginBottom: 14 }}>
           <span style={{ fontSize: 11.5, color: 'var(--text-4)' }}>当前筛选</span>
           {type !== 'all' ? (
-            <button type="button" className="chip" data-active="true" onClick={() => setType('all')}>
+            <button
+              type="button"
+              className="chip"
+              data-active="true"
+              onClick={() => setType('all')}
+            >
               {TYPE_OPTIONS.find((o) => o.value === type)?.label}
               <IconClose size={12} />
             </button>
@@ -220,7 +238,12 @@ export function LibraryPage(): React.JSX.Element {
             </button>
           ))}
           {showHidden ? (
-            <button type="button" className="chip" data-active="true" onClick={() => setShowHidden(false)}>
+            <button
+              type="button"
+              className="chip"
+              data-active="true"
+              onClick={() => setShowHidden(false)}
+            >
               含隐藏歌单
               <IconClose size={12} />
             </button>
@@ -275,7 +298,12 @@ export function LibraryPage(): React.JSX.Element {
                   onClick={() => applyFilter(browseField, facet.value)}
                 >
                   <div className="card-art">
-                    <Cover coverUrl={facet.cover_url} size="100%" radius={0} round={browseField === 'artist'} />
+                    <Cover
+                      coverUrl={facet.cover_url}
+                      size="100%"
+                      radius={0}
+                      round={browseField === 'artist'}
+                    />
                   </div>
                   <div className="card-title truncate" style={{ textAlign: 'left' }}>
                     {facet.value}
@@ -306,7 +334,9 @@ export function LibraryPage(): React.JSX.Element {
         loading={list.loading}
         sort={sort}
         onSortChange={setSort}
-        onPlayAt={(index) => void playSongs(list.songs, index, { type: 'library', key: JSON.stringify(filters) })}
+        onPlayAt={(index) =>
+          void playSongs(list.songs, index, { type: 'library', key: JSON.stringify(filters) })
+        }
         hasMore={list.hasMore}
         onLoadMore={list.loadMore}
         selection={selection}
@@ -332,7 +362,13 @@ export function LibraryPage(): React.JSX.Element {
 
       {list.songs.length > 0 && selection.length === 0 && !selectAllIds ? (
         <div className="load-more">
-          <button type="button" className="btn" data-size="sm" data-variant="ghost" onClick={() => void handleSelectAll()}>
+          <button
+            type="button"
+            className="btn"
+            data-size="sm"
+            data-variant="ghost"
+            onClick={() => void handleSelectAll()}
+          >
             全选当前筛选（{list.total} 首）
           </button>
         </div>

@@ -127,7 +127,13 @@ export function FavoritesPage(): React.JSX.Element {
 
       {list.songs.length > 0 && selection.length === 0 && !selectAllIds ? (
         <div className="load-more">
-          <button type="button" className="btn" data-size="sm" data-variant="ghost" onClick={() => void handleSelectAll()}>
+          <button
+            type="button"
+            className="btn"
+            data-size="sm"
+            data-variant="ghost"
+            onClick={() => void handleSelectAll()}
+          >
             全选（{list.total} 首）
           </button>
         </div>
@@ -135,7 +141,10 @@ export function FavoritesPage(): React.JSX.Element {
 
       {selectAllIds || selection.length > 0 ? (
         <SelectionBar
-          ids={selectAllIds ?? selection.map((i) => list.songs[i]?.id).filter((x): x is number => x != null)}
+          ids={
+            selectAllIds ??
+            selection.map((i) => list.songs[i]?.id).filter((x): x is number => x != null)
+          }
           songs={selectAllIds ? undefined : selectedSongs}
           selectAll={Boolean(selectAllIds)}
           selectAllTotal={selectAllIds?.length}

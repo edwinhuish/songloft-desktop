@@ -44,7 +44,8 @@ const bridge: SongloftBridge = {
     getState: () => ipcRenderer.invoke(IPC.windowGetState) as Promise<WindowState>
   },
   tray: {
-    update: (snapshot: TraySnapshot) => ipcRenderer.invoke(IPC.trayUpdate, snapshot) as Promise<void>
+    update: (snapshot: TraySnapshot) =>
+      ipcRenderer.invoke(IPC.trayUpdate, snapshot) as Promise<void>
   },
   shell: {
     openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url) as Promise<void>

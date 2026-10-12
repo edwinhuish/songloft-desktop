@@ -73,7 +73,9 @@ export class ConfigStore {
       return {
         schema: 1,
         settings: { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}) },
-        servers: Array.isArray(raw.servers) ? raw.servers.filter((s) => s && typeof s.url === 'string') : [],
+        servers: Array.isArray(raw.servers)
+          ? raw.servers.filter((s) => s && typeof s.url === 'string')
+          : [],
         credentials: raw.credentials && typeof raw.credentials === 'object' ? raw.credentials : {},
         window: { ...DEFAULT_WINDOW, ...(raw.window ?? {}) }
       }

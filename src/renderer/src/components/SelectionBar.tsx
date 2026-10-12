@@ -8,7 +8,15 @@
  *     而不是悄悄什么也不做。
  */
 
-import { IconCheck, IconClose, IconHeart, IconListMusic, IconPlay, IconQueue, IconTrash } from './Icons'
+import {
+  IconCheck,
+  IconClose,
+  IconHeart,
+  IconListMusic,
+  IconPlay,
+  IconQueue,
+  IconTrash
+} from './Icons'
 import type { Song } from '@shared/types'
 import { deleteSong } from '@/api/endpoints'
 import { requireClient } from '@/state/useAuth'
@@ -106,12 +114,7 @@ export function SelectionBar({
           <IconQueue size={14} />
           加入队列
         </button>
-        <button
-          type="button"
-          className="btn"
-          data-size="sm"
-          onClick={() => openAddToPlaylist(ids)}
-        >
+        <button type="button" className="btn" data-size="sm" onClick={() => openAddToPlaylist(ids)}>
           <IconListMusic size={14} />
           加入歌单
         </button>

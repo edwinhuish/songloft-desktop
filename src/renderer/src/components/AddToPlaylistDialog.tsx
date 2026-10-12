@@ -94,7 +94,12 @@ export function AddToPlaylistDialog(): React.JSX.Element | null {
               创建并加入
             </button>
           ) : (
-            <button type="button" className="btn" data-variant="primary" onClick={() => setCreating(true)}>
+            <button
+              type="button"
+              className="btn"
+              data-variant="primary"
+              onClick={() => setCreating(true)}
+            >
               <IconPlus size={15} />
               新建歌单
             </button>
@@ -112,7 +117,12 @@ export function AddToPlaylistDialog(): React.JSX.Element | null {
             onChange={(event) => setKeyword(event.target.value)}
           />
           {keyword ? (
-            <button type="button" className="search-clear" aria-label="清除" onClick={() => setKeyword('')}>
+            <button
+              type="button"
+              className="search-clear"
+              aria-label="清除"
+              onClick={() => setKeyword('')}
+            >
               ×
             </button>
           ) : null}
@@ -166,7 +176,9 @@ export function AddToPlaylistDialog(): React.JSX.Element | null {
                   {playlist.name}
                 </div>
                 <div style={{ fontSize: 11.5, color: 'var(--text-4)' }}>
-                  {playlist.id === FAVORITE_PLAYLIST_ID ? '我喜欢的音乐' : `${playlist.song_count} 首`}
+                  {playlist.id === FAVORITE_PLAYLIST_ID
+                    ? '我喜欢的音乐'
+                    : `${playlist.song_count} 首`}
                 </div>
               </div>
               {busyId === playlist.id ? <IconCheck size={15} /> : null}

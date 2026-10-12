@@ -92,10 +92,16 @@ export function LyricsView({ compact = false }: { compact?: boolean }): React.JS
   }
 
   const activeLine = activeIndex >= 0 ? lyrics.lines[activeIndex] : null
-  const activeWordIndex = activeLine?.words.length ? findCurrentWord(activeLine.words, currentTime) : -1
+  const activeWordIndex = activeLine?.words.length
+    ? findCurrentWord(activeLine.words, currentTime)
+    : -1
 
   return (
-    <div ref={containerRef} className="lyrics" style={{ fontSize: compact ? settings.lyricFontSize * 0.85 : settings.lyricFontSize }}>
+    <div
+      ref={containerRef}
+      className="lyrics"
+      style={{ fontSize: compact ? settings.lyricFontSize * 0.85 : settings.lyricFontSize }}
+    >
       {lyrics.lines.map((line, index) => (
         <LyricRow
           key={`${line.time}-${index}`}
@@ -147,7 +153,11 @@ function LyricRow({
       <div className="lyric-main">
         {line.words.length > 0 ? (
           line.words.map((word, i) => (
-            <span key={`${word.time}-${i}`} className="lyric-word" data-sung={i <= activeWordIndex && active}>
+            <span
+              key={`${word.time}-${i}`}
+              className="lyric-word"
+              data-sung={i <= activeWordIndex && active}
+            >
               {word.text}
             </span>
           ))
@@ -156,7 +166,9 @@ function LyricRow({
         )}
       </div>
       {showRoman && line.roman ? <div className="lyric-roman">{line.roman}</div> : null}
-      {showTranslation && line.translation ? <div className="lyric-translation">{line.translation}</div> : null}
+      {showTranslation && line.translation ? (
+        <div className="lyric-translation">{line.translation}</div>
+      ) : null}
     </div>
   )
 }

@@ -36,12 +36,33 @@ export interface SongColumn {
   align?: 'left' | 'right'
 }
 
-const DURATION: SongColumn = { key: 'duration', label: '时长', width: '72px', sortField: 'duration', align: 'right' }
+const DURATION: SongColumn = {
+  key: 'duration',
+  label: '时长',
+  width: '72px',
+  sortField: 'duration',
+  align: 'right'
+}
 const ACTIONS: SongColumn = { key: 'actions', width: '84px' }
 const INDEX: SongColumn = { key: 'index', label: '#', width: '38px' }
-const TITLE: SongColumn = { key: 'title', label: '标题', width: 'minmax(180px, 2.6fr)', sortField: 'title' }
-const ARTIST: SongColumn = { key: 'artist', label: '歌手', width: 'minmax(110px, 1.4fr)', sortField: 'artist' }
-const ALBUM: SongColumn = { key: 'album', label: '专辑', width: 'minmax(110px, 1.4fr)', sortField: 'album' }
+const TITLE: SongColumn = {
+  key: 'title',
+  label: '标题',
+  width: 'minmax(180px, 2.6fr)',
+  sortField: 'title'
+}
+const ARTIST: SongColumn = {
+  key: 'artist',
+  label: '歌手',
+  width: 'minmax(110px, 1.4fr)',
+  sortField: 'artist'
+}
+const ALBUM: SongColumn = {
+  key: 'album',
+  label: '专辑',
+  width: 'minmax(110px, 1.4fr)',
+  sortField: 'album'
+}
 const ADDED: SongColumn = { key: 'added', label: '加入时间', width: '104px', sortField: 'added_at' }
 
 export const LIBRARY_COLUMNS: SongColumn[] = [INDEX, TITLE, ARTIST, ALBUM, ADDED, DURATION, ACTIONS]
@@ -99,7 +120,9 @@ export function SongTable({
   extraMenuItems,
   maxRendered = 1200
 }: SongTableProps): React.JSX.Element {
-  const currentSongId = usePlayer((s) => (s.cursor >= 0 && s.cursor < s.order.length ? s.queue[s.order[s.cursor]]?.id ?? null : null))
+  const currentSongId = usePlayer((s) =>
+    s.cursor >= 0 && s.cursor < s.order.length ? (s.queue[s.order[s.cursor]]?.id ?? null) : null
+  )
   const playing = usePlayer((s) => s.playing)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const dragSource = useRef<number | null>(null)
@@ -128,7 +151,9 @@ export function SongTable({
         return
       }
       if (additive) {
-        const next = selectionSet.has(index) ? selection.filter((i) => i !== index) : [...selection, index]
+        const next = selectionSet.has(index)
+          ? selection.filter((i) => i !== index)
+          : [...selection, index]
         onSelectionChange(next, index)
         return
       }
@@ -198,17 +223,21 @@ export function SongTable({
           onClick={(event) => handleRowClick(event, index)}
           onContextMenu={(event) =>
             openMenuFromEvent(event, [
-              ...buildSongMenuItems(selectionSet.has(index) && selection.length > 1
-                ? selection.map((i) => songs[i]).filter(Boolean)
-                : [song], menuOptions),
+              ...buildSongMenuItems(
+                selectionSet.has(index) && selection.length > 1
+                  ? selection.map((i) => songs[i]).filter(Boolean)
+                  : [song],
+                menuOptions
+              ),
               ...(extraMenuItems?.(song) ?? [])
             ])
           }
           onMoreClick={(event) => {
             // 多选状态下对任一选中行点「更多」，操作的是整批
-            const targets = selectionSet.has(index) && selection.length > 1
-              ? selection.map((i) => songs[i]).filter(Boolean)
-              : [song]
+            const targets =
+              selectionSet.has(index) && selection.length > 1
+                ? selection.map((i) => songs[i]).filter(Boolean)
+                : [song]
             openMenuFromEvent(event, buildSongMenuItems(targets, menuOptions))
           }}
           reorderable={Boolean(onReorder)}
@@ -237,11 +266,14 @@ export function SongTable({
 
       {songs.length > maxRendered ? (
         <div style={{ padding: '16px 14px', fontSize: 12.5, color: 'var(--text-4)' }}>
-          已渲染前 {maxRendered} 首，继续滚动或缩小筛选范围以查看其余 {songs.length - maxRendered} 首
+          已渲染前 {maxRendered} 首，继续滚动或缩小筛选范围以查看其余 {songs.length - maxRendered}{' '}
+          首
         </div>
       ) : null}
 
-      {hasMore && onLoadMore ? <InfiniteSentinel onVisible={onLoadMore} disabled={!hasMore} /> : null}
+      {hasMore && onLoadMore ? (
+        <InfiniteSentinel onVisible={onLoadMore} disabled={!hasMore} />
+      ) : null}
     </div>
   )
 }
@@ -330,7 +362,11 @@ function SongRow({
           </div>
         )
       case 'duration':
-        return <div className="song-duration">{song.is_live ? 'LIVE' : formatDuration(song.duration)}</div>
+        return (
+          <div className="song-duration">
+            {song.is_live ? 'LIVE' : formatDuration(song.duration)}
+          </div>
+        )
       default:
         return null
     }
@@ -392,7 +428,10 @@ function SongRow({
             </button>
           </div>
         ) : (
-          <div key={`${column.key}-${i}`} style={{ minWidth: 0, textAlign: column.align ?? 'left' }}>
+          <div
+            key={`${column.key}-${i}`}
+            style={{ minWidth: 0, textAlign: column.align ?? 'left' }}
+          >
             {renderCell(column)}
           </div>
         )

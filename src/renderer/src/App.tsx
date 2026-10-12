@@ -35,7 +35,12 @@ import { PlaylistsPage } from './pages/PlaylistsPage'
 import { RecentPage } from './pages/RecentPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { installMediaSessionHandlers, installNowPlayingSync, primeAudio, usePlayer } from './state/usePlayer'
+import {
+  installMediaSessionHandlers,
+  installNowPlayingSync,
+  primeAudio,
+  usePlayer
+} from './state/usePlayer'
 import { useAuth } from './state/useAuth'
 import { usePlaylists } from './state/usePlaylists'
 import { useSettings, watchSystemTheme } from './state/useSettings'

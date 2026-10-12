@@ -66,6 +66,29 @@ export default tseslint.config(
   },
 
   {
+    // E2E 脚本（mock 后端 + CDP 驱动）是 Node ESM，用到的全局比主进程多：
+    // WebSocket/fetch 驱动 CDP，Buffer 处理截图字节，Timer 做轮询等待。
+    files: ['scripts/e2e/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        fetch: 'readonly',
+        Buffer: 'readonly',
+        URL: 'readonly',
+        URLSearchParams: 'readonly',
+        WebSocket: 'readonly',
+        TextDecoder: 'readonly',
+        TextEncoder: 'readonly',
+        AbortController: 'readonly',
+        structuredClone: 'readonly'
+      }
+    }
+  },
+
+  {
     // 渲染层禁止直接碰 Node / Electron 远程模块：能力只能经 preload 白名单进。
     files: ['src/renderer/**/*.{ts,tsx}'],
     rules: {
@@ -73,7 +96,10 @@ export default tseslint.config(
         'error',
         {
           paths: [
-            { name: 'electron', message: '渲染层不得直接 import electron，请走 window.songloft（preload 白名单）。' },
+            {
+              name: 'electron',
+              message: '渲染层不得直接 import electron，请走 window.songloft（preload 白名单）。'
+            },
             { name: 'node:fs', message: '渲染层不得访问文件系统，请走 window.songloft。' },
             { name: 'node:child_process', message: '渲染层不得启动进程。' }
           ]

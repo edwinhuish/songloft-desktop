@@ -51,7 +51,10 @@ export function PlayerBar(): React.JSX.Element {
   const [scrub, setScrub] = useState<number | null>(null)
 
   const song = useMemo(
-    () => (player.cursor >= 0 && player.cursor < player.order.length ? player.queue[player.order[player.cursor]] : null),
+    () =>
+      player.cursor >= 0 && player.cursor < player.order.length
+        ? player.queue[player.order[player.cursor]]
+        : null,
     [player.cursor, player.order, player.queue]
   )
 

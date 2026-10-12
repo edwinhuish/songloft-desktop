@@ -56,7 +56,10 @@ export function Panel(): React.JSX.Element | null {
         </button>
       </div>
 
-      <div className="panel-body" style={panelTab === 'now-playing' ? { overflow: 'hidden' } : undefined}>
+      <div
+        className="panel-body"
+        style={panelTab === 'now-playing' ? { overflow: 'hidden' } : undefined}
+      >
         {panelTab === 'now-playing' ? <NowPlaying /> : <Queue />}
       </div>
     </aside>
@@ -64,7 +67,9 @@ export function Panel(): React.JSX.Element | null {
 }
 
 function NowPlaying(): React.JSX.Element {
-  const song = usePlayer((s) => (s.cursor >= 0 && s.cursor < s.order.length ? s.queue[s.order[s.cursor]] : null))
+  const song = usePlayer((s) =>
+    s.cursor >= 0 && s.cursor < s.order.length ? s.queue[s.order[s.cursor]] : null
+  )
   const context = usePlayer((s) => s.context)
 
   if (!song) {
@@ -91,9 +96,13 @@ function NowPlaying(): React.JSX.Element {
           {song.album ? ` · ${song.album}` : ''}
         </div>
         <div className="row" style={{ marginTop: 7, gap: 6, flexWrap: 'wrap' }}>
-          {context ? <span className="badge">来自{context.type === 'playlist' ? '歌单' : context.type}</span> : null}
+          {context ? (
+            <span className="badge">来自{context.type === 'playlist' ? '歌单' : context.type}</span>
+          ) : null}
           {song.format ? <span className="badge">{song.format.toUpperCase()}</span> : null}
-          {song.bit_rate ? <span className="badge">{Math.round(song.bit_rate / 1000)}k</span> : null}
+          {song.bit_rate ? (
+            <span className="badge">{Math.round(song.bit_rate / 1000)}k</span>
+          ) : null}
           {song.year ? <span className="badge">{song.year}</span> : null}
         </div>
       </div>
@@ -123,7 +132,13 @@ function Queue(): React.JSX.Element {
   }, [currentIndex])
 
   if (queue.length === 0) {
-    return <EmptyState icon={<IconListMusic size={26} />} title="播放队列是空的" description="双击歌曲或右键「加入播放队列」" />
+    return (
+      <EmptyState
+        icon={<IconListMusic size={26} />}
+        title="播放队列是空的"
+        description="双击歌曲或右键「加入播放队列」"
+      />
+    )
   }
 
   const totalDuration = queue.reduce((sum, s) => sum + (s.duration || 0), 0)
@@ -137,7 +152,13 @@ function Queue(): React.JSX.Element {
         <span>
           共 {queue.length} 首 · {formatDuration(totalDuration)}
         </span>
-        <button type="button" className="btn" data-size="sm" data-variant="ghost" onClick={() => clearQueue()}>
+        <button
+          type="button"
+          className="btn"
+          data-size="sm"
+          data-variant="ghost"
+          onClick={() => clearQueue()}
+        >
           <IconTrash size={14} />
           清空
         </button>

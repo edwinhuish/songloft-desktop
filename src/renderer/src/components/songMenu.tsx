@@ -7,7 +7,16 @@
 
 import type { Song } from '@shared/types'
 import type { MenuItem } from './ContextMenu'
-import { IconDisc, IconDownload, IconHeart, IconListMusic, IconPlus, IconQueue, IconTrash, IconUser } from './Icons'
+import {
+  IconDisc,
+  IconDownload,
+  IconHeart,
+  IconListMusic,
+  IconPlus,
+  IconQueue,
+  IconTrash,
+  IconUser
+} from './Icons'
 import { deleteSong, getSongIds } from '@/api/endpoints'
 import { usePlayer } from '@/state/usePlayer'
 import { usePlaylists } from '@/state/usePlaylists'

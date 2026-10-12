@@ -14,7 +14,13 @@ export function Toasts(): React.JSX.Element | null {
       {toasts.map((t) => (
         <div key={t.id} className="toast" data-tone={t.tone} onClick={() => dismiss(t.id)}>
           <span className="toast-icon">
-            {t.tone === 'success' ? <IconCheck size={16} /> : t.tone === 'error' ? <IconAlert size={16} /> : <IconInfo size={16} />}
+            {t.tone === 'success' ? (
+              <IconCheck size={16} />
+            ) : t.tone === 'error' ? (
+              <IconAlert size={16} />
+            ) : (
+              <IconInfo size={16} />
+            )}
           </span>
           <span className="grow">
             <div>{t.message}</div>

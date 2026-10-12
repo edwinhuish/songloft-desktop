@@ -32,7 +32,12 @@ import { Cover, EmptyState } from '@/components/primitives'
 import { Modal } from '@/components/Modal'
 import { SelectionBar } from '@/components/SelectionBar'
 import { PLAYLIST_COLUMNS, SongTable } from '@/components/SongTable'
-import { getPlaylist, reorderPlaylistSongs, sortPlaylistSongs, updatePlaylistSort } from '@/api/endpoints'
+import {
+  getPlaylist,
+  reorderPlaylistSongs,
+  sortPlaylistSongs,
+  updatePlaylistSort
+} from '@/api/endpoints'
 import { useAsync } from '@/hooks/useAsync'
 import { usePlaylistSongs } from '@/hooks/usePlaylistSongs'
 import { formatDuration } from '@/lib/format'
@@ -42,7 +47,8 @@ import { FAVORITE_PLAYLIST_ID, usePlaylists } from '@/state/usePlaylists'
 import { useUi } from '@/state/useUi'
 import { toast } from '@/state/useToasts'
 
-type ViewSort = 'position' | 'added_at' | 'file_modified_at' | 'title' | 'artist' | 'duration' | 'file_size'
+type ViewSort =
+  'position' | 'added_at' | 'file_modified_at' | 'title' | 'artist' | 'duration' | 'file_size'
 
 const VIEW_SORTS: { value: ViewSort; label: string; defaultOrder: 'asc' | 'desc' }[] = [
   { value: 'position', label: '自定义顺序', defaultOrder: 'asc' },
@@ -92,7 +98,8 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
   }, [metaResult.data, localMeta])
 
   const isFavorite = playlistId === FAVORITE_PLAYLIST_ID
-  const canReorder = sort === 'position' && !keyword && list.songs.length === list.total && list.total > 1
+  const canReorder =
+    sort === 'position' && !keyword && list.songs.length === list.total && list.total > 1
 
   const selectedSongs = useMemo(
     () => selection.map((i) => list.songs[i]).filter((s): s is NonNullable<typeof s> => Boolean(s)),
@@ -208,8 +215,14 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
           <div className="detail-meta">
             <span>{list.total} 首</span>
             {list.songs.length > 0 ? <span>· {formatDuration(totalDuration)}</span> : null}
-            {meta?.pinned_at ? <span className="badge" data-tone="accent">已置顶</span> : null}
-            {meta && meta.remote_count > 0 ? <span className="badge">含网络歌曲 {meta.remote_count}</span> : null}
+            {meta?.pinned_at ? (
+              <span className="badge" data-tone="accent">
+                已置顶
+              </span>
+            ) : null}
+            {meta && meta.remote_count > 0 ? (
+              <span className="badge">含网络歌曲 {meta.remote_count}</span>
+            ) : null}
           </div>
           {meta?.description ? <div className="detail-desc">{meta.description}</div> : null}
 
@@ -219,7 +232,9 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
               className="btn"
               data-variant="primary"
               disabled={list.songs.length === 0}
-              onClick={() => void playSongs(list.songs, 0, { type: 'playlist', key: String(playlistId) })}
+              onClick={() =>
+                void playSongs(list.songs, 0, { type: 'playlist', key: String(playlistId) })
+              }
             >
               <IconPlay size={15} />
               播放全部
@@ -269,7 +284,9 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
                   onClick={() => {
                     void playlistsStore.setPinned(playlistId, !meta?.pinned_at).then(() => {
                       setLocalMeta((prev) =>
-                        prev ? { ...prev, pinned_at: prev.pinned_at ? null : new Date().toISOString() } : prev
+                        prev
+                          ? { ...prev, pinned_at: prev.pinned_at ? null : new Date().toISOString() }
+                          : prev
                       )
                     })
                   }}
@@ -283,8 +300,15 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
                   className="btn"
                   data-variant="danger"
                   onClick={() => {
-                    if (!window.confirm(`确定删除歌单「${meta?.name ?? ''}」？只删歌单，不动歌曲文件。`)) return
-                    void playlistsStore.remove(playlistId, false).then(() => navigate({ name: 'playlists' }))
+                    if (
+                      !window.confirm(
+                        `确定删除歌单「${meta?.name ?? ''}」？只删歌单，不动歌曲文件。`
+                      )
+                    )
+                      return
+                    void playlistsStore
+                      .remove(playlistId, false)
+                      .then(() => navigate({ name: 'playlists' }))
                   }}
                 >
                   <IconTrash size={15} />
@@ -324,9 +348,12 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
               setSort(next)
               setOrder(preset?.defaultOrder ?? 'asc')
               clearSelection()
-              void updatePlaylistSort(requireClient(), playlistId, next, preset?.defaultOrder ?? 'asc').catch(
-                () => undefined
-              )
+              void updatePlaylistSort(
+                requireClient(),
+                playlistId,
+                next,
+                preset?.defaultOrder ?? 'asc'
+              ).catch(() => undefined)
             }}
             title="视图排序（不改动歌单本身）"
           >
@@ -347,7 +374,11 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
           </button>
           <span className="badge" data-tone={canReorder ? 'accent' : 'default'}>
             <IconGrip size={12} />
-            {canReorder ? '可拖动排序' : sort === 'position' ? '加载全部后可拖动' : '切到「自定义顺序」才能拖动'}
+            {canReorder
+              ? '可拖动排序'
+              : sort === 'position'
+                ? '加载全部后可拖动'
+                : '切到「自定义顺序」才能拖动'}
           </span>
         </div>
 
@@ -393,7 +424,9 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
         songs={list.songs}
         columns={PLAYLIST_COLUMNS}
         loading={list.loading}
-        onPlayAt={(index) => void playSongs(list.songs, index, { type: 'playlist', key: String(playlistId) })}
+        onPlayAt={(index) =>
+          void playSongs(list.songs, index, { type: 'playlist', key: String(playlistId) })
+        }
         hasMore={list.hasMore}
         onLoadMore={list.loadMore}
         selection={selection}
@@ -433,7 +466,12 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
         }
         emptyAction={
           keyword ? null : (
-            <button type="button" className="btn" data-variant="primary" onClick={() => navigate({ name: 'library' })}>
+            <button
+              type="button"
+              className="btn"
+              data-variant="primary"
+              onClick={() => navigate({ name: 'library' })}
+            >
               去曲库选歌
             </button>
           )
@@ -461,7 +499,10 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
 
       {selectAllIds || selection.length > 0 ? (
         <SelectionBar
-          ids={selectAllIds ?? selection.map((i) => list.songs[i]?.id).filter((x): x is number => x != null)}
+          ids={
+            selectAllIds ??
+            selection.map((i) => list.songs[i]?.id).filter((x): x is number => x != null)
+          }
           songs={selectAllIds ? undefined : selectedSongs}
           selectAll={Boolean(selectAllIds)}
           selectAllTotal={selectAllIds?.length}

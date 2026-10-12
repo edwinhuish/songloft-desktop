@@ -7,13 +7,7 @@
 
 import { create } from 'zustand'
 
-export type SettingsSection =
-  | 'appearance'
-  | 'playback'
-  | 'library'
-  | 'server'
-  | 'account'
-  | 'about'
+export type SettingsSection = 'appearance' | 'playback' | 'library' | 'server' | 'account' | 'about'
 
 export type Route =
   | { name: 'home' }
@@ -111,9 +105,9 @@ export function routeFromPath(path: string): Route | null {
     const section = path.split('/')[2]
     return {
       name: 'settings',
-      section: (['appearance', 'playback', 'library', 'server', 'account', 'about'] as const).includes(
-        section as never
-      )
+      section: (
+        ['appearance', 'playback', 'library', 'server', 'account', 'about'] as const
+      ).includes(section as never)
         ? (section as SettingsSection)
         : 'appearance'
     }

@@ -43,7 +43,8 @@ export function buildCoverUrl(
   const full = buildResourceUrl(coverUrl, ctx)
   if (!full || width == null || width <= 0) return full
   // 只对本机后端加：外链 CDN 的 URL 可能带签名，改 query 会失效
-  const isBackendUrl = !/^https?:\/\//i.test(coverUrl ?? '') || full.startsWith(trimTrailingSlash(ctx.baseUrl))
+  const isBackendUrl =
+    !/^https?:\/\//i.test(coverUrl ?? '') || full.startsWith(trimTrailingSlash(ctx.baseUrl))
   if (!isBackendUrl) return full
   if (/[?&]w=\d+/.test(full)) return full
   return `${full}&w=${Math.round(width)}`
@@ -78,7 +79,11 @@ export interface SongUrlOptions {
  * 与 Flutter 端一致：指定 track 时**不再附加 format** —— 容器由后端按该音轨编码决定
  * （AAC → m4a 无损 remux，否则 → mp3），两个参数一起给会互相冲突。
  */
-export function buildSongUrl(song: Song, ctx: ResourceContext, options: SongUrlOptions = {}): string {
+export function buildSongUrl(
+  song: Song,
+  ctx: ResourceContext,
+  options: SongUrlOptions = {}
+): string {
   const source = song.url ?? song.source_url ?? ''
   let result = buildResourceUrl(source, ctx)
   if (!result) return ''

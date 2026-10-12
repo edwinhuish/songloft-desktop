@@ -59,7 +59,10 @@ interface RawLine {
   words: LyricWord[]
 }
 
-function parseRawLines(source: string, meta: Record<string, string>): { lines: RawLine[]; offset: number } {
+function parseRawLines(
+  source: string,
+  meta: Record<string, string>
+): { lines: RawLine[]; offset: number } {
   const lines: RawLine[] = []
   let offset = 0
 
@@ -116,32 +119,87 @@ function parseRawLines(source: string, meta: Record<string, string>): { lines: R
       continue
     }
     for (const time of stamps) {
-      if (text || words.length > 0) lines.push({ time, text: text || words.map((w) => w.text).join(''), words })
+      if (text || words.length > 0)
+        lines.push({ time, text: text || words.map((w) => w.text).join(''), words })
     }
   }
 
   return { lines, offset }
 }
 
-export function parseLrc(source: string): { lines: RawLine[]; offset: number; meta: Record<string, string> } {
+export function parseLrc(source: string): {
+  lines: RawLine[]
+  offset: number
+  meta: Record<string, string>
+} {
   const meta: Record<string, string> = {}
   const { lines, offset } = parseRawLines(source ?? '', meta)
   return { lines, offset, meta }
 }
 
-/** 按时间戳把翻译/罗马音对齐到主歌词行 */
+/**
+ * 时间戳对齐容差（秒）。
+ * 同一首歌的翻译 / 罗马音 / 逐字源与主歌词常来自不同的处理环节，
+ * 会有几毫秒的写法差异（`12.000` vs `12.010`）。
+ */
+const ALIGN_TOLERANCE = 0.04
+
+/**
+ * 为每个 target 找容差内最近的一个候选，返回与 targets 等长的数组（未命中为 null）。
+ *
+ * ⚠️ 这里**不能**用「按 20ms 分桶」的写法：`Math.round(t * 50)` 会把 12.000 和
+ *    12.010 分别归到 600 / 601 两桶，恰好落在桶边界上就漏配 —— 分桶只能保证
+ *    「同一桶内」的差异可容忍，无法保证容差本身。改用单调游标 + 窗口内最近邻：
+ *    targets 按时间排序后游标只前进，复杂度近似线性。
+ *
+ * 约定：`candidates` 必须已按 time 升序排列。
+ */
+function matchNearest<T extends { time: number }>(
+  candidates: T[],
+  targets: { time: number }[]
+): (T | null)[] {
+  const out: (T | null)[] = new Array<T | null>(targets.length).fill(null)
+  if (candidates.length === 0 || targets.length === 0) return out
+
+  // 按时间顺序遍历 target 以维持游标单调；结果回填到原下标，保持调用方的顺序语义。
+  const order = targets.map((_, index) => index).sort((a, b) => targets[a]!.time - targets[b]!.time)
+
+  let cursor = 0
+  for (const index of order) {
+    const time = targets[index]!.time
+    // 纯文本歌词的占位时间戳是 NaN，不参与对齐
+    if (Number.isNaN(time)) continue
+
+    while (cursor < candidates.length && candidates[cursor]!.time < time - ALIGN_TOLERANCE)
+      cursor += 1
+
+    let best: T | null = null
+    let bestDelta = Number.POSITIVE_INFINITY
+    for (
+      let k = cursor;
+      k < candidates.length && candidates[k]!.time <= time + ALIGN_TOLERANCE;
+      k += 1
+    ) {
+      const delta = Math.abs(candidates[k]!.time - time)
+      if (delta < bestDelta) {
+        bestDelta = delta
+        best = candidates[k]!
+      }
+    }
+    out[index] = best
+  }
+  return out
+}
+
+/** 按时间戳把翻译/罗马音对齐到主歌词行（同一时间戳只保留一条） */
 function alignByTime(timeline: RawLine[], extra: RawLine[]): Map<number, string> {
   const map = new Map<number, string>()
   if (extra.length === 0) return map
-  // 时间戳可能有 ±10ms 的写法差异，按 20ms 粒度做键，避免「差 5ms 对不上」。
-  const key = (t: number): number => Math.round(t * 50)
-  const bucket = new Map<number, string>()
-  for (const line of extra) {
-    if (line.text) bucket.set(key(line.time), line.text)
-  }
-  for (const line of timeline) {
-    const hit = bucket.get(key(line.time))
-    if (hit) map.set(line.time, hit)
+  const candidates = extra.filter((l) => l.text).sort((a, b) => a.time - b.time)
+  const hits = matchNearest(candidates, timeline)
+  for (let i = 0; i < timeline.length; i += 1) {
+    const hit = hits[i]
+    if (hit) map.set(timeline[i]!.time, hit.text)
   }
   return map
 }
@@ -149,6 +207,39 @@ function alignByTime(timeline: RawLine[], extra: RawLine[]): Map<number, string>
 /** 去掉翻译/罗马音里与主歌词完全相同的行（很多后端会原样回填） */
 function isRedundant(main: string, extra: string): boolean {
   return !extra || extra.trim() === main.trim()
+}
+
+/**
+ * 把「逐字时间轴」并到主歌词的时间轴上。
+ *
+ * ⚠️ 行集合**必须以主歌词为准**。这里早先的写法是 `base = wordSource ?? main`，
+ *    即一旦有逐字歌词就整份换掉主歌词 —— 后果是：主歌词里有、逐字源里没有的行
+ *    会被**整行丢弃**，界面上表现为歌词莫名其妙少几句，且没有任何报错。
+ *    逐字源只覆盖副歌、或与主歌词行数不一致，在真实数据里很常见。
+ *
+ * 逐字源里多出来的行（主歌词缺失/为空）按时间补进来；主歌词为空时结果就等于逐字源。
+ * 时间戳的对齐同样走 matchNearest —— 逐字源与主歌词也可能是分开生成的，
+ * 差几毫秒就贴不上的话，卡拉 OK 高亮会整段失效。
+ */
+function mergeWordTimeline(main: RawLine[], wordSource: RawLine[] | null): RawLine[] {
+  if (!wordSource || wordSource.length === 0) return main
+
+  const candidates = wordSource.filter((l) => l.words.length > 0).sort((a, b) => a.time - b.time)
+  if (candidates.length === 0) return main
+
+  const hits = matchNearest(candidates, main)
+  const attached = new Set<RawLine>()
+  const merged = main.map((line, index) => {
+    const hit = hits[index]
+    if (!hit) return line
+    attached.add(hit)
+    return { ...line, words: hit.words }
+  })
+
+  // 逐字源里没被任何主歌词行认领的，按时间补进来
+  const extra = candidates.filter((l) => !attached.has(l))
+  if (extra.length === 0) return merged
+  return [...merged, ...extra].sort((a, b) => a.time - b.time)
 }
 
 export interface ParseLyricOptions {
@@ -160,7 +251,7 @@ export interface ParseLyricOptions {
 
 /**
  * 把后端返回的四路歌词合成一个可直接渲染的时间轴。
- * 逐字源优先 lxlyric；为空且主歌词自带 `<…>` 时用主歌词。
+ * 行集合取主歌词；逐字时间轴优先用 lxlyric（主歌词自带 `<…>` 时已在 main 里）。
  */
 export function parseLyrics(payload: ParseLyricOptions): ParsedLyric {
   const meta: Record<string, string> = {}
@@ -169,16 +260,15 @@ export function parseLyrics(payload: ParseLyricOptions): ParsedLyric {
   const tr = parseRawLines(payload.tlyric ?? '', {})
   const ro = parseRawLines(payload.rlyric ?? '', {})
 
-  const hasWordMark = main.lines.some((l) => l.words.length > 0)
-  const wordSource = lx.lines.some((l) => l.words.length > 0) ? lx : hasWordMark ? main : null
-  const base = wordSource ?? main
+  const lxHasWords = lx.lines.some((l) => l.words.length > 0)
+  const baseLines = mergeWordTimeline(main.lines, lxHasWords ? lx.lines : null)
   const offset = main.offset
 
-  const translationMap = alignByTime(base.lines, tr.lines)
-  const romanMap = alignByTime(base.lines, ro.lines)
+  const translationMap = alignByTime(baseLines, tr.lines)
+  const romanMap = alignByTime(baseLines, ro.lines)
 
-  const unsynced = base.lines.length > 0 && base.lines.every((l) => Number.isNaN(l.time))
-  const lines: LyricLine[] = base.lines
+  const unsynced = baseLines.length > 0 && baseLines.every((l) => Number.isNaN(l.time))
+  const lines: LyricLine[] = baseLines
     // 丢掉空行，但保留至少一行的情况
     .filter((l) => l.text.length > 0 || l.words.length > 0)
     .map((l, index) => {

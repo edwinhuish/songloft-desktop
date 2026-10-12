@@ -7,3 +7,11 @@ coverage/
 *.log
 .DS_Store
 .vite/
+
+# 端到端巡检的产物（截图 / 日志 / 临时 userData）
+.e2e/
+
+# electron-vite 每次加载配置都会在根目录生成一份「转译副本」再 import，
+# 正常情况下跑完就删。若进程被中断（或删除动作被拦），它就会留下来污染 git status ——
+# 它们只是 electron.vite.config.ts 的产物，删掉即可，下次构建自动重建。
+electron.vite.config.*.mjs

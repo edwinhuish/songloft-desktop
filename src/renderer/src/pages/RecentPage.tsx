@@ -74,7 +74,9 @@ export function RecentPage(): React.JSX.Element {
             最近播放
           </h1>
           <p className="page-subtitle">
-            {recentIds.length === 0 ? '还没有播放记录' : `共 ${recentIds.length} 条记录（显示最近 ${visibleIds.length} 条）`}
+            {recentIds.length === 0
+              ? '还没有播放记录'
+              : `共 ${recentIds.length} 条记录（显示最近 ${visibleIds.length} 条）`}
           </p>
         </div>
         <div className="row" style={{ gap: 8 }}>
@@ -92,7 +94,13 @@ export function RecentPage(): React.JSX.Element {
             <IconPlay size={15} />
             播放全部
           </button>
-          <button type="button" className="btn" data-variant="danger" disabled={recentIds.length === 0} onClick={clearAll}>
+          <button
+            type="button"
+            className="btn"
+            data-variant="danger"
+            disabled={recentIds.length === 0}
+            onClick={clearAll}
+          >
             <IconTrash size={15} />
             清空历史
           </button>
@@ -102,7 +110,12 @@ export function RecentPage(): React.JSX.Element {
       {result.data && result.data.missing.length > 0 ? (
         <div className="probe-result" style={{ marginBottom: 14 }}>
           <span>有 {result.data.missing.length} 首歌已从曲库删除，可直接从记录里清掉</span>
-          <button type="button" className="btn" data-size="sm" onClick={() => removeEntries(result.data!.missing)}>
+          <button
+            type="button"
+            className="btn"
+            data-size="sm"
+            onClick={() => removeEntries(result.data!.missing)}
+          >
             清理失效记录
           </button>
         </div>
@@ -132,7 +145,12 @@ export function RecentPage(): React.JSX.Element {
 
       {visibleIds.length < recentIds.length ? (
         <div className="load-more">
-          <button type="button" className="btn" data-size="sm" onClick={() => setLimit((v) => v + PAGE)}>
+          <button
+            type="button"
+            className="btn"
+            data-size="sm"
+            onClick={() => setLimit((v) => v + PAGE)}
+          >
             再显示 {Math.min(PAGE, recentIds.length - visibleIds.length)} 条
           </button>
         </div>

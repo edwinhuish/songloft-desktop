@@ -91,7 +91,9 @@ export function FoldersPage({ path }: { path: string }): React.JSX.Element {
               type="button"
               aria-current={segment.path === path}
               onClick={() => navigate({ name: 'folders', path: segment.path })}
-              style={segment.path === path ? { color: 'var(--text-1)', fontWeight: 600 } : undefined}
+              style={
+                segment.path === path ? { color: 'var(--text-1)', fontWeight: 600 } : undefined
+              }
             >
               {segment.label}
             </button>
@@ -142,7 +144,9 @@ export function FoldersPage({ path }: { path: string }): React.JSX.Element {
         menuOptions={{}}
         emptyTitle={folders.length > 0 ? '这个目录下没有直接的歌曲' : '这个目录是空的'}
         emptyDescription={
-          folders.length > 0 ? '点上面的子文件夹继续往里看' : '去「设置 → 曲库」扫描音乐目录，或在这里新建目录后重新扫描'
+          folders.length > 0
+            ? '点上面的子文件夹继续往里看'
+            : '去「设置 → 曲库」扫描音乐目录，或在这里新建目录后重新扫描'
         }
         emptyAction={
           folders.length === 0 ? (
@@ -160,12 +164,18 @@ export function FoldersPage({ path }: { path: string }): React.JSX.Element {
       />
 
       {songs.length === 0 && folders.length === 0 && !result.loading ? (
-        <EmptyState icon={<IconMusic size={26} />} title="目录是空的" description={data?.music_path} />
+        <EmptyState
+          icon={<IconMusic size={26} />}
+          title="目录是空的"
+          description={data?.music_path}
+        />
       ) : null}
 
       {selectAllIds || selection.length > 0 ? (
         <SelectionBar
-          ids={selectAllIds ?? selection.map((i) => songs[i]?.id).filter((x): x is number => x != null)}
+          ids={
+            selectAllIds ?? selection.map((i) => songs[i]?.id).filter((x): x is number => x != null)
+          }
           songs={selectAllIds ? undefined : selectedSongs}
           selectAll={Boolean(selectAllIds)}
           selectAllTotal={selectAllIds?.length}

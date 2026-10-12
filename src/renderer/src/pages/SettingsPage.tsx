@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { AppInfo, ServerProbeResult } from '@shared/ipc'
+import { REPO_URL, UPSTREAM_URL } from '@shared/links'
 import type { DuplicatesResult, MusicPathSetting, ScanProgress, TokenInfo } from '@shared/types'
 import {
   IconAlert,
@@ -139,7 +140,13 @@ function Row({ title, desc, server, children }: RowProps): React.JSX.Element {
   )
 }
 
-function Card({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
+function Card({
+  title,
+  children
+}: {
+  title: string
+  children: React.ReactNode
+}): React.JSX.Element {
   return (
     <section className="setting-card">
       <div className="setting-card-title">{title}</div>
@@ -205,7 +212,10 @@ function AppearanceSettings(): React.JSX.Element {
                   width: 26,
                   height: 26,
                   borderRadius: 8,
-                  border: accent.toLowerCase() === preset ? '2px solid var(--text-1)' : '1px solid var(--line-2)',
+                  border:
+                    accent.toLowerCase() === preset
+                      ? '2px solid var(--text-1)'
+                      : '1px solid var(--line-2)',
                   background: preset,
                   cursor: 'pointer'
                 }}
@@ -215,8 +225,16 @@ function AppearanceSettings(): React.JSX.Element {
               type="color"
               aria-label="自定义强调色"
               value={settings.accent}
-              onChange={(event) => void patch({ accent: event.target.value, accentFromCover: false })}
-              style={{ width: 34, height: 26, border: 'none', background: 'transparent', cursor: 'pointer' }}
+              onChange={(event) =>
+                void patch({ accent: event.target.value, accentFromCover: false })
+              }
+              style={{
+                width: 34,
+                height: 26,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer'
+              }}
             />
           </div>
         </Row>
@@ -300,7 +318,9 @@ function PlaybackSettings(): React.JSX.Element {
             className="input"
             style={{ width: 150 }}
             value={settings.playMode}
-            onChange={(event) => void patch({ playMode: event.target.value as typeof settings.playMode })}
+            onChange={(event) =>
+              void patch({ playMode: event.target.value as typeof settings.playMode })
+            }
           >
             <option value="order">顺序播放</option>
             <option value="loop">列表循环</option>
@@ -309,15 +329,14 @@ function PlaybackSettings(): React.JSX.Element {
           </select>
         </Row>
 
-        <Row
-          title="音质上限"
-          desc="只有后端配了对应转码等级才有效；「原始」表示不做任何处理"
-        >
+        <Row title="音质上限" desc="只有后端配了对应转码等级才有效；「原始」表示不做任何处理">
           <select
             className="input"
             style={{ width: 150 }}
             value={settings.quality}
-            onChange={(event) => void patch({ quality: event.target.value as typeof settings.quality })}
+            onChange={(event) =>
+              void patch({ quality: event.target.value as typeof settings.quality })
+            }
           >
             <option value="original">原始</option>
             <option value="320">320 kbps</option>
@@ -378,7 +397,10 @@ function PlaybackSettings(): React.JSX.Element {
           )}
         </Row>
 
-        <Row title="本机音频归一化参数" desc="把 normalize=1 一并交给后端音频端点（与上面那个开关是两件事）">
+        <Row
+          title="本机音频归一化参数"
+          desc="把 normalize=1 一并交给后端音频端点（与上面那个开关是两件事）"
+        >
           <Switch
             ariaLabel="本机音频归一化参数"
             checked={settings.volumeNormalize}
@@ -451,7 +473,9 @@ function LibrarySettings(): React.JSX.Element {
 
   const isScanning =
     progress != null &&
-    ['scanning', 'importing', 'splitting_cue', 'creating_playlists', 'cancelling'].includes(progress.status)
+    ['scanning', 'importing', 'splitting_cue', 'creating_playlists', 'cancelling'].includes(
+      progress.status
+    )
 
   // 扫描中才轮询；停下就清掉定时器，别让后台一直发请求
   useEffect(() => {
@@ -490,7 +514,10 @@ function LibrarySettings(): React.JSX.Element {
     []
   )
 
-  const percent = progress && progress.total_files > 0 ? Math.floor((progress.scanned_files * 100) / progress.total_files) : 0
+  const percent =
+    progress && progress.total_files > 0
+      ? Math.floor((progress.scanned_files * 100) / progress.total_files)
+      : 0
 
   return (
     <>
@@ -644,9 +671,10 @@ function LibrarySettings(): React.JSX.Element {
               <div className="progress-fill" style={{ width: `${percent}%` }} />
             </div>
             <div className="setting-row-desc" style={{ marginTop: 8 }}>
-              {percent}%
-              {progress.current_file ? ` · ${progress.current_file}` : ''}
-              {progress.cue_split_sources > 0 ? ` · 已切 CUE 整轨 ${progress.cue_split_sources} 个` : ''}
+              {percent}%{progress.current_file ? ` · ${progress.current_file}` : ''}
+              {progress.cue_split_sources > 0
+                ? ` · 已切 CUE 整轨 ${progress.cue_split_sources} 个`
+                : ''}
             </div>
           </div>
         ) : null}
@@ -669,7 +697,11 @@ function LibrarySettings(): React.JSX.Element {
           )}
         </Row>
 
-        <Row server title="标题来源" desc="「文件标签」优先读内嵌元数据；「文件名」直接拿文件名当标题">
+        <Row
+          server
+          title="标题来源"
+          desc="「文件标签」优先读内嵌元数据；「文件名」直接拿文件名当标题"
+        >
           <select
             className="input"
             style={{ width: 150 }}
@@ -689,7 +721,11 @@ function LibrarySettings(): React.JSX.Element {
           </select>
         </Row>
 
-        <Row server title="编辑元数据时回写音频文件" desc="关闭后只改数据库，本地文件的标签保持原样">
+        <Row
+          server
+          title="编辑元数据时回写音频文件"
+          desc="关闭后只改数据库，本地文件的标签保持原样"
+        >
           {tagSync.loading ? (
             <IconLoader size={16} />
           ) : (
@@ -709,10 +745,7 @@ function LibrarySettings(): React.JSX.Element {
       </Card>
 
       <Card title="曲库维护">
-        <Row
-          title="清理失效歌曲"
-          desc="把数据库里文件已经不存在的记录清掉（不动任何文件）"
-        >
+        <Row title="清理失效歌曲" desc="把数据库里文件已经不存在的记录清掉（不动任何文件）">
           <button
             type="button"
             className="btn"
@@ -846,11 +879,13 @@ function DuplicatesModal({
                     <div style={{ minWidth: 0 }}>
                       <div className="truncate" style={{ fontSize: 13 }}>
                         {song.title}
-                        {song.artist ? <span style={{ color: 'var(--text-3)' }}> — {song.artist}</span> : null}
+                        {song.artist ? (
+                          <span style={{ color: 'var(--text-3)' }}> — {song.artist}</span>
+                        ) : null}
                       </div>
                       <div className="truncate" style={{ fontSize: 11.5, color: 'var(--text-4)' }}>
-                        {song.format?.toUpperCase() || '?'} · {Math.round(song.bit_rate / 1000)}kbps ·{' '}
-                        {formatBytes(song.file_size)} · {song.file_path}
+                        {song.format?.toUpperCase() || '?'} · {Math.round(song.bit_rate / 1000)}kbps
+                        · {formatBytes(song.file_size)} · {song.file_path}
                       </div>
                     </div>
                     <button
@@ -860,7 +895,10 @@ function DuplicatesModal({
                       data-variant="danger"
                       disabled={busyId === song.id || removed.includes(song.id)}
                       onClick={() => {
-                        if (!window.confirm(`从曲库删除记录「${song.title}」？（不会删除本地文件）`)) return
+                        if (
+                          !window.confirm(`从曲库删除记录「${song.title}」？（不会删除本地文件）`)
+                        )
+                          return
                         setBusyId(song.id)
                         void deleteSong(requireClient(), song.id, false)
                           .then(() => {
@@ -868,7 +906,11 @@ function DuplicatesModal({
                             toast('已从曲库删除该记录', 'success')
                           })
                           .catch((error: unknown) =>
-                            toast('删除失败', 'error', error instanceof Error ? error.message : undefined)
+                            toast(
+                              '删除失败',
+                              'error',
+                              error instanceof Error ? error.message : undefined
+                            )
                           )
                           .finally(() => setBusyId(null))
                       }}
@@ -983,7 +1025,8 @@ function ServerSettings(): React.JSX.Element {
                     title="移除该服务器及其本机凭据"
                     aria-label={`移除 ${server.name}`}
                     onClick={() => {
-                      if (window.confirm(`移除「${server.name}」及其本机凭据？`)) void forgetServer(server.url)
+                      if (window.confirm(`移除「${server.name}」及其本机凭据？`))
+                        void forgetServer(server.url)
                     }}
                   >
                     <IconTrash size={15} />
@@ -1106,6 +1149,12 @@ function AccountSettings(): React.JSX.Element {
 
 /* ───────────────────────────── 关于 ───────────────────────────── */
 
+/** 「关于」里要打开的两个地址：本仓库在前，上游原项目在后 */
+const ABOUT_LINKS: { href: string; label: string }[] = [
+  { href: REPO_URL, label: '本仓库' },
+  { href: UPSTREAM_URL, label: '原项目' }
+]
+
 function AboutSettings(): React.JSX.Element {
   const { backendVersion } = useAuth()
   const info = useAsync<AppInfo>(() => window.songloft.app.info(), [])
@@ -1117,7 +1166,10 @@ function AboutSettings(): React.JSX.Element {
         ['Chromium', info.data.chrome],
         ['Node', info.data.node],
         ['平台', info.data.platform],
-        ['运行方式', info.data.packaged ? (info.data.appImage ? 'AppImage' : '已安装包') : '开发模式'],
+        [
+          '运行方式',
+          info.data.packaged ? (info.data.appImage ? 'AppImage' : '已安装包') : '开发模式'
+        ],
         ['后端版本', backendVersion ?? '未知']
       ]
     : []
@@ -1130,15 +1182,18 @@ function AboutSettings(): React.JSX.Element {
           desc="songloft-player 的 Electron 桌面重写版：只做桌面端，用一套 Web 技术栈换取更小的体积与更顺的宽屏布局。数据与后端协议完全沿用原项目。"
         >
           <div className="row" style={{ gap: 8 }}>
-            <button
-              type="button"
-              className="btn"
-              data-size="sm"
-              onClick={() => void window.songloft.shell.openExternal('https://github.com/songloft-org/songloft-player')}
-            >
-              <IconExternal size={14} />
-              原项目
-            </button>
+            {ABOUT_LINKS.map(({ href, label }) => (
+              <button
+                key={href}
+                type="button"
+                className="btn"
+                data-size="sm"
+                onClick={() => void window.songloft.shell.openExternal(href)}
+              >
+                <IconExternal size={14} />
+                {label}
+              </button>
+            ))}
           </div>
         </Row>
 
@@ -1174,7 +1229,10 @@ function AboutSettings(): React.JSX.Element {
         <Row title="Alt + ←" desc="返回上一页">
           <span className="badge">导航</span>
         </Row>
-        <Row title="媒体键 / 托盘" desc="键盘上的播放暂停、上一首、下一首键直接接管；最小化到托盘后仍可控制">
+        <Row
+          title="媒体键 / 托盘"
+          desc="键盘上的播放暂停、上一首、下一首键直接接管；最小化到托盘后仍可控制"
+        >
           <IconSliders size={15} />
         </Row>
       </Card>

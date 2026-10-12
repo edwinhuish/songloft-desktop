@@ -11,6 +11,8 @@
 
 import { Menu, app, shell } from 'electron'
 import type { BrowserWindow } from 'electron'
+import { IPC } from '@shared/ipc'
+import { REPO_URL, UPSTREAM_URL } from '@shared/links'
 
 export function installAppMenu(getWindow: () => BrowserWindow | null): void {
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -20,7 +22,7 @@ export function installAppMenu(getWindow: () => BrowserWindow | null): void {
         {
           label: '设置',
           accelerator: 'CmdOrCtrl+,',
-          click: () => getWindow()?.webContents.send('app:navigate', '/settings')
+          click: () => getWindow()?.webContents.send(IPC.onNavigate, '/settings')
         },
         { type: 'separator' },
         { label: '退出', accelerator: 'CmdOrCtrl+Q', role: 'quit' }
@@ -55,9 +57,14 @@ export function installAppMenu(getWindow: () => BrowserWindow | null): void {
       label: '帮助',
       submenu: [
         {
-          label: 'Songloft 项目主页',
-          click: () => void shell.openExternal('https://github.com/songloft-org/songloft-player')
+          label: '本仓库（songloft-desktop）',
+          click: () => void shell.openExternal(REPO_URL)
         },
+        {
+          label: '原项目（songloft-player）',
+          click: () => void shell.openExternal(UPSTREAM_URL)
+        },
+        { type: 'separator' },
         {
           label: '打开配置目录',
           click: () => void shell.openPath(app.getPath('userData'))

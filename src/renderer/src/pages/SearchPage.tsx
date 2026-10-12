@@ -37,16 +37,10 @@ export function SearchPage({ keyword }: { keyword: string }): React.JSX.Element 
     setSelectAllIds(null)
   }, [keyword])
 
-  const query = useMemo(
-    () => ({ keyword, sort: sort?.field, order: sort?.order }),
-    [keyword, sort]
-  )
+  const query = useMemo(() => ({ keyword, sort: sort?.field, order: sort?.order }), [keyword, sort])
   const list = useSongList(query, 200)
 
-  const playlists = useAsync(
-    () => getPlaylists(requireClient(), { keyword, limit: 6 }),
-    [keyword]
-  )
+  const playlists = useAsync(() => getPlaylists(requireClient(), { keyword, limit: 6 }), [keyword])
   const artistFacets = useAsync(
     () => getFacets(requireClient(), 'artist', { keyword, limit: 6, sort: 'count', order: 'desc' }),
     [keyword]
@@ -64,7 +58,8 @@ export function SearchPage({ keyword }: { keyword: string }): React.JSX.Element 
   const matchedPlaylists = playlists.data?.playlists ?? []
   const matchedArtists = artistFacets.data?.facets ?? []
   const matchedAlbums = albumFacets.data?.facets ?? []
-  const hasRelated = matchedPlaylists.length > 0 || matchedArtists.length > 0 || matchedAlbums.length > 0
+  const hasRelated =
+    matchedPlaylists.length > 0 || matchedArtists.length > 0 || matchedAlbums.length > 0
 
   const submit = (event: React.FormEvent): void => {
     event.preventDefault()
@@ -127,7 +122,9 @@ export function SearchPage({ keyword }: { keyword: string }): React.JSX.Element 
                   >
                     <Cover coverUrl={playlist.cover_url} width={48} size={26} radius={6} />
                     {playlist.name}
-                    <span style={{ color: 'var(--text-4)', fontSize: 11.5 }}>{playlist.song_count} 首</span>
+                    <span style={{ color: 'var(--text-4)', fontSize: 11.5 }}>
+                      {playlist.song_count} 首
+                    </span>
                   </button>
                 ))}
               </div>
@@ -217,9 +214,7 @@ export function SearchPage({ keyword }: { keyword: string }): React.JSX.Element 
         menuOptions={{ onDeleted: (ids) => list.removeSongs(ids) }}
         emptyTitle={`没有找到「${keyword}」`}
         emptyDescription="试试更短的关键词，或者用 Ctrl+K 打开命令面板"
-        emptyAction={
-          <EmptyStateInline />
-        }
+        emptyAction={<EmptyStateInline />}
       />
 
       {list.songs.length > 0 && selection.length === 0 && !selectAllIds ? (
@@ -230,7 +225,10 @@ export function SearchPage({ keyword }: { keyword: string }): React.JSX.Element 
             data-size="sm"
             data-variant="ghost"
             onClick={() => {
-              void list.fetchAllIds().then(setSelectAllIds).catch(() => undefined)
+              void list
+                .fetchAllIds()
+                .then(setSelectAllIds)
+                .catch(() => undefined)
             }}
           >
             全选当前筛选（{list.total} 首）
@@ -240,7 +238,10 @@ export function SearchPage({ keyword }: { keyword: string }): React.JSX.Element 
 
       {selectAllIds || selection.length > 0 ? (
         <SelectionBar
-          ids={selectAllIds ?? selection.map((i) => list.songs[i]?.id).filter((x): x is number => x != null)}
+          ids={
+            selectAllIds ??
+            selection.map((i) => list.songs[i]?.id).filter((x): x is number => x != null)
+          }
           songs={selectAllIds ? undefined : selectedSongs}
           selectAll={Boolean(selectAllIds)}
           selectAllTotal={selectAllIds?.length}
@@ -268,7 +269,12 @@ function EmptyStateInline(): React.JSX.Element {
         <IconSearch size={15} />
         打开命令面板
       </button>
-      <button type="button" className="btn" data-variant="primary" onClick={() => navigate({ name: 'library' })}>
+      <button
+        type="button"
+        className="btn"
+        data-variant="primary"
+        onClick={() => navigate({ name: 'library' })}
+      >
         回到曲库
       </button>
     </div>

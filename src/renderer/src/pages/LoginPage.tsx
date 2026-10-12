@@ -11,7 +11,14 @@
 import { useEffect, useState } from 'react'
 
 import type { ServerProbeResult } from '@shared/ipc'
-import { IconAlert, IconCheck, IconLoader, IconServer, IconSparkle, IconTrash } from '@/components/Icons'
+import {
+  IconAlert,
+  IconCheck,
+  IconLoader,
+  IconServer,
+  IconSparkle,
+  IconTrash
+} from '@/components/Icons'
 import { useAuth } from '@/state/useAuth'
 import { useToasts } from '@/state/useToasts'
 
@@ -89,7 +96,11 @@ export function LoginPage(): React.JSX.Element {
   return (
     <div className="login">
       <div className="login-brand">
-        <img src="./icon.png" alt="" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+        <img
+          src="./icon.png"
+          alt=""
+          onError={(e) => (e.currentTarget.style.visibility = 'hidden')}
+        />
         <div>
           <h1>Songloft</h1>
           <p>
@@ -149,7 +160,7 @@ export function LoginPage(): React.JSX.Element {
                     ? `连接正常${probeResult.version ? ` · 后端 ${probeResult.version}` : ''}${
                         probeResult.healthy ? '' : '（健康检查未通过）'
                       }`
-                    : probeResult.error ?? '无法连接'}
+                    : (probeResult.error ?? '无法连接')}
                   {probeResult.elapsedMs > 0 ? ` · ${probeResult.elapsedMs}ms` : ''}
                 </span>
               </div>
@@ -208,7 +219,13 @@ export function LoginPage(): React.JSX.Element {
             </div>
           ) : null}
 
-          <button type="submit" className="btn" data-variant="primary" data-size="lg" disabled={busy}>
+          <button
+            type="submit"
+            className="btn"
+            data-variant="primary"
+            data-size="lg"
+            disabled={busy}
+          >
             {busy ? <IconLoader size={16} /> : null}
             {busy ? '正在登录…' : '登录'}
           </button>

@@ -148,7 +148,11 @@ function updateMediaSession(song: Song, playing: boolean): void {
 }
 
 function updatePositionState(): void {
-  if (!('mediaSession' in navigator) || typeof navigator.mediaSession.setPositionState !== 'function') return
+  if (
+    !('mediaSession' in navigator) ||
+    typeof navigator.mediaSession.setPositionState !== 'function'
+  )
+    return
   if (!Number.isFinite(audio.duration) || audio.duration <= 0) return
   try {
     navigator.mediaSession.setPositionState({
@@ -177,7 +181,15 @@ export const usePlayer = create<PlayerState>((set, get) => {
       return
     }
 
-    set({ error: null, buffering: true, lyrics: EMPTY_LYRIC, lyricsLoading: true, context: ctx, tracks: [], activeTrack: -1 })
+    set({
+      error: null,
+      buffering: true,
+      lyrics: EMPTY_LYRIC,
+      lyricsLoading: true,
+      context: ctx,
+      tracks: [],
+      activeTrack: -1
+    })
     audio.src = url
     audio.volume = settings.volume
 
@@ -187,12 +199,18 @@ export const usePlayer = create<PlayerState>((set, get) => {
       set({ buffering: false, playing: false })
       const message = error instanceof Error ? error.message : String(error)
       // NotAllowedError 只会在「没有用户手势」时出现，属于程序问题而非资源问题
-      set({ error: message.includes('NotAllowed') ? '浏览器阻止了自动播放，请点一下播放按钮' : `播放失败：${message}` })
+      set({
+        error: message.includes('NotAllowed')
+          ? '浏览器阻止了自动播放，请点一下播放按钮'
+          : `播放失败：${message}`
+      })
       return
     }
 
     // 播放成功后才记账：失败的重试不该刷进「最近播放」
-    void reportPlayed(requireClient(), song.id, { type: 'play', context: ctx }).catch(() => undefined)
+    void reportPlayed(requireClient(), song.id, { type: 'play', context: ctx }).catch(
+      () => undefined
+    )
     rememberRecent(song.id)
 
     // 封面主色 → 整页强调色
@@ -329,7 +347,8 @@ export const usePlayer = create<PlayerState>((set, get) => {
     playSongs: async (songs, startIndex = 0, context = null) => {
       if (songs.length === 0) return
       const mode = get().playMode
-      const order = mode === 'random' ? shuffleIndices(songs.length, startIndex) : identityOrder(songs.length)
+      const order =
+        mode === 'random' ? shuffleIndices(songs.length, startIndex) : identityOrder(songs.length)
       const cursor = mode === 'random' ? order.indexOf(startIndex) : startIndex
       set({ queue: songs, order, cursor: cursor >= 0 ? cursor : 0, context })
       await startSong(songs[startIndex], context)
@@ -415,7 +434,11 @@ export const usePlayer = create<PlayerState>((set, get) => {
         const insertAt = cursor + 1
         const nextQueue = [...queue]
         nextQueue.splice(insertAt, 0, ...songs)
-        const nextOrder = [...order.slice(0, insertAt), ...songs.map((_, i) => queue.length + i), ...order.slice(insertAt)]
+        const nextOrder = [
+          ...order.slice(0, insertAt),
+          ...songs.map((_, i) => queue.length + i),
+          ...order.slice(insertAt)
+        ]
         set({ queue: nextQueue, order: nextOrder })
       } else {
         set({
@@ -436,7 +459,10 @@ export const usePlayer = create<PlayerState>((set, get) => {
         if (!remove.has(i)) remap.set(i, write++)
       })
       const nextOrder = order.filter((i) => !remove.has(i)).map((i) => remap.get(i) ?? 0)
-      const nextCursor = currentIndex >= 0 && remap.has(currentIndex) ? nextOrder.indexOf(remap.get(currentIndex)!) : -1
+      const nextCursor =
+        currentIndex >= 0 && remap.has(currentIndex)
+          ? nextOrder.indexOf(remap.get(currentIndex)!)
+          : -1
       set({ queue: nextQueue, order: nextOrder, cursor: nextCursor })
     },
 
@@ -449,7 +475,8 @@ export const usePlayer = create<PlayerState>((set, get) => {
       nextQueue.splice(to, 0, moved)
       // 队列重排后顺序全部按新顺序走（随机模式的洗牌序列作废，符合直觉）
       const nextOrder = identityOrder(nextQueue.length)
-      const nextCursor = currentIndex >= 0 ? from === currentIndex ? to : nextOrder.indexOf(currentIndex) : -1
+      const nextCursor =
+        currentIndex >= 0 ? (from === currentIndex ? to : nextOrder.indexOf(currentIndex)) : -1
       set({ queue: nextQueue, order: nextOrder, cursor: nextCursor })
     },
 
@@ -522,7 +549,9 @@ export const usePlayer = create<PlayerState>((set, get) => {
           audio.src = url
           audio.volume = settings.volume
           updateMediaSession(song, false)
-          void loadLyrics(song).then(({ parsed, failed }) => set({ lyrics: parsed, lyricFailed: failed }))
+          void loadLyrics(song).then(({ parsed, failed }) =>
+            set({ lyrics: parsed, lyricFailed: failed })
+          )
         }
       } catch {
         /* 队列恢复失败不该拦住启动 */
@@ -562,9 +591,12 @@ export function installMediaSessionHandlers(): () => void {
     ['nexttrack', () => void player.next(false)],
     ['seekbackward', (details) => player.seekBy(-(details.seekOffset ?? 10))],
     ['seekforward', (details) => player.seekBy(details.seekOffset ?? 10)],
-    ['seekto', (details) => {
-      if (details.seekTime != null) player.seek(details.seekTime)
-    }],
+    [
+      'seekto',
+      (details) => {
+        if (details.seekTime != null) player.seek(details.seekTime)
+      }
+    ],
     ['stop', () => player.pause()]
   ]
 
@@ -592,7 +624,9 @@ export function installNowPlayingSync(): () => void {
   let lastKey = ''
   return usePlayer.subscribe((state) => {
     const song =
-      state.cursor >= 0 && state.cursor < state.order.length ? state.queue[state.order[state.cursor]] : null
+      state.cursor >= 0 && state.cursor < state.order.length
+        ? state.queue[state.order[state.cursor]]
+        : null
     if (!song) return
     const key = `${song.id}:${state.playing}`
     if (key === lastKey) return

@@ -107,7 +107,11 @@ export function getSong(client: ApiClient, id: number): Promise<Song> {
   return client.request<Song>(`/songs/${id}`)
 }
 
-export function getFolders(client: ApiClient, path = '', keyword = ''): Promise<FolderListResponse> {
+export function getFolders(
+  client: ApiClient,
+  path = '',
+  keyword = ''
+): Promise<FolderListResponse> {
   return client.request<FolderListResponse>('/songs/folders', {
     query: { path: path || undefined, keyword: keyword || undefined }
   })
@@ -120,7 +124,13 @@ export function getLibraryStats(client: ApiClient): Promise<LibraryStats> {
 export function getFacets(
   client: ApiClient,
   field: FacetField,
-  options: { keyword?: string; limit?: number; offset?: number; sort?: 'count' | 'name'; order?: 'asc' | 'desc' } = {}
+  options: {
+    keyword?: string
+    limit?: number
+    offset?: number
+    sort?: 'count' | 'name'
+    order?: 'asc' | 'desc'
+  } = {}
 ): Promise<SongFacetResponse> {
   return client.request<SongFacetResponse>('/songs/facets', {
     query: {
@@ -147,7 +157,12 @@ export function getLyric(client: ApiClient, songId: number): Promise<LyricPayloa
 export function updateSong(
   client: ApiClient,
   id: number,
-  patch: Partial<Pick<Song, 'title' | 'artist' | 'album' | 'url' | 'cover_url' | 'duration' | 'is_live' | 'is_video'>>
+  patch: Partial<
+    Pick<
+      Song,
+      'title' | 'artist' | 'album' | 'url' | 'cover_url' | 'duration' | 'is_live' | 'is_video'
+    >
+  >
 ): Promise<Song> {
   return client.request<Song>(`/songs/${id}`, { method: 'PUT', body: patch })
 }
@@ -194,7 +209,11 @@ export function deleteSong(client: ApiClient, id: number, deleteFiles = false): 
   })
 }
 
-export function batchDeleteSongs(client: ApiClient, ids: number[], deleteFiles = false): Promise<void> {
+export function batchDeleteSongs(
+  client: ApiClient,
+  ids: number[],
+  deleteFiles = false
+): Promise<void> {
   return client.request<void>('/songs/batch-delete', {
     method: 'POST',
     body: { ids, delete_files: deleteFiles }
@@ -208,7 +227,10 @@ export function batchDeleteSongs(client: ApiClient, ids: number[], deleteFiles =
 export function reportPlayed(
   client: ApiClient,
   id: number,
-  options: { type?: 'play' | 'finish' | 'skip'; context?: { type: string; key: string } | null } = {}
+  options: {
+    type?: 'play' | 'finish' | 'skip'
+    context?: { type: string; key: string } | null
+  } = {}
 ): Promise<void> {
   return client.request<void>(`/songs/${id}/played`, {
     method: 'POST',
@@ -223,9 +245,19 @@ export function reportPlayed(
 
 export function createRemoteSongs(
   client: ApiClient,
-  items: { title: string; artist?: string; album?: string; url: string; cover_url?: string; duration?: number }[]
+  items: {
+    title: string
+    artist?: string
+    album?: string
+    url: string
+    cover_url?: string
+    duration?: number
+  }[]
 ): Promise<{ songs: Song[]; count: number }> {
-  return client.request<{ songs: Song[]; count: number }>('/songs/remote', { method: 'POST', body: items })
+  return client.request<{ songs: Song[]; count: number }>('/songs/remote', {
+    method: 'POST',
+    body: items
+  })
 }
 
 /* ───────────────────────────── 歌单 ───────────────────────────── */
@@ -289,7 +321,13 @@ export function deletePlaylist(client: ApiClient, id: number, deleteSongs = fals
 export function getPlaylistSongs(
   client: ApiClient,
   id: number,
-  options: { limit?: number; offset?: number; sort?: string; order?: 'asc' | 'desc'; keyword?: string } = {}
+  options: {
+    limit?: number
+    offset?: number
+    sort?: string
+    order?: 'asc' | 'desc'
+    keyword?: string
+  } = {}
 ): Promise<SongListResponse> {
   return client.request<SongListResponse>(`/playlists/${id}/songs`, {
     query: {
@@ -325,11 +363,19 @@ export function addSongsToPlaylist(
   })
 }
 
-export function removeSongFromPlaylist(client: ApiClient, playlistId: number, songId: number): Promise<void> {
+export function removeSongFromPlaylist(
+  client: ApiClient,
+  playlistId: number,
+  songId: number
+): Promise<void> {
   return client.request<void>(`/playlists/${playlistId}/songs/${songId}`, { method: 'DELETE' })
 }
 
-export function reorderPlaylistSongs(client: ApiClient, id: number, songIds: number[]): Promise<void> {
+export function reorderPlaylistSongs(
+  client: ApiClient,
+  id: number,
+  songIds: number[]
+): Promise<void> {
   return client.request<void>(`/playlists/${id}/songs/reorder`, {
     method: 'PUT',
     body: { song_ids: songIds }
@@ -340,17 +386,31 @@ export function sortPlaylistSongs(client: ApiClient, id: number, action: string)
   return client.request<void>(`/playlists/${id}/songs/sort`, { method: 'POST', body: { action } })
 }
 
-export function setPlaylistPinned(client: ApiClient, id: number, pinned: boolean): Promise<Playlist> {
+export function setPlaylistPinned(
+  client: ApiClient,
+  id: number,
+  pinned: boolean
+): Promise<Playlist> {
   return client.request<Playlist>(`/playlists/${id}/pin`, { method: 'PUT', body: { pinned } })
 }
 
-export function setPlaylistVisibility(client: ApiClient, id: number, hidden: boolean): Promise<Playlist> {
-  return client.request<Playlist>(`/playlists/${id}/visibility`, { method: 'PUT', body: { hidden } })
+export function setPlaylistVisibility(
+  client: ApiClient,
+  id: number,
+  hidden: boolean
+): Promise<Playlist> {
+  return client.request<Playlist>(`/playlists/${id}/visibility`, {
+    method: 'PUT',
+    body: { hidden }
+  })
 }
 
 /** 拖动重排歌单顺序（侧栏/歌单页共用） */
 export function reorderPlaylists(client: ApiClient, playlistIds: number[]): Promise<void> {
-  return client.request<void>('/playlists/reorder', { method: 'PUT', body: { playlist_ids: playlistIds } })
+  return client.request<void>('/playlists/reorder', {
+    method: 'PUT',
+    body: { playlist_ids: playlistIds }
+  })
 }
 
 /** 记住该歌单的排序偏好（后端持久化，下次进来自动沿用） */
@@ -404,40 +464,36 @@ export function cancelScan(client: ApiClient): Promise<void> {
 
 /** 懒加载音乐目录树的一层（目录选择器用） */
 export function getDirectories(client: ApiClient, path = ''): Promise<DirectoryListResponse> {
-  return client.request<DirectoryListResponse>('/scan/directories', {
-    query: { path: path || undefined }
-  }).then((res) => ({ directories: res.directories ?? [], root: res.root ?? '' }))
+  return client
+    .request<DirectoryListResponse>('/scan/directories', {
+      query: { path: path || undefined }
+    })
+    .then((res) => ({ directories: res.directories ?? [], root: res.root ?? '' }))
 }
 
 /** 全部目录名（输入自动补全） */
 export function getDirNames(client: ApiClient): Promise<string[]> {
-  return client
-    .request<{ names?: string[] }>('/scan/dir-names')
-    .then((res) => res.names ?? [])
+  return client.request<{ names?: string[] }>('/scan/dir-names').then((res) => res.names ?? [])
 }
 
 /* ───────────────────────────── 音乐库维护 ───────────────────────────── */
 
 /** 清理数据库里文件已不存在的歌曲。返回清理统计。 */
 export function cleanMissingSongs(client: ApiClient): Promise<CleanResult> {
-  return client
-    .request<Partial<CleanResult>>('/songs/clean', { method: 'POST' })
-    .then((res) => ({
-      total: res.total ?? 0,
-      file_not_found: res.file_not_found ?? 0,
-      in_excluded_dir: res.in_excluded_dir ?? 0
-    }))
+  return client.request<Partial<CleanResult>>('/songs/clean', { method: 'POST' }).then((res) => ({
+    total: res.total ?? 0,
+    file_not_found: res.file_not_found ?? 0,
+    in_excluded_dir: res.in_excluded_dir ?? 0
+  }))
 }
 
 /** 基于音频指纹找重复歌曲（后端可能跑几十秒，客户端要放宽超时） */
 export function findDuplicates(client: ApiClient): Promise<DuplicatesResult> {
-  return client
-    .request<Partial<DuplicatesResult>>('/songs/duplicates')
-    .then((res) => ({
-      groups: res.groups ?? [],
-      total_groups: res.total_groups ?? 0,
-      total_duplicates: res.total_duplicates ?? 0
-    }))
+  return client.request<Partial<DuplicatesResult>>('/songs/duplicates').then((res) => ({
+    groups: res.groups ?? [],
+    total_groups: res.total_groups ?? 0,
+    total_duplicates: res.total_duplicates ?? 0
+  }))
 }
 
 export function getFingerprintStatus(client: ApiClient): Promise<FingerprintStatus> {
@@ -470,7 +526,10 @@ export function getVolumeNormalize(client: ApiClient): Promise<VolumeNormalizeSe
     .then((res) => ({ enabled: res.enabled ?? false, loudness: res.loudness ?? -16 }))
 }
 
-export function setVolumeNormalize(client: ApiClient, setting: VolumeNormalizeSetting): Promise<void> {
+export function setVolumeNormalize(
+  client: ApiClient,
+  setting: VolumeNormalizeSetting
+): Promise<void> {
   return client.request<void>('/settings/volume-normalize', { method: 'PUT', body: setting })
 }
 
@@ -491,7 +550,10 @@ export function getScanAutoCreatePlaylists(client: ApiClient): Promise<boolean> 
 }
 
 export function setScanAutoCreatePlaylists(client: ApiClient, enabled: boolean): Promise<void> {
-  return client.request<void>('/settings/scan-auto-create-playlists', { method: 'PUT', body: { enabled } })
+  return client.request<void>('/settings/scan-auto-create-playlists', {
+    method: 'PUT',
+    body: { enabled }
+  })
 }
 
 export function getTagSyncToFile(client: ApiClient): Promise<boolean> {
@@ -511,7 +573,10 @@ export function getScanTitleSource(client: ApiClient): Promise<string> {
     .then((res) => res.title_source ?? 'tag')
 }
 
-export function setScanTitleSource(client: ApiClient, titleSource: 'tag' | 'filename'): Promise<void> {
+export function setScanTitleSource(
+  client: ApiClient,
+  titleSource: 'tag' | 'filename'
+): Promise<void> {
   return client.request<void>('/settings/scan-title-source', {
     method: 'PUT',
     body: { title_source: titleSource }

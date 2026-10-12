@@ -5,7 +5,15 @@
  * preload 的实现和渲染层的调用共用同一份签名 —— 两边各写一份必然漂移。
  */
 
-import type { AppInfo, AppSettings, MediaCommand, ServerEntry, ServerProbeResult, TraySnapshot, WindowState } from './ipc'
+import type {
+  AppInfo,
+  AppSettings,
+  MediaCommand,
+  ServerEntry,
+  ServerProbeResult,
+  TraySnapshot,
+  WindowState
+} from './ipc'
 import type { StoredCredentials } from './bridge-types'
 
 export type { StoredCredentials }

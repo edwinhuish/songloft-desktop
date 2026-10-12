@@ -62,7 +62,10 @@ export function hslToRgb({ h, s, l }: Hsl): Rgb {
 }
 
 export function rgbToHex({ r, g, b }: Rgb): string {
-  const toHex = (v: number): string => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')
+  const toHex = (v: number): string =>
+    Math.max(0, Math.min(255, Math.round(v)))
+      .toString(16)
+      .padStart(2, '0')
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`
 }
 
@@ -115,7 +118,13 @@ export function extractDominantColor(data: ImageData): string | null {
 
   if (bins.size === 0) return null
 
-  let best: { hueSum: number; satSum: number; lightSum: number; score: number; count: number } | null = null
+  let best: {
+    hueSum: number
+    satSum: number
+    lightSum: number
+    score: number
+    count: number
+  } | null = null
   for (const bin of bins.values()) {
     if (!best || bin.score > best.score) best = bin
   }

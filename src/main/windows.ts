@@ -63,7 +63,9 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
   })
 
   // 拒绝一切权限请求（麦克风/摄像头/通知/地理位置……播放器一个都不需要）
-  window.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
+  window.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) =>
+    callback(false)
+  )
 
   // ── 窗口状态同步给渲染层（自绘标题栏要知道什么时候显示「还原」图标）──────
   const emitState = (): void => {

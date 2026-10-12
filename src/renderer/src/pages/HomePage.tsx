@@ -92,7 +92,12 @@ export function HomePage(): React.JSX.Element {
   const playArtist = useCallback(
     async (name: string) => {
       try {
-        const res = await getSongs(requireClient(), { artist: name, limit: 300, sort: 'added_at', order: 'desc' })
+        const res = await getSongs(requireClient(), {
+          artist: name,
+          limit: 300,
+          sort: 'added_at',
+          order: 'desc'
+        })
         if (res.songs.length === 0) return
         await playSongs(res.songs, 0, { type: 'artist', key: name })
       } catch (error) {
@@ -103,7 +108,8 @@ export function HomePage(): React.JSX.Element {
   )
 
   const regularPlaylists = useMemo(
-    () => playlists.filter((p) => p.type === 'normal' && !p.labels.includes('built_in')).slice(0, 10),
+    () =>
+      playlists.filter((p) => p.type === 'normal' && !p.labels.includes('built_in')).slice(0, 10),
     [playlists]
   )
 
@@ -121,11 +127,21 @@ export function HomePage(): React.JSX.Element {
           </p>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          <button type="button" className="btn" onClick={() => void resume()} disabled={lastQueue.length === 0}>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => void resume()}
+            disabled={lastQueue.length === 0}
+          >
             <IconHistory size={15} />
             继续上次播放
           </button>
-          <button type="button" className="btn" data-variant="primary" onClick={() => void playRandom()}>
+          <button
+            type="button"
+            className="btn"
+            data-variant="primary"
+            onClick={() => void playRandom()}
+          >
             <IconPlay size={15} />
             随机播放
           </button>
@@ -167,7 +183,13 @@ export function HomePage(): React.JSX.Element {
           <IconClock size={16} />
           最近加入
         </span>
-        <button type="button" className="btn" data-size="sm" data-variant="ghost" onClick={() => navigate({ name: 'library' })}>
+        <button
+          type="button"
+          className="btn"
+          data-size="sm"
+          data-variant="ghost"
+          onClick={() => navigate({ name: 'library' })}
+        >
           查看曲库
         </button>
       </div>
@@ -204,7 +226,13 @@ export function HomePage(): React.JSX.Element {
           <IconHeart size={16} filled />
           我的歌单
         </span>
-        <button type="button" className="btn" data-size="sm" data-variant="ghost" onClick={() => navigate({ name: 'playlists' })}>
+        <button
+          type="button"
+          className="btn"
+          data-size="sm"
+          data-variant="ghost"
+          onClick={() => navigate({ name: 'playlists' })}
+        >
           全部歌单
         </button>
       </div>
@@ -240,7 +268,11 @@ export function HomePage(): React.JSX.Element {
       {artists.loading ? (
         <CardGridSkeleton cards={8} />
       ) : (artists.data?.facets.length ?? 0) === 0 ? (
-        <EmptyState icon={<IconUser size={26} />} title="还没有歌手数据" description="扫描完成并写入标签后这里会出现" />
+        <EmptyState
+          icon={<IconUser size={26} />}
+          title="还没有歌手数据"
+          description="扫描完成并写入标签后这里会出现"
+        />
       ) : (
         <div className="card-grid">
           {artists.data?.facets.map((facet) => (

@@ -40,7 +40,9 @@ export function Sidebar(): React.JSX.Element {
     void load()
   }, [load])
 
-  const regularPlaylists = playlists.filter((p) => p.type === 'normal' && !p.labels.includes('built_in'))
+  const regularPlaylists = playlists.filter(
+    (p) => p.type === 'normal' && !p.labels.includes('built_in')
+  )
   const count = playlists.length
 
   const isActive = (name: string, extra?: (r: typeof route) => boolean): boolean => {
@@ -126,7 +128,11 @@ export function Sidebar(): React.JSX.Element {
 
       <div className="nav-group" style={{ marginTop: 6 }}>
         <div className="row-between" style={{ padding: '0 4px 0 12px', minHeight: 26 }}>
-          {sidebarCollapsed ? null : <span className="nav-label" style={{ padding: 0 }}>我的歌单</span>}
+          {sidebarCollapsed ? null : (
+            <span className="nav-label" style={{ padding: 0 }}>
+              我的歌单
+            </span>
+          )}
           {sidebarCollapsed ? null : (
             <button
               type="button"
@@ -143,7 +149,14 @@ export function Sidebar(): React.JSX.Element {
 
         <div className="sidebar-playlists">
           {regularPlaylists.length === 0 && !sidebarCollapsed ? (
-            <div style={{ padding: '10px 12px', fontSize: 12, color: 'var(--text-4)', lineHeight: 1.8 }}>
+            <div
+              style={{
+                padding: '10px 12px',
+                fontSize: 12,
+                color: 'var(--text-4)',
+                lineHeight: 1.8
+              }}
+            >
               还没有歌单
               <br />
               点右上角 + 新建
@@ -170,7 +183,8 @@ export function Sidebar(): React.JSX.Element {
                   {
                     key: 'pin',
                     label: playlist.pinned_at ? '取消置顶' : '置顶',
-                    onClick: () => void usePlaylists.getState().setPinned(playlist.id, !playlist.pinned_at)
+                    onClick: () =>
+                      void usePlaylists.getState().setPinned(playlist.id, !playlist.pinned_at)
                   }
                 ])
               }
@@ -181,7 +195,9 @@ export function Sidebar(): React.JSX.Element {
                 event.dataTransfer.dropEffect = 'copy'
                 setDropTarget(playlist.id)
               }}
-              onDragLeave={() => setDropTarget((current) => (current === playlist.id ? null : current))}
+              onDragLeave={() =>
+                setDropTarget((current) => (current === playlist.id ? null : current))
+              }
               onDrop={(event) => {
                 const raw = event.dataTransfer.getData('application/x-songloft-songs')
                 setDropTarget(null)
@@ -213,7 +229,9 @@ export function Sidebar(): React.JSX.Element {
                 radius={6}
               />
               <span className="nav-text truncate grow">{playlist.name}</span>
-              {sidebarCollapsed ? null : <span className="nav-count">{playlist.song_count || ''}</span>}
+              {sidebarCollapsed ? null : (
+                <span className="nav-count">{playlist.song_count || ''}</span>
+              )}
             </button>
           ))}
         </div>

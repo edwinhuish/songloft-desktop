@@ -1,4 +1,4 @@
-appId: com.songloft.desktop
+appId: io.github.edwinhuish.songloft-desktop
 productName: Songloft Desktop
 copyright: Copyright © 2026 Songloft Desktop contributors
 
@@ -38,13 +38,21 @@ linux:
   description: >-
     Songloft Desktop 是 Songloft 音乐播放器的 Electron 桌面客户端。连接自建 Songloft 后端
     （默认 http://localhost:58091），支持曲库浏览、歌单管理、逐字歌词、文件夹浏览与离线播放。
-  # ★ 决定产物 .desktop 的文件名。默认 false → 会被命名成 executableName（songloft-desktop.desktop），
+  # ★ 决定产物 .desktop 的文件名。默认 false → 会被命名成 executableName（songloft-desktop），
   #   与 app.setDesktopName() 报出的 app_id 对不上，GNOME 下静默回落成占位图标。
+  #
+  #   身份（= appId = app_id = StartupWMClass）取 io.github.edwinhuish.songloft-desktop。
+  #   ⚠️ 刻意**不让身份以 `.desktop` 结尾** —— electron-builder / Electron 都会「去掉一层
+  #   `.desktop` 才是身份」，身份若自己也以 `.desktop` 结尾（例如 com.songloft.desktop），
+  #   就得把 package.json 的 desktopName 写成 com.songloft.desktop.desktop 才不会削错，
+  #   极易看错且错法完全静默。现在两边一致、没有重复后缀：
+  #     desktopName == 身份 == io.github.edwinhuish.songloft-desktop
+  #     落地文件名 == 身份 + .desktop == io.github.edwinhuish.songloft-desktop.desktop
   syncDesktopName: true
   desktop:
     entry:
-      # ★ 必须等于 package.json 的 desktopName，也等于 src/main 里 setDesktopName() 的入参（去掉 .desktop）。
-      StartupWMClass: com.songloft.desktop
+      # ★ 必须等于身份（= package.json 的 desktopName）。
+      StartupWMClass: io.github.edwinhuish.songloft-desktop
       Name: Songloft Desktop
       Comment: 插件化、无广告的免费音乐播放器
       Categories: AudioVideo;Audio;Player;

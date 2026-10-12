@@ -9,11 +9,23 @@
 import { useCallback, useMemo, useState } from 'react'
 
 import type { Playlist } from '@shared/types'
-import { IconEyeOff, IconHeart, IconPin, IconPlus, IconRadio, IconRefresh, IconTrash } from '@/components/Icons'
+import {
+  IconEyeOff,
+  IconHeart,
+  IconPin,
+  IconPlus,
+  IconRadio,
+  IconRefresh,
+  IconTrash
+} from '@/components/Icons'
 import { CardGridSkeleton, Cover, EmptyState } from '@/components/primitives'
 import { openMenuFromEvent, type MenuItem } from '@/components/ContextMenu'
 import { Modal } from '@/components/Modal'
-import { usePlaylists, FAVORITE_PLAYLIST_ID, RADIO_FAVORITE_PLAYLIST_ID } from '@/state/usePlaylists'
+import {
+  usePlaylists,
+  FAVORITE_PLAYLIST_ID,
+  RADIO_FAVORITE_PLAYLIST_ID
+} from '@/state/usePlaylists'
 import { useUi } from '@/state/useUi'
 import { toast } from '@/state/useToasts'
 
@@ -101,7 +113,9 @@ export function PlaylistsPage(): React.JSX.Element {
         <div>
           <h1 className="page-title">歌单</h1>
           <p className="page-subtitle">
-            {loading ? '正在读取…' : `${visible.length} 个${filter === 'radio' ? '电台歌单' : '歌单'}`}
+            {loading
+              ? '正在读取…'
+              : `${visible.length} 个${filter === 'radio' ? '电台歌单' : '歌单'}`}
           </p>
         </div>
         <div className="row" style={{ gap: 8 }}>
@@ -109,7 +123,12 @@ export function PlaylistsPage(): React.JSX.Element {
             <IconRefresh size={15} />
             刷新
           </button>
-          <button type="button" className="btn" data-variant="primary" onClick={() => setCreating(true)}>
+          <button
+            type="button"
+            className="btn"
+            data-variant="primary"
+            onClick={() => setCreating(true)}
+          >
             <IconPlus size={15} />
             新建歌单
           </button>
@@ -118,10 +137,18 @@ export function PlaylistsPage(): React.JSX.Element {
 
       <div className="row-between" style={{ marginBottom: 18, gap: 14, flexWrap: 'wrap' }}>
         <div className="segmented" role="group" aria-label="歌单类型">
-          <button type="button" aria-pressed={filter === 'normal'} onClick={() => setFilter('normal')}>
+          <button
+            type="button"
+            aria-pressed={filter === 'normal'}
+            onClick={() => setFilter('normal')}
+          >
             我的歌单
           </button>
-          <button type="button" aria-pressed={filter === 'radio'} onClick={() => setFilter('radio')}>
+          <button
+            type="button"
+            aria-pressed={filter === 'radio'}
+            onClick={() => setFilter('radio')}
+          >
             电台
           </button>
           <button type="button" aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
@@ -151,7 +178,12 @@ export function PlaylistsPage(): React.JSX.Element {
           title="这里还没有歌单"
           description="新建一个歌单，或者把歌曲行直接拖到侧栏的歌单上"
           action={
-            <button type="button" className="btn" data-variant="primary" onClick={() => setCreating(true)}>
+            <button
+              type="button"
+              className="btn"
+              data-variant="primary"
+              onClick={() => setCreating(true)}
+            >
               新建歌单
             </button>
           }

@@ -97,7 +97,11 @@ export const useAuth = create<AuthState>((set, get) => ({
 
     const stored = await window.songloft.credentials.get(activeUrl)
     const client = createClient(activeUrl)
-    set({ client, baseUrl: activeUrl, serverName: servers.find((s) => s.url === activeUrl)?.name ?? null })
+    set({
+      client,
+      baseUrl: activeUrl,
+      serverName: servers.find((s) => s.url === activeUrl)?.name ?? null
+    })
 
     if (!stored) {
       set({ status: 'unauthenticated' })

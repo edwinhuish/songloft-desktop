@@ -28,7 +28,9 @@ export interface TitleBarProps {
 export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   const [state, setState] = useState({ maximized: false, fullscreen: false, focused: true })
   const setPaletteOpen = useUi((s) => s.setPaletteOpen)
-  const song = usePlayer((s) => (s.cursor >= 0 && s.cursor < s.order.length ? s.queue[s.order[s.cursor]] : null))
+  const song = usePlayer((s) =>
+    s.cursor >= 0 && s.cursor < s.order.length ? s.queue[s.order[s.cursor]] : null
+  )
 
   useEffect(() => {
     void window.songloft.window.getState().then(setState)
@@ -44,7 +46,10 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
 
       <div className="titlebar-center">
         {!solo && song ? (
-          <div className="truncate" style={{ maxWidth: 460, fontSize: 12.5, color: 'var(--text-3)' }}>
+          <div
+            className="truncate"
+            style={{ maxWidth: 460, fontSize: 12.5, color: 'var(--text-3)' }}
+          >
             <span style={{ color: 'var(--text-2)' }}>{song.title}</span>
             <span> — {displayArtist(song.artist)}</span>
           </div>

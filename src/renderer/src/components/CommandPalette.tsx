@@ -287,7 +287,9 @@ export function CommandPalette(): React.JSX.Element | null {
       }
       if (event.key === 'ArrowUp') {
         event.preventDefault()
-        setActive((current) => (entries.length === 0 ? 0 : (current - 1 + entries.length) % entries.length))
+        setActive((current) =>
+          entries.length === 0 ? 0 : (current - 1 + entries.length) % entries.length
+        )
         return
       }
       if (event.key === 'Enter') {
@@ -317,7 +319,11 @@ export function CommandPalette(): React.JSX.Element | null {
   let lastGroup = ''
 
   return (
-    <div className="overlay" data-align="top" onPointerDown={(event) => event.target === event.currentTarget && close()}>
+    <div
+      className="overlay"
+      data-align="top"
+      onPointerDown={(event) => event.target === event.currentTarget && close()}
+    >
       <div className="palette" role="dialog" aria-modal="true" aria-label="命令面板">
         <div className="row" style={{ paddingRight: 12 }}>
           <IconCommand size={17} style={{ marginLeft: 16, color: 'var(--text-4)', flex: 'none' }} />

@@ -40,7 +40,8 @@ async function probeVersion(base: string): Promise<VersionProbe> {
     if (res.status === 404) {
       return {
         ok: false,
-        error: '地址可达，但找不到 /api/v1/version —— 可能不是 Songloft 后端，或 BASE_PATH 配了子路径'
+        error:
+          '地址可达，但找不到 /api/v1/version —— 可能不是 Songloft 后端，或 BASE_PATH 配了子路径'
       }
     }
     return { ok: false, error: `版本接口返回 HTTP ${res.status}` }
@@ -54,12 +55,24 @@ export async function probeServer(rawUrl: string): Promise<ServerProbeResult> {
   const started = Date.now()
   const base = normalizeBase(rawUrl)
   if (!/^https?:\/\//i.test(base)) {
-    return { ok: false, version: null, healthy: false, error: '地址必须以 http:// 或 https:// 开头', elapsedMs: 0 }
+    return {
+      ok: false,
+      version: null,
+      healthy: false,
+      error: '地址必须以 http:// 或 https:// 开头',
+      elapsedMs: 0
+    }
   }
 
   const probe = await probeVersion(base)
   if (!probe.ok) {
-    return { ok: false, version: null, healthy: false, error: probe.error, elapsedMs: Date.now() - started }
+    return {
+      ok: false,
+      version: null,
+      healthy: false,
+      error: probe.error,
+      elapsedMs: Date.now() - started
+    }
   }
 
   // health 探不到不算致命：版本接口已经证明后端在跑，健康检查可能只是被反代挡了
@@ -76,7 +89,8 @@ function describeFetchError(error: unknown): string {
   if (/certificate|SELF_SIGNED|ERR_CERT/i.test(message)) {
     return 'TLS 证书校验失败 —— 自签证书请在设置里打开「忽略证书校验」'
   }
-  if (/ECONNREFUSED|ERR_CONNECTION_REFUSED/i.test(message)) return '连接被拒绝：服务没在跑，或端口不对'
+  if (/ECONNREFUSED|ERR_CONNECTION_REFUSED/i.test(message))
+    return '连接被拒绝：服务没在跑，或端口不对'
   if (/ENOTFOUND|ERR_NAME_NOT_RESOLVED/i.test(message)) return '域名解析失败'
   if (/timeout|ETIMEDOUT|ERR_TIMED_OUT/i.test(message)) return '连接超时'
   return message

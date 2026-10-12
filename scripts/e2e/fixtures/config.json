@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "settings": {
+    "activeServerUrl": "http://127.0.0.1:58091",
+    "theme": "dark",
+    "accent": "#7c5cff",
+    "accentFromCover": true,
+    "density": "comfortable",
+    "glassIntensity": 62,
+    "lyricFontSize": 30,
+    "lyricShowTranslation": true,
+    "lyricShowRoman": false,
+    "closeToTray": false,
+    "volume": 0.8,
+    "playMode": "order",
+    "volumeNormalize": false,
+    "quality": "original",
+    "allowInsecureTls": false,
+    "sidebarCollapsed": false,
+    "homeColumns": 5,
+    "lastQueue": [2, 6, 10, 14, 18, 22],
+    "lastQueueIndex": 2,
+    "lastQueueContext": null,
+    "recentSongIds": [3, 11, 19, 27, 35, 41, 7, 24, 33, 12]
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:58091",
+      "name": "本地 Mock",
+      "lastUsedAt": 1791789000000
+    }
+  ],
+  "credentials": {
+    "http://127.0.0.1:58091": {
+      "accessToken": "mock-access-token",
+      "refreshToken": "mock-refresh-token",
+      "expiresIn": 86400,
+      "savedAt": 1791789000000
+    }
+  },
+  "window": {
+    "width": 1440,
+    "height": 920,
+    "maximized": false
+  }
+}
