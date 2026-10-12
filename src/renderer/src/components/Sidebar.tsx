@@ -19,8 +19,7 @@ import {
   IconLibrary,
   IconListMusic,
   IconPlus,
-  IconSettings,
-  IconSparkle
+  IconSettings
 } from './Icons'
 import { openMenuFromEvent } from './ContextMenu'
 import { usePlaylists } from '@/state/usePlaylists'
@@ -29,19 +28,10 @@ import { useUi } from '@/state/useUi'
 import { useToasts } from '@/state/useToasts'
 import { Cover } from './primitives'
 
-/** 服务器只露 host：完整 URL 太长，会把一行挤成两行 */
-function serverHost(url: string): string {
-  try {
-    return new URL(url).host
-  } catch {
-    return url
-  }
-}
-
 export function Sidebar(): React.JSX.Element {
   const { route, navigate, sidebarCollapsed, toggleSidebar } = useUi()
   const { playlists, load, create } = usePlaylists()
-  const { settings, patch } = useSettings()
+  const { patch } = useSettings()
   const push = useToasts((s) => s.push)
   const [dropTarget, setDropTarget] = useState<number | null>(null)
 
@@ -233,20 +223,6 @@ export function Sidebar(): React.JSX.Element {
       </div>
 
       <div className="sidebar-foot">
-        {/* 服务器入口在图标条里也保留（图标 + title 提示）：底部留一块空位，
-            比少一个入口更糟 */}
-        {settings.activeServerUrl ? (
-          <button
-            type="button"
-            className="nav-item"
-            title={settings.activeServerUrl}
-            onClick={() => navigate({ name: 'settings', section: 'server' })}
-          >
-            <IconSparkle size={18} />
-            <span className="nav-text truncate">{serverHost(settings.activeServerUrl)}</span>
-          </button>
-        ) : null}
-
         <button
           type="button"
           className="nav-item"
