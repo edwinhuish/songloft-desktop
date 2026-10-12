@@ -1,11 +1,14 @@
 /**
- * 按文件夹浏览。
+ * 曲库页的「文件夹」模式（见 LibraryPage 的说明）。
  *
  * 后端 `/songs/folders?path=` 一次返回「当前目录 + 子文件夹 + 本目录下的歌」，
  * 所以一层一个请求，不需要自己拼路径。
  *
  * 桌面端相对移动端多做的一点：面包屑做成可点击的层级链（移动端只有返回箭头），
  * 深目录下从 `Pop/2020/Live` 跳回 `Pop` 只要一次点击。
+ *
+ * ★ 页面标题与标签条由 LibraryPage 提供，这里只画自己那一行（目录摘要 + 动作）
+ *   和目录内容 —— 两处各写一遍标题，迟早会长歪。
  */
 
 import { useMemo, useState } from 'react'
@@ -21,7 +24,7 @@ import { requireClient } from '@/state/useAuth'
 import { usePlayer } from '@/state/usePlayer'
 import { useUi } from '@/state/useUi'
 
-export function FoldersPage({ path }: { path: string }): React.JSX.Element {
+export function FoldersView({ path }: { path: string }): React.JSX.Element {
   const navigate = useUi((s) => s.navigate)
   const playSongs = usePlayer((s) => s.playSongs)
   const [selection, setSelection] = useState<number[]>([])
@@ -51,17 +54,14 @@ export function FoldersPage({ path }: { path: string }): React.JSX.Element {
   }
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <div style={{ minWidth: 0 }}>
-          <h1 className="page-title">文件夹</h1>
-          <p className="page-subtitle">
-            {result.loading && !data
-              ? '正在读取…'
-              : `${folders.length} 个子文件夹 · ${data?.total_songs ?? 0} 首歌${path ? ` · ${path}` : ''}`}
-          </p>
+    <>
+      <div className="row-between" style={{ gap: 14, marginBottom: 14 }}>
+        <div className="page-subtitle truncate" style={{ margin: 0, minWidth: 0 }}>
+          {result.loading && !data
+            ? '正在读取…'
+            : `${folders.length} 个子文件夹 · ${data?.total_songs ?? 0} 首歌${path ? ` · ${path}` : ''}`}
         </div>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="row" style={{ gap: 8, flex: 'none' }}>
           <button type="button" className="btn" onClick={() => result.reload()}>
             <IconRefresh size={15} />
             刷新
@@ -186,6 +186,6 @@ export function FoldersPage({ path }: { path: string }): React.JSX.Element {
           }}
         />
       ) : null}
-    </div>
+    </>
   )
 }

@@ -1,7 +1,14 @@
 /**
- * 曲库。
+ * 曲库页 = 外壳（标题 +「曲库 / 文件夹」标签条）+ 两种模式各自的内容。
  *
- * 桌面端最核心的一页，做了三件原 Flutter 端没做好的事：
+ * 「曲库」与「文件夹」本来就是同一批歌的两种切法（按标签筛 / 按目录钻），所以并成一页。
+ *
+ * ★ 底下仍然是**两条路由**（library / folders），而不是一个组件内的 state：
+ *   文件夹要能带着当前目录深链、面包屑要能一段段跳回去，局部 state 表达不了这些
+ *   （刷新窗口或后退就丢）；主进程菜单、命令面板也都是按路由打的。
+ *   所以这一页只负责标签条与标题，模式内容各自成块（LibraryView / FoldersView）。
+ *
+ * 曲库模式（LibraryView）做了三件原 Flutter 端没做好的事：
  *   1. **分面浏览就在同一页**：歌手/专辑/流派/语种/风格 五个维度用 chip 切换，
  *      点卡片直接落成筛选条件（真·服务端过滤），而不是跳去另一个页面再用关键词搜。
  *   2. **筛选条件可视化**：生效的筛选条件以 chip 形式挂在表头上，一眼看到"现在在看什么"，
@@ -15,7 +22,6 @@ import type { FacetField, Song, SongType } from '@shared/types'
 import { FACET_LABELS } from '@shared/types'
 import {
   IconClose,
-  IconFolderOpen,
   IconPlay,
   IconRefresh,
   IconSearch,
@@ -31,6 +37,7 @@ import { useSongList } from '@/hooks/useSongList'
 import { requireClient } from '@/state/useAuth'
 import { usePlayer } from '@/state/usePlayer'
 import { useUi } from '@/state/useUi'
+import { FoldersView } from './FoldersView'
 
 const TYPE_OPTIONS: { value: SongType | 'all'; label: string }[] = [
   { value: 'all', label: '全部' },
@@ -42,6 +49,39 @@ const TYPE_OPTIONS: { value: SongType | 'all'; label: string }[] = [
 const BROWSE_FIELDS: FacetField[] = ['artist', 'album', 'genre', 'language', 'style']
 
 export function LibraryPage(): React.JSX.Element {
+  const route = useUi((s) => s.route)
+  const navigate = useUi((s) => s.navigate)
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <h1 className="page-title">曲库</h1>
+        {/* 视图切换（不是筛选）：所以走 .segmented，而不是筛选区那种 chip */}
+        <div className="segmented" role="group" aria-label="曲库视图">
+          <button
+            type="button"
+            aria-pressed={route.name !== 'folders'}
+            onClick={() => navigate({ name: 'library' })}
+          >
+            曲库
+          </button>
+          <button
+            type="button"
+            aria-pressed={route.name === 'folders'}
+            onClick={() => navigate({ name: 'folders', path: '' })}
+          >
+            文件夹
+          </button>
+        </div>
+      </div>
+
+      {route.name === 'folders' ? <FoldersView path={route.path} /> : <LibraryView />}
+    </div>
+  )
+}
+
+/** 「曲库」模式：类型筛选 + 分面浏览 + 歌曲表 */
+function LibraryView(): React.JSX.Element {
   const navigate = useUi((s) => s.navigate)
   const playSongs = usePlayer((s) => s.playSongs)
 
@@ -111,17 +151,14 @@ export function LibraryPage(): React.JSX.Element {
     : selection.map((i) => list.songs[i]?.id).filter((x): x is number => x != null)
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">曲库</h1>
-          <p className="page-subtitle">
-            {list.loading && list.songs.length === 0
-              ? '正在读取…'
-              : `${list.total} 首${list.total > list.songs.length ? `（已加载 ${list.songs.length}）` : ''}`}
-          </p>
+    <>
+      <div className="row-between" style={{ gap: 14, marginBottom: 14 }}>
+        <div className="page-subtitle truncate" style={{ margin: 0, minWidth: 0 }}>
+          {list.loading && list.songs.length === 0
+            ? '正在读取…'
+            : `${list.total} 首${list.total > list.songs.length ? `（已加载 ${list.songs.length}）` : ''}`}
         </div>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="row" style={{ gap: 8, flex: 'none' }}>
           <button type="button" className="btn" onClick={() => list.refresh()}>
             <IconRefresh size={15} />
             刷新
@@ -180,15 +217,6 @@ export function LibraryPage(): React.JSX.Element {
           >
             <IconSparkle size={14} />
             分类浏览
-          </button>
-          <button
-            type="button"
-            className="btn"
-            data-size="sm"
-            onClick={() => navigate({ name: 'folders', path: '' })}
-          >
-            <IconFolderOpen size={14} />
-            按文件夹
           </button>
           <select
             className="input"
@@ -387,6 +415,6 @@ export function LibraryPage(): React.JSX.Element {
           }}
         />
       ) : null}
-    </div>
+    </>
   )
 }

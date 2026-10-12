@@ -127,7 +127,9 @@ window.__t = {
     navs: document.querySelectorAll('.nav-item').length,
     chips: document.querySelectorAll('.chip').length,
     switches: document.querySelectorAll('[role="switch"]').length,
-    // 文件夹页的目录行（与歌曲行是两个不同的容器）
+    // 当前页标题：用来确认「曲库 / 文件夹」是两个标签、同一页（切完标题还得是「曲库」）
+    pageTitle: (document.querySelector('.page-title') || {}).textContent || '',
+    // 文件夹模式的目录行（与歌曲行是两个不同的容器）
     folderRows: document.querySelectorAll('.folder-row').length,
     // 歌词面板：行数用于回归"逐字源只覆盖部分行时不能丢主歌词的行"
     lyricLines: document.querySelectorAll('.lyric-line').length,
@@ -271,56 +273,71 @@ const STEPS = [
     { rows: exactly(12), cards: exactly(0), chipTitles: containsAll('流派：摇滚') }
   ],
 
-  // ── 歌单 / 文件夹 / 最近 / 收藏 ────────────────────────────────────────
-  ['09-playlists', "window.__t.click('.nav-item', '歌单')", 1800, { cards: atLeast(3) }],
-  ['10-playlist-detail', "window.__t.click('.nav-item', '深夜写码')", 2200, { rows: atLeast(1) }],
-  ['11-folders', "window.__t.click('.nav-item', '文件夹')", 2000, { folderRows: exactly(5) }],
-  ['12-recent', "window.__t.click('.nav-item', '最近播放')", 2400, { rows: exactly(10) }],
-  ['13-favorites', "window.__t.click('.nav-item', '我喜欢')", 2400, { rows: exactly(6) }],
+  // 「曲库」页的第二个标签：内容换成目录，**标题还得是「曲库」** —— 这一条正是
+  // 「两个页面合成了一页」的判据，只看 folderRows 的话，"又开了一个页面"也能过。
+  [
+    '09-library-folders-tab',
+    "window.__t.click('.segmented button', '文件夹')",
+    2200,
+    { folderRows: exactly(5), pageTitle: exactly('曲库') }
+  ],
+  // 换回「曲库」标签：模式要能来回切，且切回来不能是空页
+  [
+    '10-library-tab-back',
+    "window.__t.click('.segmented button', '曲库')",
+    2400,
+    { rows: atLeast(1), folderRows: exactly(0), pageTitle: exactly('曲库') }
+  ],
+
+  // ── 歌单 / 最近 / 收藏 ─────────────────────────────────────────────────
+  ['11-playlists', "window.__t.click('.nav-item', '歌单')", 1800, { cards: atLeast(3) }],
+  ['12-playlist-detail', "window.__t.click('.nav-item', '深夜写码')", 2200, { rows: atLeast(1) }],
+  ['13-recent', "window.__t.click('.nav-item', '最近播放')", 2400, { rows: exactly(10) }],
+  ['14-favorites', "window.__t.click('.nav-item', '我喜欢')", 2400, { rows: exactly(6) }],
 
   // ── 折叠菜单 → 设置四页 ────────────────────────────────────────────────
   // 标题栏 LOGO 右侧的折叠按钮。断言用 equals 而不是 containsAll：菜单项的**顺序**
-  // 也是需求的一部分，集合比会把「顺序错了」放过。
+  // 也是需求的一部分，集合比会把「顺序错了」放过。「文件夹」不在菜单里 —— 它是曲库页的标签。
   [
-    '14-nav-menu',
+    '15-nav-menu',
     "window.__t.clickLabel('导航菜单')",
     900,
-    { menuItems: equals('首页', '曲库', '文件夹', '歌单', '我喜欢', '最近播放', '设置') }
+    { menuItems: equals('首页', '曲库', '歌单', '我喜欢', '最近播放', '设置') }
   ],
-  ['15-settings-appearance', "window.__t.click('.context-menu button', '设置')", 1600],
+  ['16-settings-appearance', "window.__t.click('.context-menu button', '设置')", 1600],
   [
-    '16-settings-playback',
+    '17-settings-playback',
     "window.__t.click('.settings-nav button', '播放')",
     1800,
     { switches: atLeast(1) }
   ],
   [
-    '17-settings-library',
+    '18-settings-library',
     "window.__t.click('.settings-nav button', '曲库')",
     2200,
     { switches: atLeast(2) }
   ],
-  ['18-settings-server', "window.__t.click('.settings-nav button', '服务器')", 1600],
+  ['19-settings-server', "window.__t.click('.settings-nav button', '服务器')", 1600],
 
   // ── 播放 / 面板 ────────────────────────────────────────────────────────
-  ['19-playing', "window.__t.click('.nav-item', '曲库')", 2400],
+  ['20-playing', "window.__t.click('.nav-item', '曲库')", 2400],
   // 双击歌曲行 = 开始播放并打开面板，页签就落在「正在播放」，歌词在这一页里。
   // 断言必须在这一步做：下一行会把页签切走。
   [
-    '20-now-playing-panel',
+    '21-now-playing-panel',
     "window.__t.dbl('.song-row')",
     2600,
     { lyricLines: exactly(10), lyricWords: atLeast(20) }
   ],
   [
-    '21-queue-panel',
+    '22-queue-panel',
     'window.__t.click(\'button[aria-label="播放队列"]\')',
     1400,
     { queueItems: atLeast(1) }
   ],
   // 控制栏的页签在「已激活」时再点一次 = 收起面板（不是什么都不做）
   [
-    '22-panel-closed',
+    '23-panel-closed',
     'window.__t.click(\'button[aria-label="播放队列"]\')',
     1400,
     { panel: exactly(0) }
@@ -330,13 +347,13 @@ const STEPS = [
   // 放在命令面板之前：面板的 Escape 绑在它自己的输入框上，从 window 派发关不掉，
   // 先折叠就不会让它盖在侧栏截图上。
   [
-    '23-sidebar-collapsed',
+    '24-sidebar-collapsed',
     "window.__t.click('.sidebar-foot .nav-item', '收起侧栏')",
     1600,
     { offCenter: atMost(1) }
   ],
   [
-    '24-command-palette',
+    '25-command-palette',
     "window.__t.key('k', { ctrlKey: true })",
     1400,
     { paletteItems: atLeast(1) }

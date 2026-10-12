@@ -87,8 +87,9 @@ src/
 └─ renderer/       React 19 + zustand
    ├─ api/           client.ts（fetch 封装）/ endpoints.ts（端点清单，来自上游 Flutter 实现）
    ├─ state/         useAuth / usePlayer / usePlaylists / useSettings / useUi / useToasts
-   ├─ pages/         10 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
-   │                 Recent / Folders / Search / Settings / Login
+   ├─ pages/         9 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
+   │                 Recent / Search / Settings / Login
+   │                 （「文件夹」不是独立页面，是 LibraryPage 里的一个标签，见 FoldersView）
    ├─ components/    Sidebar / TitleBar / SongTable / PlayerBar / LyricsView / CommandPalette /
    │                 Panel / ContextMenu / Modal / Toasts / SelectionBar / …
    ├─ hooks/         useSongList / usePlaylistSongs / useAsync

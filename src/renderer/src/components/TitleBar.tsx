@@ -18,7 +18,6 @@ import { useEffect, useState } from 'react'
 import {
   IconClock,
   IconClose,
-  IconFolder,
   IconHeart,
   IconHome,
   IconLibrary,
@@ -71,8 +70,8 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   }
 
   /**
-   * 折叠菜单（LOGO 右侧那个按钮）的菜单项：按「浏览 → 收藏与历史 → 设置」排，
-   * 文件夹紧跟曲库（它们是同一件事的两种切法）。只放「去哪儿」不放管理动作。
+   * 折叠菜单（LOGO 右侧那个按钮）的菜单项：按「浏览 → 收藏与历史 → 设置」排。
+   * 只放「去哪儿」不放管理动作；「文件夹」不单列 —— 它是曲库页里的一个标签。
    *
    * 复用 ContextMenuHost 而不是自己造一个下拉：宿主已经处理了贴边翻转、Esc、失焦关闭，
    * 再造一份就是两份要同步维护的行为。代价是必须把触发器一起传进去 —— 见 ContextMenu.tsx
@@ -91,12 +90,7 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
       icon: <IconLibrary size={16} />,
       onClick: () => navigate({ name: 'library' })
     },
-    {
-      key: 'folders',
-      label: '文件夹',
-      icon: <IconFolder size={16} />,
-      onClick: () => navigate({ name: 'folders', path: '' })
-    },
+
     {
       key: 'playlists',
       label: '歌单',

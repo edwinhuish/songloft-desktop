@@ -28,7 +28,6 @@ import { Toasts } from './components/Toasts'
 import { TooltipHost } from './components/Tooltip'
 import { useResponsiveSidebar } from './hooks/useResponsiveSidebar'
 import { FavoritesPage } from './pages/FavoritesPage'
-import { FoldersPage } from './pages/FoldersPage'
 import { HomePage } from './pages/HomePage'
 import { LibraryPage } from './pages/LibraryPage'
 import { LoginPage } from './pages/LoginPage'
@@ -317,7 +316,9 @@ function renderRoute(route: Route): React.JSX.Element {
   switch (route.name) {
     case 'home':
       return <HomePage />
+    // 「曲库」与「文件夹」是同一页的两种模式（标签条在页内），所以两条路由都落到它
     case 'library':
+    case 'folders':
       return <LibraryPage />
     case 'favorites':
       return <FavoritesPage />
@@ -329,8 +330,6 @@ function renderRoute(route: Route): React.JSX.Element {
       return <PlaylistsPage />
     case 'playlist':
       return <PlaylistDetailPage playlistId={route.id} />
-    case 'folders':
-      return <FoldersPage path={route.path} />
     case 'settings':
       return <SettingsPage section={route.section} />
     default:

@@ -13,7 +13,6 @@ import {
   IconChevronLeft,
   IconChevronRight,
   IconClock,
-  IconFolder,
   IconHeart,
   IconHome,
   IconLibrary,
@@ -81,28 +80,16 @@ export function Sidebar(): React.JSX.Element {
           <span className="nav-text">首页</span>
         </button>
 
-        {/* 文件夹占了自己的位置，就不再算「曲库」的一部分 —— 否则进文件夹页时
-            这里和下面那项会同时高亮 */}
+        {/* 「文件夹」是曲库页里的一个标签（不是独立入口），所以进文件夹模式时这里照样高亮 */}
         <button
           type="button"
           className="nav-item"
-          aria-current={isActive('library')}
+          aria-current={isActive('library', (r) => r.name === 'folders')}
           onClick={() => navigate({ name: 'library' })}
           {...tip('曲库')}
         >
           <IconLibrary size={18} />
           <span className="nav-text">曲库</span>
-        </button>
-
-        <button
-          type="button"
-          className="nav-item"
-          aria-current={isActive('folders')}
-          onClick={() => navigate({ name: 'folders', path: '' })}
-          {...tip('文件夹')}
-        >
-          <IconFolder size={18} />
-          <span className="nav-text">文件夹</span>
         </button>
 
         <button
