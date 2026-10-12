@@ -132,6 +132,28 @@ function toggleWindowVisibility(): void {
   }
 }
 
+/**
+ * 装配一个主窗口的监听。
+ *
+ * ★ 必须可重复调用：macOS 在「窗口都关掉但应用还活着」时会走 `activate` 重建窗口。
+ *   原先只在启动路径上挂这两个监听，重建出来的窗口于是既不会在关闭时把 mainWindow
+ *   置空（留下野引用），也不受 `closeToTray` 约束 —— 一次重建就静默丢掉两个行为。
+ */
+function attachWindowHandlers(window: BrowserWindow): void {
+  window.on('closed', () => {
+    // 只清理「当前这一个」：旧窗口延迟到达的 closed 不该抹掉新窗口的引用
+    if (mainWindow === window) mainWindow = null
+  })
+
+  // 关闭即最小化到托盘（默认关）：拦下 close，改成 hide
+  window.on('close', (event) => {
+    if (isQuitting) return
+    if (!store.getSettings().closeToTray) return
+    event.preventDefault()
+    window.hide()
+  })
+}
+
 // ────────────────────────────────── IPC ──────────────────────────────────
 function registerIpcHandlers(): void {
   // 设置
@@ -235,17 +257,7 @@ if (gotTheLock) {
     installAppMenu(() => mainWindow)
 
     mainWindow = createMainWindow(store)
-    mainWindow.on('closed', () => {
-      mainWindow = null
-    })
-
-    // 关闭即最小化到托盘（默认关）：拦下 close，改成 hide
-    mainWindow.on('close', (event) => {
-      if (isQuitting) return
-      if (!store.getSettings().closeToTray) return
-      event.preventDefault()
-      mainWindow?.hide()
-    })
+    attachWindowHandlers(mainWindow)
 
     createTray(trayDeps)
     disposeMediaKeys = registerMediaKeys(broadcastMediaCommand)
@@ -253,6 +265,8 @@ if (gotTheLock) {
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         mainWindow = createMainWindow(store)
+        // ★ 重建的窗口也要挂上监听，否则 closeToTray 与 mainWindow 置空就只对首个窗口有效
+        attachWindowHandlers(mainWindow)
       } else {
         mainWindow?.show()
       }
