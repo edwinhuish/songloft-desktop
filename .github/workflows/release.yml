@@ -55,7 +55,7 @@ jobs:
     outputs:
       tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # 要能解析出标签本身（还要判断标签指向的提交是否含最新 package.json），
           # 默认的浅克隆拿不到。
@@ -129,7 +129,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event.inputs.tag || github.ref }}
@@ -173,7 +173,7 @@ jobs:
     steps:
       # fetch-depth: 0 —— 生成发布说明要能跑 `git log <前一个标签>..<当前标签>`，也要能
       # 解析出前一个标签；默认的浅克隆（fetch-depth: 1）两条都拿不到。
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.event.inputs.tag || github.ref }}
