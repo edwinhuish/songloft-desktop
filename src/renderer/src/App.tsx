@@ -25,6 +25,7 @@ import { PlayerBar } from './components/PlayerBar'
 import { Sidebar } from './components/Sidebar'
 import { TitleBar } from './components/TitleBar'
 import { Toasts } from './components/Toasts'
+import { TooltipHost } from './components/Tooltip'
 import { useResponsiveSidebar } from './hooks/useResponsiveSidebar'
 import { FavoritesPage } from './pages/FavoritesPage'
 import { FoldersPage } from './pages/FoldersPage'
@@ -249,6 +250,7 @@ function Shell(): React.JSX.Element {
       <CommandPalette />
       <AddToPlaylistDialog />
       <ContextMenuHost />
+      <TooltipHost />
       <Toasts />
     </div>
   )

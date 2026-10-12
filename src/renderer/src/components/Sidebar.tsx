@@ -26,22 +26,18 @@ import { useSettings } from '@/state/useSettings'
 import { useUi } from '@/state/useUi'
 import { useToasts } from '@/state/useToasts'
 import { Cover } from './primitives'
-
-/** 折叠态用自绘 tooltip（data-tip），展开态退回原生 title */
-type NavTip = { 'data-tip'?: string; title?: string }
-
-/**
- * 折叠态只剩图标，菜单名改由自绘 tooltip 交代：原生 title 有约一秒延迟、样式由系统
- * 决定，在这套深色界面里很突兀，两边同时开着还会先后弹出两个。展开态文字可见，仍留
- * title —— 歌单名被截断时它是唯一的兜底。
- */
-function navTip(label: string, collapsed: boolean): NavTip {
-  return collapsed ? { 'data-tip': label } : { title: label }
-}
+import { hideTip, showTip } from './Tooltip'
 
 export function Sidebar(): React.JSX.Element {
   const { route, navigate, sidebarCollapsed, toggleSidebar } = useUi()
-  const tip = (label: string): NavTip => navTip(label, sidebarCollapsed)
+  /**
+   * 折叠态只剩图标，名字改由全局浮层交代（见 Tooltip.tsx：浮层必须渲染到滚动容器之外，
+   * 否则会被歌单列表的 overflow 剪掉）；展开态文字可见，留 title 兜底截断。
+   */
+  const tip = (label: string): React.ComponentProps<'button'> =>
+    sidebarCollapsed
+      ? { onMouseEnter: (event) => showTip(event, label), onMouseLeave: hideTip }
+      : { title: label }
   const { playlists, load, create } = usePlaylists()
   const { patch } = useSettings()
   const push = useToasts((s) => s.push)
@@ -145,7 +141,7 @@ export function Sidebar(): React.JSX.Element {
           <button
             type="button"
             className="icon-btn nav-section-add"
-            title="新建歌单"
+            {...tip('新建歌单')}
             aria-label="新建歌单"
             onClick={() => void handleCreate()}
           >

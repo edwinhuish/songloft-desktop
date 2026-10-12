@@ -302,10 +302,6 @@ a {
 /* ───────────────────────────── 侧栏 ───────────────────────────── */
 
 .sidebar {
-  /* position + z-index：折叠态的 tooltip 要画到侧栏之外，得能压住右侧内容
-     （.toolbar 是 z-index:20），否则会被主内容区盖住。 */
-  position: relative;
-  z-index: 30;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -345,24 +341,11 @@ a {
   padding: 6px 2px 2px 12px;
 }
 
-/* 「+」在图标条里没有位置：用 visibility 而不是 display，
-   好让它等淡出结束之后再退出（顺带退出 tab 顺序） */
+/* 「+」在折叠态也保留：新增歌单是这一段唯一的动作，藏起来就没地方点了。
+   它挂的是 .icon-btn，尺寸以那个类为准（32px，components.css 后加载），
+   写在这里会被盖掉，所以这里只管别被 flex 压扁。 */
 .nav-section-add {
   flex: none;
-  width: 24px;
-  height: 24px;
-  transition:
-    opacity var(--dur-2) var(--ease) var(--dur-2),
-    visibility 0s linear;
-}
-
-.sidebar[data-collapsed='true'] .nav-section-add {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transition:
-    opacity var(--dur-1) var(--ease),
-    visibility 0s linear var(--dur-1);
 }
 
 .nav-empty {
@@ -481,45 +464,13 @@ a {
   border-top: 1px solid var(--line-1);
 }
 
-/* 折叠态只剩图标，菜单名靠自绘 tooltip 交代（属性由 Sidebar 的 navTip 挂上）。
-   tooltip 要画到侧栏之外，而侧栏平时是 overflow:hidden（折叠过渡靠它裁掉溢出的
-   内容），所以只在「真的悬浮着」的时候放开裁剪 —— 过渡进行时没有悬浮，仍是 hidden，
-   动画观感不受影响。 */
-.sidebar[data-collapsed='true']:has(.nav-item:hover) {
-  overflow: visible;
-}
-
-.sidebar[data-collapsed='true'] .nav-item[data-tip]::after {
-  content: attr(data-tip);
-  position: absolute;
-  left: calc(100% + 10px);
-  top: 50%;
-  transform: translateY(-50%);
-  padding: 5px 9px;
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-xs);
-  /* 与右键菜单同一套浮层语言：低透明度底色 + 背景模糊 + 投影 */
-  background: color-mix(in srgb, var(--bg-3) 94%, transparent);
-  backdrop-filter: blur(20px);
-  box-shadow: var(--shadow-2);
-  color: var(--text-1);
-  font-size: 12.5px;
-  font-weight: 520;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--dur-1) var(--ease);
-  /* 提到同类 nav-item 之上：它们都是 z-index:auto，按 DOM 顺序会盖住前面的 tooltip */
-  z-index: 1;
-}
-
-.sidebar[data-collapsed='true'] .nav-item[data-tip]:hover::after {
-  opacity: 1;
-}
-
 .sidebar[data-collapsed='true'] .nav-section-head {
   min-height: 20px;
   padding: 4px 0 0;
+  /* 标题淡出后只剩「+」一个，居中才跟上下那些图标对得齐。
+     gap 也要归零：标题宽度虽然是 0，但 gap 是容器属性，照样占位、把按钮顶偏。 */
+  justify-content: center;
+  gap: 0;
 }
 
 /* 文字与计数：淡出，同时让出宽度。

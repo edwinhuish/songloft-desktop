@@ -1202,6 +1202,30 @@ select.input option {
   color: var(--text-4);
 }
 
+/* 挂在 App 根部的单例小提示（折叠侧栏里的图标名）。
+   为什么不做在元素自己的伪元素上：歌单列表是滚动容器，而滚动容器的 overflow 一定
+   会剪掉伸出它之外的伪元素，且两个轴不能只放开一个 —— 一个轴是 visible、另一个是
+   auto 时，visible 会被算成 auto，照样剪。 */
+.tip {
+  position: fixed;
+  /* 高于提示条(300)与右键菜单(200)：它只是个装饰，不该被别的浮层压住 */
+  z-index: 400;
+  /* 锚点是被提示元素的右缘中点，所以自身要往上挪半个高度 */
+  transform: translateY(-50%);
+  padding: 5px 9px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-xs);
+  /* 与右键菜单同一套浮层语言：低透明度底色 + 背景模糊 + 投影 */
+  background: color-mix(in srgb, var(--bg-3) 94%, transparent);
+  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-2);
+  color: var(--text-1);
+  font-size: 12.5px;
+  font-weight: 520;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* ── 提示条 ───────────────────────────────────────────────────────────── */
 
 .toasts {
