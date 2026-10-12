@@ -133,6 +133,8 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
       icon: <IconClock size={16} />,
       onClick: () => navigate({ name: 'recent' })
     },
+    // 设置与上面那串「去哪儿」不是一类：分割线把这一段单独划出来
+    { key: 'sep-settings', label: '', separator: true },
     {
       key: 'settings',
       label: '设置',

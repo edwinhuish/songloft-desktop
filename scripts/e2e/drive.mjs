@@ -151,7 +151,9 @@ window.__t = {
     cardTitles: window.__t.cardTitles(),
     chipTitles: window.__t.chipTitles(),
     menuItems: window.__t.menuTitles(),
-    subMenuItems: window.__t.lastMenuTitles()
+    subMenuItems: window.__t.lastMenuTitles(),
+    // 菜单里的分割线（渲染成 hr，不是 button，光断言条目文字看不见它）
+    menuDividers: document.querySelectorAll('.context-menu hr').length
   })
 };
 'ready'
@@ -309,7 +311,11 @@ const STEPS = [
     '15-nav-menu',
     "window.__t.clickLabel('导航菜单')",
     900,
-    { menuItems: equals('首页', '曲库', '歌单', '我的歌单', '我喜欢', '最近播放', '设置') }
+    {
+      menuItems: equals('首页', '曲库', '歌单', '我的歌单', '我喜欢', '最近播放', '设置'),
+      // 设置与上面那串之间要有分割线（条目文字看不出这条线，得单独数）
+      menuDividers: exactly(1)
+    }
   ],
   // 「我的歌单」的二级菜单 = 那份歌单名单。这里同样用 equals：断言的是名单内容与顺序，
   // 只数个数的话「混进电台收藏之类的非普通歌单」也可能碰巧一样多。
