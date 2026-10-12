@@ -1,0 +1,6 @@
+/* 样式单一入口：顺序即层叠顺序，别打乱。
+   tokens → base（重置 + 外壳布局）→ components（可复用的部件）。 */
+
+@import './tokens.css';
+@import './base.css';
+@import './components.css';

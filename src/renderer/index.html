@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Songloft Desktop</title>
+    <!-- 打包态的 CSP 由主进程注入（session.onHeadersReceived）：
+         开发态要放行 vite 的 HMR 与 react-refresh 内联脚本，两边策略不同，
+         所以不在这里写死一份两边都将就的 meta。 -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

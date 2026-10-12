@@ -1,0 +1,57 @@
+appId: com.songloft.desktop
+productName: Songloft Desktop
+copyright: Copyright © 2026 Songloft Desktop contributors
+
+directories:
+  buildResources: build
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+
+extraResources:
+  # 托盘图标：build/ 不会进包，托盘在运行期要读一个真实文件（skill 第一节）。
+  - from: build/icon-source.png
+    to: tray.png
+  # AppImage 专用 AppArmor profile 完整版（deb 那份由 electron-builder 内建生成并自动安装）。
+  # 文件名必须与 profile 内声明的名字、以及安装目标 /etc/apparmor.d/<executableName> 三处同源。
+  - from: build/apparmor-profile
+    to: apparmor/songloft-desktop
+
+# 本项目没有任何原生（node-gyp）依赖 —— 显式关闭，避免打包机被迫装 gcc/make/python。
+npmRebuild: false
+
+linux:
+  target:
+    - target: deb
+      arch: [x64]
+    - target: AppImage
+      arch: [x64]
+    - target: tar.gz
+      arch: [x64]
+  executableName: songloft-desktop
+  icon: build/icon-source.png
+  category: AudioVideo
+  synopsis: 插件化、无广告的免费音乐播放器
+  description: >-
+    Songloft Desktop 是 Songloft 音乐播放器的 Electron 桌面客户端。连接自建 Songloft 后端
+    （默认 http://localhost:58091），支持曲库浏览、歌单管理、逐字歌词、文件夹浏览与离线播放。
+  # ★ 决定产物 .desktop 的文件名。默认 false → 会被命名成 executableName（songloft-desktop.desktop），
+  #   与 app.setDesktopName() 报出的 app_id 对不上，GNOME 下静默回落成占位图标。
+  syncDesktopName: true
+  desktop:
+    entry:
+      # ★ 必须等于 package.json 的 desktopName，也等于 src/main 里 setDesktopName() 的入参（去掉 .desktop）。
+      StartupWMClass: com.songloft.desktop
+      Name: Songloft Desktop
+      Comment: 插件化、无广告的免费音乐播放器
+      Categories: AudioVideo;Audio;Player;
+      Keywords: music;player;songloft;audio;
+      MimeType: x-scheme-handler/songloft;
+
+# AppImage 的静态 runtime：彻底去掉对 libfuse2（Ubuntu 24.04+ 已改名 libfuse2t64）的依赖。
+# 固定版本而不是等默认值，避免某次升级静默改变产物行为。
+toolsets:
+  appimage: '1.0.3'

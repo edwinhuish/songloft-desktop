@@ -1,0 +1,19 @@
+# 仅用于 AppImage：AppImage 的运行路径是随机的 /tmp/.mount_XXXXXXXX，
+# deb 那份 profile 由 electron-builder 内建生成并在 postinst 自动安装，不用手写。
+#
+# 三处同源（文件名 = profile 名 = postinst 目标路径 /etc/apparmor.d/songloft-desktop）：
+#   1) 本文件名 songloft-desktop
+#   2) 下面 profile 声明的名字 songloft-desktop
+#   3) 安装目标 /etc/apparmor.d/songloft-desktop
+#
+# 路径写法避开空格引号问题：/opt/*/songloft-desktop 里的 * 不跨 /，
+# 因此可同时覆盖 /opt/Songloft Desktop/ 与 /opt/songloft-desktop/。
+abi <abi/4.0>,
+include <tunables/global>
+
+profile songloft-desktop /opt/*/songloft-desktop /usr/lib/*/songloft-desktop /tmp/.mount_Songlof*/songloft-desktop flags=(unconfined) {
+  # 只放行非特权 user namespace（Ubuntu 24.04+ 默认限制的正是这一项），不改其它权限。
+  userns,
+
+  include if exists <local/songloft-desktop>
+}

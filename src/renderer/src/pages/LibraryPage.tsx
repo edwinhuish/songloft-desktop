@@ -1,0 +1,356 @@
+/**
+ * 曲库。
+ *
+ * 桌面端最核心的一页，做了三件原 Flutter 端没做好的事：
+ *   1. **分面浏览就在同一页**：歌手/专辑/流派/语种/风格 五个维度用 chip 切换，
+ *      点卡片直接落成筛选条件（真·服务端过滤），而不是跳去另一个页面再用关键词搜。
+ *   2. **筛选条件可视化**：生效的筛选条件以 chip 形式挂在表头上，一眼看到"现在在看什么"，
+ *      点 × 就地解除。
+ *   3. **批量操作区分「行选中」与「全选当前筛选」**：前者能播能排队，后者只做 id 级动作。
+ */
+
+import { useCallback, useMemo, useState } from 'react'
+
+import type { FacetField, Song, SongType } from '@shared/types'
+import { FACET_LABELS } from '@shared/types'
+import { IconClose, IconFolderOpen, IconPlay, IconRefresh, IconSearch, IconSparkle, IconUpload } from '@/components/Icons'
+import { CardGridSkeleton, Cover, EmptyState } from '@/components/primitives'
+import { SelectionBar } from '@/components/SelectionBar'
+import { LIBRARY_COLUMNS, SongTable, type SongSort } from '@/components/SongTable'
+import { getFacets } from '@/api/endpoints'
+import { useAsync } from '@/hooks/useAsync'
+import { useSongList } from '@/hooks/useSongList'
+import { requireClient } from '@/state/useAuth'
+import { usePlayer } from '@/state/usePlayer'
+import { useUi } from '@/state/useUi'
+
+const TYPE_OPTIONS: { value: SongType | 'all'; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'local', label: '本地' },
+  { value: 'remote', label: '网络' },
+  { value: 'radio', label: '电台' }
+]
+
+const BROWSE_FIELDS: FacetField[] = ['artist', 'album', 'genre', 'language', 'style']
+
+export function LibraryPage(): React.JSX.Element {
+  const navigate = useUi((s) => s.navigate)
+  const playSongs = usePlayer((s) => s.playSongs)
+
+  const [type, setType] = useState<SongType | 'all'>('all')
+  const [showHidden, setShowHidden] = useState(false)
+  const [filters, setFilters] = useState<Partial<Record<FacetField, string>>>({})
+  const [browseField, setBrowseField] = useState<FacetField>('artist')
+  const [browsing, setBrowsing] = useState(false)
+  const [sort, setSort] = useState<SongSort | null>({ field: 'added_at', order: 'desc' })
+  const [selection, setSelection] = useState<number[]>([])
+  const [selectAllIds, setSelectAllIds] = useState<number[] | null>(null)
+
+  const query = useMemo(
+    () => ({
+      type,
+      exclude_playlist_labels: showHidden ? 'none' : undefined,
+      artist: filters.artist,
+      album: filters.album,
+      genre: filters.genre,
+      language: filters.language,
+      style: filters.style,
+      sort: sort?.field,
+      order: sort?.order
+    }),
+    [type, showHidden, filters, sort]
+  )
+
+  const list = useSongList(query, 200)
+  const facets = useAsync(
+    () => getFacets(requireClient(), browseField, { limit: 60, sort: 'count', order: 'desc' }),
+    [browseField]
+  )
+
+  const activeFilters = Object.entries(filters).filter(([, v]) => Boolean(v)) as [FacetField, string][]
+  const selectedSongs = useMemo(
+    () => selection.map((i) => list.songs[i]).filter((s): s is Song => Boolean(s)),
+    [selection, list.songs]
+  )
+
+  const clearSelection = useCallback(() => {
+    setSelection([])
+    setSelectAllIds(null)
+  }, [])
+
+  const applyFilter = useCallback((field: FacetField, value: string) => {
+    setFilters((prev) => ({ ...prev, [field]: value }))
+    setBrowsing(false)
+    setSelection([])
+    setSelectAllIds(null)
+  }, [])
+
+  const handleSelectAll = useCallback(async () => {
+    try {
+      const ids = await list.fetchAllIds()
+      setSelectAllIds(ids)
+      setSelection([])
+    } catch {
+      /* fetchAllIds 内部已经把错误暴露在 list.error 上，这里不需要额外提示 */
+    }
+  }, [list])
+
+  const totalForBar = selectAllIds ? selectAllIds : selection.map((i) => list.songs[i]?.id).filter((x): x is number => x != null)
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">曲库</h1>
+          <p className="page-subtitle">
+            {list.loading && list.songs.length === 0
+              ? '正在读取…'
+              : `${list.total} 首${list.total > list.songs.length ? `（已加载 ${list.songs.length}）` : ''}`}
+          </p>
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <button type="button" className="btn" onClick={() => list.refresh()}>
+            <IconRefresh size={15} />
+            刷新
+          </button>
+          <button
+            type="button"
+            className="btn"
+            data-variant="primary"
+            disabled={list.songs.length === 0}
+            onClick={() => void playSongs(list.songs, 0, { type: 'library', key: 'all' })}
+          >
+            <IconPlay size={15} />
+            播放全部
+          </button>
+        </div>
+      </div>
+
+      {/* ── 筛选区 ── */}
+      <div className="row-between" style={{ gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div className="segmented" role="group" aria-label="歌曲类型">
+          {TYPE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={type === option.value}
+              onClick={() => {
+                setType(option.value)
+                clearSelection()
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="row" style={{ gap: 8 }}>
+          <button
+            type="button"
+            className="btn"
+            data-size="sm"
+            data-variant={showHidden ? 'primary' : 'default'}
+            title="包含被隐藏歌单里的歌曲"
+            onClick={() => {
+              setShowHidden((v) => !v)
+              clearSelection()
+            }}
+          >
+            显示隐藏歌单曲目
+          </button>
+          <button
+            type="button"
+            className="btn"
+            data-size="sm"
+            data-variant={browsing ? 'primary' : 'default'}
+            onClick={() => setBrowsing((v) => !v)}
+          >
+            <IconSparkle size={14} />
+            分类浏览
+          </button>
+          <button
+            type="button"
+            className="btn"
+            data-size="sm"
+            onClick={() => navigate({ name: 'folders', path: '' })}
+          >
+            <IconFolderOpen size={14} />
+            按文件夹
+          </button>
+          <select
+            className="input"
+            style={{ width: 132, height: 29, fontSize: 12.5 }}
+            value={sort ? `${sort.field}:${sort.order}` : 'added_at:desc'}
+            onChange={(event) => {
+              const [field, order] = event.target.value.split(':')
+              setSort({ field: field as SongSort['field'], order: order as 'asc' | 'desc' })
+            }}
+            title="排序方式"
+          >
+            <option value="added_at:desc">最近加入</option>
+            <option value="added_at:asc">最早加入</option>
+            <option value="title:asc">标题 A→Z</option>
+            <option value="artist:asc">歌手 A→Z</option>
+            <option value="album:asc">专辑 A→Z</option>
+            <option value="duration:desc">时长 长→短</option>
+            <option value="year:desc">年份 新→旧</option>
+          </select>
+        </div>
+      </div>
+
+      {activeFilters.length > 0 || showHidden || type !== 'all' ? (
+        <div className="chip-row" style={{ marginBottom: 14 }}>
+          <span style={{ fontSize: 11.5, color: 'var(--text-4)' }}>当前筛选</span>
+          {type !== 'all' ? (
+            <button type="button" className="chip" data-active="true" onClick={() => setType('all')}>
+              {TYPE_OPTIONS.find((o) => o.value === type)?.label}
+              <IconClose size={12} />
+            </button>
+          ) : null}
+          {activeFilters.map(([field, value]) => (
+            <button
+              key={field}
+              type="button"
+              className="chip"
+              data-active="true"
+              onClick={() => setFilters((prev) => ({ ...prev, [field]: undefined }))}
+            >
+              {FACET_LABELS[field]}：{value}
+              <IconClose size={12} />
+            </button>
+          ))}
+          {showHidden ? (
+            <button type="button" className="chip" data-active="true" onClick={() => setShowHidden(false)}>
+              含隐藏歌单
+              <IconClose size={12} />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="chip"
+            onClick={() => {
+              setFilters({})
+              setShowHidden(false)
+              setType('all')
+            }}
+          >
+            清空全部
+          </button>
+        </div>
+      ) : null}
+
+      {/* ── 分面网格 ── */}
+      {browsing ? (
+        <>
+          <div className="chip-row" style={{ marginBottom: 16 }}>
+            {BROWSE_FIELDS.map((field) => (
+              <button
+                key={field}
+                type="button"
+                className="chip"
+                data-active={browseField === field}
+                onClick={() => setBrowseField(field)}
+              >
+                {FACET_LABELS[field]}
+              </button>
+            ))}
+          </div>
+
+          {facets.loading ? (
+            <CardGridSkeleton cards={12} />
+          ) : (facets.data?.facets.length ?? 0) === 0 ? (
+            <EmptyState
+              icon={<IconSearch size={26} />}
+              title={`还没有${FACET_LABELS[browseField]}数据`}
+              description="扫描曲库时把标签一并导入，这里才会有内容"
+            />
+          ) : (
+            <div className="card-grid" style={{ marginBottom: 20 }}>
+              {facets.data?.facets.map((facet) => (
+                <button
+                  key={facet.value}
+                  type="button"
+                  className="card"
+                  title={`只看${FACET_LABELS[browseField]}：${facet.value}`}
+                  onClick={() => applyFilter(browseField, facet.value)}
+                >
+                  <div className="card-art">
+                    <Cover coverUrl={facet.cover_url} size="100%" radius={0} round={browseField === 'artist'} />
+                  </div>
+                  <div className="card-title truncate" style={{ textAlign: 'left' }}>
+                    {facet.value}
+                  </div>
+                  <div className="card-meta" style={{ textAlign: 'left' }}>
+                    {facet.count} 首
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      ) : null}
+
+      {/* ── 歌曲表 ── */}
+      {list.error ? (
+        <div className="probe-result" data-state="error" style={{ marginBottom: 14 }}>
+          <span>{list.error}</span>
+          <button type="button" className="btn" data-size="sm" onClick={() => list.refresh()}>
+            重试
+          </button>
+        </div>
+      ) : null}
+
+      <SongTable
+        songs={list.songs}
+        columns={LIBRARY_COLUMNS}
+        loading={list.loading}
+        sort={sort}
+        onSortChange={setSort}
+        onPlayAt={(index) => void playSongs(list.songs, index, { type: 'library', key: JSON.stringify(filters) })}
+        hasMore={list.hasMore}
+        onLoadMore={list.loadMore}
+        selection={selection}
+        onSelectionChange={(indexes) => {
+          setSelection(indexes)
+          setSelectAllIds(null)
+        }}
+        menuOptions={{ onDeleted: (ids) => list.removeSongs(ids) }}
+        emptyTitle="没有匹配的歌曲"
+        emptyDescription="换个筛选条件，或去「设置 → 曲库」扫描音乐目录"
+        emptyAction={
+          <button
+            type="button"
+            className="btn"
+            data-variant="primary"
+            onClick={() => navigate({ name: 'settings', section: 'library' })}
+          >
+            <IconUpload size={15} />
+            去扫描曲库
+          </button>
+        }
+      />
+
+      {list.songs.length > 0 && selection.length === 0 && !selectAllIds ? (
+        <div className="load-more">
+          <button type="button" className="btn" data-size="sm" data-variant="ghost" onClick={() => void handleSelectAll()}>
+            全选当前筛选（{list.total} 首）
+          </button>
+        </div>
+      ) : null}
+
+      {selectAllIds || selection.length > 0 ? (
+        <SelectionBar
+          ids={totalForBar}
+          songs={selectAllIds ? undefined : selectedSongs}
+          selectAll={Boolean(selectAllIds)}
+          selectAllTotal={selectAllIds?.length}
+          onClear={clearSelection}
+          onRemoved={(ids) => {
+            list.removeSongs(ids)
+            clearSelection()
+          }}
+        />
+      ) : null}
+    </div>
+  )
+}

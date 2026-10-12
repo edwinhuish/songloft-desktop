@@ -1,0 +1,110 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   设计令牌
+   主题色 --accent 由封面取色在运行期改写（见 state/useTheme.ts），
+   所以所有强调色都必须走 var(--accent)，不要写死色值。
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  color-scheme: dark;
+
+  /* 中性色阶（暗色为主） */
+  --bg-0: #08090d;
+  --bg-1: #0d0f15;
+  --bg-2: #12151d;
+  --bg-3: #171b25;
+  --bg-4: #1e2330;
+
+  --surface-1: rgba(255, 255, 255, 0.038);
+  --surface-2: rgba(255, 255, 255, 0.062);
+  --surface-3: rgba(255, 255, 255, 0.095);
+  --surface-hover: rgba(255, 255, 255, 0.052);
+
+  --line-1: rgba(255, 255, 255, 0.075);
+  --line-2: rgba(255, 255, 255, 0.12);
+
+  --text-1: rgba(255, 255, 255, 0.96);
+  --text-2: rgba(255, 255, 255, 0.68);
+  --text-3: rgba(255, 255, 255, 0.44);
+  --text-4: rgba(255, 255, 255, 0.28);
+
+  /* 强调色：默认取 Songloft 品牌紫，运行期可能被封面主色覆盖 */
+  --accent: #7c5cff;
+  --accent-soft: color-mix(in srgb, var(--accent) 18%, transparent);
+  --accent-softer: color-mix(in srgb, var(--accent) 10%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent) 42%, transparent);
+  --on-accent: #ffffff;
+
+  --danger: #ff5f57;
+  --warning: #ffb340;
+  --success: #35c88c;
+
+  /* 尺寸 */
+  --titlebar-h: 44px;
+  --sidebar-w: 244px;
+  --sidebar-w-collapsed: 72px;
+  --player-h: 92px;
+  --panel-w: 384px;
+
+  --r-xs: 6px;
+  --r-sm: 9px;
+  --r-md: 13px;
+  --r-lg: 18px;
+  --r-xl: 26px;
+  --r-pill: 999px;
+
+  /* 玻璃质感强度由 --glass 控制（设置里可调，0 = 纯色不透明） */
+  --glass: 62%;
+  --glass-blur: calc(8px + var(--glass) * 0.28);
+  --glass-tint: color-mix(in srgb, var(--bg-1) calc(100% - var(--glass) * 0.7), transparent);
+
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+  --shadow-3: 0 24px 64px -16px rgba(0, 0, 0, 0.75);
+  --glow: 0 0 0 1px var(--accent-line), 0 8px 32px -12px var(--accent);
+
+  --dur-1: 110ms;
+  --dur-2: 190ms;
+  --dur-3: 320ms;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB',
+    'Noto Sans CJK SC', 'Source Han Sans SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, 'JetBrains Mono', 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
+
+  --row-h: 46px;
+}
+
+/* 浅色主题：只换中性色阶与阴影强度，其余令牌沿用 */
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg-0: #eef0f5;
+  --bg-1: #f6f7fa;
+  --bg-2: #ffffff;
+  --bg-3: #ffffff;
+  --bg-4: #eef1f7;
+
+  --surface-1: rgba(15, 18, 32, 0.035);
+  --surface-2: rgba(15, 18, 32, 0.06);
+  --surface-3: rgba(15, 18, 32, 0.095);
+  --surface-hover: rgba(15, 18, 32, 0.048);
+
+  --line-1: rgba(15, 18, 32, 0.09);
+  --line-2: rgba(15, 18, 32, 0.16);
+
+  --text-1: rgba(12, 14, 24, 0.94);
+  --text-2: rgba(12, 14, 24, 0.64);
+  --text-3: rgba(12, 14, 24, 0.42);
+  --text-4: rgba(12, 14, 24, 0.26);
+
+  --glass-tint: color-mix(in srgb, #ffffff calc(100% - var(--glass) * 0.55), transparent);
+
+  --shadow-1: 0 1px 2px rgba(15, 18, 32, 0.08);
+  --shadow-2: 0 8px 24px -10px rgba(15, 18, 32, 0.18);
+  --shadow-3: 0 24px 64px -20px rgba(15, 18, 32, 0.28);
+}
+
+/* 紧凑密度 */
+:root[data-density='compact'] {
+  --row-h: 38px;
+}

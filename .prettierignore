@@ -1,0 +1,7 @@
+out
+release
+node_modules
+pnpm-lock.yaml
+coverage
+build/icon-source.png
+*.md

@@ -1,0 +1,22 @@
+# pnpm 配置载体。
+#
+# ★ allowBuilds 只认这个文件：写进 .npmrc 或 package.json 会被静默忽略。
+# ★ pnpm 默认「不执行任何依赖的安装脚本」（供应链防护）；被拦下的依赖会让
+#   `pnpm install` 以 ERR_PNPM_IGNORED_BUILDS 非零退出，CI 里 --frozen-lockfile 直接失败。
+#   所以每一个带 install/postinstall 的依赖都必须在这里表态（true 批准 / false 显式拒绝）。
+#   ⚠️ pnpm 自己追加的 `xxx: set this to true or false` 占位项**不算决定**，构建仍会被拒。
+packages:
+  - '.'
+
+allowBuilds:
+  # vite / electron-vite 的打包器：postinstall 要下载平台二进制，不批就 `vite build` 起不来。
+  esbuild: true
+  # 只服务 Windows 的 NSIS/Squirrel 打包器（electron-builder 的传递依赖）。
+  # 本项目只发 deb / AppImage / tar.gz，它的 install 脚本（挑 7z 架构）无用 —— 显式拒绝。
+  electron-winstaller: false
+
+# vitest 5.0.4 比 pnpm 默认的「最小发布年龄」策略更新，不豁免就装不上。
+minimumReleaseAgeExclude:
+  - '@vitest/mocker@5.0.4'
+  - '@vitest/spy@5.0.4'
+  - vitest@5.0.4
