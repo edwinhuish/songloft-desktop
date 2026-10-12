@@ -28,8 +28,21 @@ import { useUi } from '@/state/useUi'
 import { useToasts } from '@/state/useToasts'
 import { Cover } from './primitives'
 
+/** 折叠态用自绘 tooltip（data-tip），展开态退回原生 title */
+type NavTip = { 'data-tip'?: string; title?: string }
+
+/**
+ * 折叠态只剩图标，菜单名改由自绘 tooltip 交代：原生 title 有约一秒延迟、样式由系统
+ * 决定，在这套深色界面里很突兀，两边同时开着还会先后弹出两个。展开态文字可见，仍留
+ * title —— 歌单名被截断时它是唯一的兜底。
+ */
+function navTip(label: string, collapsed: boolean): NavTip {
+  return collapsed ? { 'data-tip': label } : { title: label }
+}
+
 export function Sidebar(): React.JSX.Element {
   const { route, navigate, sidebarCollapsed, toggleSidebar } = useUi()
+  const tip = (label: string): NavTip => navTip(label, sidebarCollapsed)
   const { playlists, load, create } = usePlaylists()
   const { patch } = useSettings()
   const push = useToasts((s) => s.push)
@@ -62,7 +75,7 @@ export function Sidebar(): React.JSX.Element {
           className="nav-item"
           aria-current={isActive('home')}
           onClick={() => navigate({ name: 'home' })}
-          title="首页"
+          {...tip('首页')}
         >
           <IconHome size={18} />
           <span className="nav-text">首页</span>
@@ -73,7 +86,7 @@ export function Sidebar(): React.JSX.Element {
           className="nav-item"
           aria-current={route.name === 'library' || route.name === 'folders'}
           onClick={() => navigate({ name: 'library' })}
-          title="曲库"
+          {...tip('曲库')}
         >
           <IconLibrary size={18} />
           <span className="nav-text">曲库</span>
@@ -84,7 +97,7 @@ export function Sidebar(): React.JSX.Element {
           className="nav-item"
           aria-current={isActive('favorites')}
           onClick={() => navigate({ name: 'favorites' })}
-          title="我喜欢的音乐"
+          {...tip('我喜欢的音乐')}
         >
           <IconHeart size={18} filled={route.name === 'favorites'} />
           <span className="nav-text">我喜欢的</span>
@@ -95,7 +108,7 @@ export function Sidebar(): React.JSX.Element {
           className="nav-item"
           aria-current={isActive('recent')}
           onClick={() => navigate({ name: 'recent' })}
-          title="最近播放"
+          {...tip('最近播放')}
         >
           <IconClock size={18} />
           <span className="nav-text">最近播放</span>
@@ -106,7 +119,7 @@ export function Sidebar(): React.JSX.Element {
           className="nav-item"
           aria-current={isActive('playlists', (r) => r.name === 'playlist')}
           onClick={() => navigate({ name: 'playlists' })}
-          title="歌单"
+          {...tip('歌单')}
         >
           <IconListMusic size={18} />
           <span className="nav-text">歌单</span>
@@ -118,7 +131,7 @@ export function Sidebar(): React.JSX.Element {
           className="nav-item"
           aria-current={isActive('folders')}
           onClick={() => navigate({ name: 'folders', path: '' })}
-          title="文件夹浏览"
+          {...tip('文件夹浏览')}
         >
           <IconFolder size={18} />
           <span className="nav-text">文件夹</span>
@@ -157,7 +170,7 @@ export function Sidebar(): React.JSX.Element {
               className="nav-item"
               aria-current={route.name === 'playlist' && route.id === playlist.id}
               data-drop={dropTarget === playlist.id}
-              title={playlist.name}
+              {...tip(playlist.name)}
               onClick={() => navigate({ name: 'playlist', id: playlist.id })}
               onContextMenu={(event) =>
                 openMenuFromEvent(event, [
@@ -228,7 +241,7 @@ export function Sidebar(): React.JSX.Element {
           className="nav-item"
           aria-current={isActive('settings')}
           onClick={() => navigate({ name: 'settings', section: 'appearance' })}
-          title="设置"
+          {...tip('设置')}
         >
           <IconSettings size={18} />
           <span className="nav-text">设置</span>
@@ -242,7 +255,7 @@ export function Sidebar(): React.JSX.Element {
             toggleSidebar()
             void patch({ sidebarCollapsed: next })
           }}
-          title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
+          {...tip(sidebarCollapsed ? '展开侧栏' : '收起侧栏')}
         >
           {sidebarCollapsed ? <IconChevronRight size={18} /> : <IconChevronLeft size={18} />}
           {/* 文字要跟着状态走：折叠着还写「收起侧栏」是自相矛盾的 */}
