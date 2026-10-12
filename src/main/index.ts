@@ -26,6 +26,15 @@ import { createMainWindow } from './windows'
  */
 app.setDesktopName('com.songloft.desktop.desktop')
 
+/**
+ * 允许把配置目录挪走。两个用途：
+ *   1. 自动化冒烟测试给一份预置凭据的配置，不去碰用户真实的 ~/.config/songloft-desktop；
+ *   2. 用户想同时挂两套服务器配置时，可以自己指定。
+ * 必须在任何 app.getPath('userData') 被读取之前调用，所以放在 ConfigStore 实例化之前。
+ */
+const userDataOverride = process.env.SONGLOFT_USER_DATA
+if (userDataOverride) app.setPath('userData', userDataOverride)
+
 // 只允许一个实例：第二次启动就把已有窗口顶到前面，而不是再开一个播放器。
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {

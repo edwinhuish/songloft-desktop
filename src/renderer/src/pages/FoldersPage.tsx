@@ -30,8 +30,9 @@ export function FoldersPage({ path }: { path: string }): React.JSX.Element {
   const result = useAsync(() => getFolders(requireClient(), path), [path])
   const data = result.data
 
-  const songs = data?.songs ?? []
-  const folders = data?.folders ?? []
+  // ?? [] 每次渲染都是新数组，会顺带把下游 useMemo 的依赖搅成"每帧必变"（等于白 memo）
+  const songs = useMemo(() => data?.songs ?? [], [data])
+  const folders = useMemo(() => data?.folders ?? [], [data])
 
   const selectedSongs = useMemo(
     () => selection.map((i) => songs[i]).filter((s): s is Song => Boolean(s)),

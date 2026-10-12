@@ -107,6 +107,21 @@ a {
   transition: grid-template-columns var(--dur-3) var(--ease);
 }
 
+/* 未登录 / 启动中的单栏占用：标题栏仍在最外层（拖拽区与窗口控制要一直在），
+   这里只负责把剩下的整行交给登录页或启动占位。 */
+.shell-solo {
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.solo-splash {
+  display: grid;
+  place-items: center;
+  gap: 14px;
+  color: var(--text-3);
+}
+
 .shell-body[data-panel='open'] {
   grid-template-columns: var(--sidebar-current, var(--sidebar-w)) minmax(0, 1fr) var(--panel-w);
 }

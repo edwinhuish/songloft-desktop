@@ -13,12 +13,24 @@ import type { MediaCommand, TraySnapshot } from '@shared/ipc'
 
 let tray: Tray | null = null
 
-function resolveIconPath(): string {
-  // 打包后 extraResources 落到 process.resourcesPath/tray.png；
-  // 开发态直接读仓库里的 build/tray-256.png。
-  const packaged = join(process.resourcesPath ?? '', 'tray.png')
-  if (existsSync(packaged)) return packaged
-  return join(app.getAppPath(), 'build', 'tray-256.png')
+/**
+ * 托盘图标的候选路径。
+ *
+ *  打包态：extraResources 把 build/icon-source.png 落到 process.resourcesPath/tray.png
+ *  开发态：build/ 不进包，但仓库里这两份都在 —— 优先 256 的托盘专用图，
+ *          没有再退回 1024 的位图母版（反正下面会 resize 到 22）。
+ *
+ * ⚠️ 早先这里只写死 build/tray-256.png，而 make-icons.sh 并不产出该文件，
+ *    结果开发态托盘**必然**静默失败（只有一行 warn），很容易被当成"GNOME 没托盘"而误判。
+ *    所以改成按序试多份，且最后一份是必然存在的母版。
+ */
+function resolveIconPath(): string | null {
+  const candidates = [
+    join(process.resourcesPath ?? '', 'tray.png'),
+    join(app.getAppPath(), 'build', 'tray-256.png'),
+    join(app.getAppPath(), 'build', 'icon-source.png')
+  ]
+  return candidates.find((path) => path && existsSync(path)) ?? null
 }
 
 export interface TrayDeps {
@@ -30,9 +42,14 @@ export interface TrayDeps {
 
 export function createTray(deps: TrayDeps): Tray | null {
   try {
-    const image = nativeImage.createFromPath(resolveIconPath())
+    const iconPath = resolveIconPath()
+    if (!iconPath) {
+      console.warn('[tray] 找不到托盘图标（build/icon-source.png 缺失？），跳过托盘')
+      return null
+    }
+    const image = nativeImage.createFromPath(iconPath)
     if (image.isEmpty()) {
-      console.warn('[tray] 图标文件读不出内容，跳过托盘')
+      console.warn('[tray] 图标读不出像素内容，跳过托盘：', iconPath)
       return null
     }
     tray = new Tray(image.resize({ width: 22, height: 22 }))

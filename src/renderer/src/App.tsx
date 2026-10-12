@@ -177,18 +177,25 @@ export function App(): React.JSX.Element {
     void usePlayer.getState().restoreLastQueue()
   }, [status])
 
-  if (status === 'booting') {
+  /* 未登录 / 启动中：同样是 frameless 窗口，必须带上标题栏才有拖拽区与窗口控制。
+     少了它，登录页会变成一个既拖不动也关不掉的窗口（只能 Alt+F4）。 */
+  if (status !== 'authenticated') {
     return (
-      <div className="login" style={{ gridTemplateColumns: '1fr', placeItems: 'center' }}>
-        <div style={{ display: 'grid', placeItems: 'center', gap: 14, color: 'var(--text-3)' }}>
-          <IconLoader size={26} />
-          <div>正在恢复上次的会话…</div>
+      <div className="shell">
+        <TitleBar solo />
+        <div className="shell-solo">
+          {status === 'booting' ? (
+            <div className="solo-splash">
+              <IconLoader size={26} />
+              <div>正在恢复上次的会话…</div>
+            </div>
+          ) : (
+            <LoginPage />
+          )}
         </div>
       </div>
     )
   }
-
-  if (status !== 'authenticated') return <LoginPage />
 
   return <Shell />
 }

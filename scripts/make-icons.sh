@@ -108,6 +108,12 @@ for size in 16 32 48 64 128 256 512; do
 done
 info "派生尺寸写入 build/icons/（16…512）"
 
+# ── 托盘专用图 ────────────────────────────────────────────────────────────────
+# 开发态托盘（src/main/tray.ts）会优先读这一份。不生成的话开发态托盘必然静默失败，
+# 而症状只是"托盘图标不出现"，跟 GNOME 缺 AppIndicator 扩展长得一模一样，极难分辨。
+magick "$PNG" -resize 256x256 -strip "$ROOT/build/tray-256.png"
+assert_icon "$ROOT/build/tray-256.png" 3
+
 # ── 负向自检：故意喂一张灰度图，断言必须失败（只会输出 ✓ 的校验等于没有校验）────
 magick "$PNG" -colorspace Gray -colorspace sRGB "$OUT/.negative-control.png"
 if assert_icon "$OUT/.negative-control.png" 3 >/dev/null 2>&1; then

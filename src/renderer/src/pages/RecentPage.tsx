@@ -46,10 +46,11 @@ export function RecentPage(): React.JSX.Element {
     // 后端可能已经删掉某些歌：把失效的 id 一起带回去，方便顺手清掉
     const missing = visibleIds.filter((_, index) => songs[index] === null)
     return { songs: songs.filter((s): s is Song => s !== null), missing }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 依赖用 idsKey（逗号串）而不是 visibleIds：后者每次 useMemo 都是新数组，
+    // 直接当依赖会无限重取；这里语义就是"可见 id 集合变了才重拉"。
   }, [idsKey])
 
-  const songs = result.data?.songs ?? []
+  const songs = useMemo(() => result.data?.songs ?? [], [result.data])
 
   const removeEntries = useCallback(
     (ids: number[]) => {
