@@ -11,9 +11,11 @@ packages:
 allowBuilds:
   # vite / electron-vite 的打包器：postinstall 要下载平台二进制，不批就 `vite build` 起不来。
   esbuild: true
-  # 只服务 Windows 的 NSIS/Squirrel 打包器（electron-builder 的传递依赖）。
-  # 本项目只发 deb / AppImage / tar.gz，它的 install 脚本（挑 7z 架构）无用 —— 显式拒绝。
-  electron-winstaller: false
+  # Windows 打包目标的传递依赖（electron-builder → electron-winstaller）：
+  # 它的 install 脚本按当前架构挑选 7z 可执行文件，NSIS / Squirrel 目标都要用它。
+  # ★ 本项目发三平台（Linux + Windows + macOS），Windows 那一份走 NSIS，因此必须批准；
+  #   此前是 false（当时只有 Linux 产物）—— 改回 false 会让 Windows 打包在 CI 上失败。
+  electron-winstaller: true
 
 # vitest 5.0.4 比 pnpm 默认的「最小发布年龄」策略更新，不豁免就装不上。
 minimumReleaseAgeExclude:

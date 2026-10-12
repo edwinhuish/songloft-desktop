@@ -33,11 +33,14 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "icons": "bash scripts/make-icons.sh",
-    "pack:linux": "pnpm run build && electron-builder --linux",
-    "pack:deb": "pnpm run build && electron-builder --linux deb",
-    "pack:appimage": "pnpm run build && electron-builder --linux AppImage",
+    "pack:linux": "pnpm run build && electron-builder --linux --publish never",
+    "pack:deb": "pnpm run build && electron-builder --linux deb --publish never",
+    "pack:appimage": "pnpm run build && electron-builder --linux AppImage --publish never",
+    "pack:win": "pnpm run build && electron-builder --win --publish never",
+    "pack:mac": "pnpm run build && electron-builder --mac --publish never",
     "verify:package": "bash scripts/verify-package.sh",
-    "check": "pnpm run typecheck && pnpm run lint && pnpm run format:check && pnpm run test"
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run format:check && pnpm run test",
+    "release": "bumpp"
   },
   "dependencies": {
     "zustand": "^5.0.15"
@@ -48,6 +51,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",
+    "bumpp": "^12.3.0",
     "electron": "^44.7.0",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
