@@ -59,6 +59,8 @@ export interface PlayerState {
   seek: (seconds: number) => void
   seekBy: (delta: number) => void
   setVolume: (volume: number) => void
+  /** 立刻把当前音量写盘（拖动结束/窗口关闭前用），并取消尚未执行的合并写 */
+  flushVolume: () => void
   toggleMute: () => void
   cyclePlayMode: () => void
   setPlayMode: (mode: PlayMode) => void
@@ -163,6 +165,32 @@ function updatePositionState(): void {
   } catch {
     /* 某些状态下 Chromium 会拒绝，忽略即可 */
   }
+}
+
+/* ──────────────────── 音量落盘（合并写） ──────────────────── */
+
+/**
+ * 音量的变化形态是「持续连发」：拖音量条每个 pointermove 一次，按住 ↑/↓ 会随按键重复连发。
+ * 而每次写盘要走 IPC + 主进程的 `writeFileSync` + `renameSync`（整份 JSON，同步 I/O），
+ * 拖一次音量条就是几十次全量落盘，主进程会被拖住。这里把连续改动合并成
+ * 「静默 400ms 后的一跳」；拖动结束时再显式 flush，保证最后一次值不会只留在内存里。
+ */
+const VOLUME_PERSIST_DEBOUNCE_MS = 400
+let volumePersistTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleVolumePersist(volume: number, immediate = false): void {
+  if (volumePersistTimer) {
+    clearTimeout(volumePersistTimer)
+    volumePersistTimer = null
+  }
+  if (immediate) {
+    void useSettings.getState().patch({ volume })
+    return
+  }
+  volumePersistTimer = setTimeout(() => {
+    volumePersistTimer = null
+    void useSettings.getState().patch({ volume })
+  }, VOLUME_PERSIST_DEBOUNCE_MS)
 }
 
 /* ─────────────────────── store ─────────────────────── */
@@ -399,8 +427,10 @@ export const usePlayer = create<PlayerState>((set, get) => {
       audio.volume = clamped
       audio.muted = false
       set({ volume: clamped, muted: false })
-      void useSettings.getState().patch({ volume: clamped })
+      scheduleVolumePersist(clamped)
     },
+
+    flushVolume: () => scheduleVolumePersist(get().volume, true),
 
     toggleMute: () => {
       const muted = !get().muted

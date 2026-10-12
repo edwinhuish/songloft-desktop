@@ -6,7 +6,7 @@
  * 同时滚动的进度始终可见。这是相对 Flutter 端移动优先布局最明显的桌面化调整。
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 import type { PlayMode } from '@shared/types'
 import {
@@ -49,6 +49,8 @@ export function PlayerBar(): React.JSX.Element {
   const favoriteIds = usePlaylists((s) => s.favoriteIds)
   const toggleFavorite = usePlaylists((s) => s.toggleFavorite)
   const [scrub, setScrub] = useState<number | null>(null)
+  // ★ 用 ref 而不是用 scrub 判「是否在拖」：pointermove 的闭包拿到的可能还是上一帧的 state
+  const scrubbing = useRef(false)
 
   const song = useMemo(
     () =>
@@ -63,14 +65,71 @@ export function PlayerBar(): React.JSX.Element {
   const favorited = song ? favoriteIds.has(song.id) : false
   const hasTrackSwitch = player.tracks.length > 1
 
+  /** 指针横坐标 → 秒 */
+  const secondsAt = (clientX: number, el: HTMLElement): number => {
+    const rect = el.getBoundingClientRect()
+    if (rect.width <= 0) return 0
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
+    return ratio * duration
+  }
+
+  const beginScrub = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (duration <= 0) return
+    event.preventDefault()
+    scrubbing.current = true
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setScrub(secondsAt(event.clientX, event.currentTarget))
+  }
+
+  const moveScrub = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (!scrubbing.current) return
+    setScrub(secondsAt(event.clientX, event.currentTarget))
+  }
+
+  const endScrub = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (!scrubbing.current) return
+    scrubbing.current = false
+    const target = secondsAt(event.clientX, event.currentTarget)
+    setScrub(null)
+    player.seek(target)
+  }
+
+  const cancelScrub = (): void => {
+    if (!scrubbing.current) return
+    scrubbing.current = false
+    setScrub(null)
+  }
+
   return (
     <footer className="playerbar">
+      {/*
+        进度条。拖动期间**只**更新本地 scrub，松手才真去 seek ——
+        每移动一像素就写一次 audio.currentTime，会让解码器反复丢弃缓冲。
+        左右方向键也接上，键盘用户不该只能靠 Ctrl+←/→ 跳曲。
+      */}
       <div
         className="playerbar-progress"
-        role="presentation"
-        onPointerDown={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect()
-          setScrub(((event.clientX - rect.left) / rect.width) * duration)
+        role="slider"
+        tabIndex={0}
+        aria-label="播放进度"
+        aria-valuemin={0}
+        aria-valuemax={Math.round(duration)}
+        aria-valuenow={Math.round(position)}
+        aria-valuetext={`${formatDuration(position)} / ${formatDuration(duration)}`}
+        data-dragging={scrub !== null}
+        onPointerDown={beginScrub}
+        onPointerMove={moveScrub}
+        onPointerUp={endScrub}
+        onPointerCancel={cancelScrub}
+        onKeyDown={(event) => {
+          if (duration <= 0) return
+          if (event.key === 'ArrowRight') {
+            event.preventDefault()
+            player.seekBy(5)
+          } else if (event.key === 'ArrowLeft') {
+            event.preventDefault()
+            player.seekBy(-5)
+          }
         }}
       >
         <div className="playerbar-progress-track" />
@@ -219,7 +278,13 @@ export function PlayerBar(): React.JSX.Element {
             ariaLabel="音量"
             value={player.muted ? 0 : player.volume * 100}
             max={100}
+            // 拖动期间只改内存（setVolume 内部会把落盘合并成一跳），
+            // 松手再立刻 flush，避免「拖完就退出」丢掉最后一次音量
             onChange={(value) => player.setVolume(value / 100)}
+            onCommit={(value) => {
+              player.setVolume(value / 100)
+              player.flushVolume()
+            }}
           />
         </div>
       </div>

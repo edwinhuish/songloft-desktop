@@ -493,6 +493,8 @@
   right: 0;
   height: 3px;
   cursor: pointer;
+  /* 拖动进度时别让浏览器把指针手势当成滚动/缩放手势抢走 */
+  touch-action: none;
 }
 
 .playerbar-progress-track {
@@ -516,6 +518,20 @@
 
 .playerbar-progress:hover .playerbar-progress-track {
   background: var(--surface-2);
+}
+
+/* 拖动中固定成「粗 + 有底色」，并关掉填充的过渡 ——
+   否则指针已经走远、填充还追在半路上（transition: width 120ms linear）。 */
+.playerbar-progress[data-dragging='true'] {
+  height: 5px;
+}
+
+.playerbar-progress[data-dragging='true'] .playerbar-progress-track {
+  background: var(--surface-2);
+}
+
+.playerbar-progress[data-dragging='true'] .playerbar-progress-fill {
+  transition: none;
 }
 
 .playerbar-now {
