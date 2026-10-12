@@ -66,6 +66,13 @@ window.__t = {
     el.click();
     return 'OK';
   },
+  /** 按 aria-label 点：标题栏那排是纯图标按钮，byText 够不着它们 */
+  clickLabel: (label) => {
+    const el = document.querySelector('[aria-label="' + label + '"]');
+    if (!el) return 'NOT_FOUND:' + label;
+    el.click();
+    return 'OK';
+  },
   dbl: (sel) => {
     const el = document.querySelector(sel);
     if (!el) return 'NOT_FOUND';
@@ -259,7 +266,8 @@ const STEPS = [
   ['13-favorites', "window.__t.click('.nav-item', '我喜欢的')", 2400, { rows: exactly(6) }],
 
   // ── 设置四页 ───────────────────────────────────────────────────────────
-  ['14-settings-appearance', "window.__t.click('.nav-item', '设置')", 1600],
+  // 设置入口已从侧栏挪到标题栏（在「搜索与命令」与「最小化」之间），按 aria-label 点
+  ['14-settings-appearance', "window.__t.clickLabel('设置')", 1600],
   [
     '15-settings-playback',
     "window.__t.click('.settings-nav button', '播放')",

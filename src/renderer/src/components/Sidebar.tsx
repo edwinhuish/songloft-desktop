@@ -18,8 +18,7 @@ import {
   IconHome,
   IconLibrary,
   IconListMusic,
-  IconPlus,
-  IconSettings
+  IconPlus
 } from './Icons'
 import { openMenuFromEvent } from './ContextMenu'
 import { usePlaylists } from '@/state/usePlaylists'
@@ -236,17 +235,6 @@ export function Sidebar(): React.JSX.Element {
       </div>
 
       <div className="sidebar-foot">
-        <button
-          type="button"
-          className="nav-item"
-          aria-current={isActive('settings')}
-          onClick={() => navigate({ name: 'settings', section: 'appearance' })}
-          {...tip('设置')}
-        >
-          <IconSettings size={18} />
-          <span className="nav-text">设置</span>
-        </button>
-
         <button
           type="button"
           className="nav-item"

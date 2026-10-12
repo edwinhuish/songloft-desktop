@@ -15,7 +15,14 @@
 
 import { useEffect, useState } from 'react'
 
-import { IconClose, IconMaximize, IconMinimize, IconRestore, IconSearch } from './Icons'
+import {
+  IconClose,
+  IconMaximize,
+  IconMinimize,
+  IconRestore,
+  IconSearch,
+  IconSettings
+} from './Icons'
 import { useUi } from '@/state/useUi'
 import { usePlayer } from '@/state/usePlayer'
 import { displayArtist } from '@/lib/format'
@@ -28,6 +35,7 @@ export interface TitleBarProps {
 export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   const [state, setState] = useState({ maximized: false, fullscreen: false, focused: true })
   const setPaletteOpen = useUi((s) => s.setPaletteOpen)
+  const navigate = useUi((s) => s.navigate)
   const song = usePlayer((s) =>
     s.cursor >= 0 && s.cursor < s.order.length ? s.queue[s.order[s.cursor]] : null
   )
@@ -73,15 +81,29 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
 
       <div className="titlebar-actions">
         {!solo ? (
-          <button
-            type="button"
-            className="win-btn"
-            title="搜索与命令（Ctrl+K）"
-            aria-label="打开命令面板"
-            onClick={() => setPaletteOpen(true)}
-          >
-            <IconSearch size={15} />
-          </button>
+          <>
+            <button
+              type="button"
+              className="win-btn"
+              title="搜索与命令（Ctrl+K）"
+              aria-label="打开命令面板"
+              onClick={() => setPaletteOpen(true)}
+            >
+              <IconSearch size={15} />
+            </button>
+            {/* 设置入口挪到标题栏，与窗口按钮共用一套尺寸和 hover —— 侧栏底部因此
+                只剩「收起侧栏」一件事。拖动区对标题栏里的所有 button 都设了 no-drag
+                （见 base.css 的 .titlebar button），所以它照样点得动 */}
+            <button
+              type="button"
+              className="win-btn"
+              title="设置"
+              aria-label="设置"
+              onClick={() => navigate({ name: 'settings', section: 'appearance' })}
+            >
+              <IconSettings size={15} />
+            </button>
+          </>
         ) : null}
         <button
           type="button"
