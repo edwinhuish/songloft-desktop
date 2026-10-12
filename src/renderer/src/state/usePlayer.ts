@@ -46,8 +46,6 @@ export interface PlayerState {
   tracks: { index: number; title: string | null; language: string | null }[]
   activeTrack: number
   context: PlaybackContext | null
-  /** 播放队列是否正在被拖动重排（避免高频写盘） */
-  speed: number
 
   currentSong: () => Song | null
   playSongs: (songs: Song[], startIndex?: number, context?: PlaybackContext | null) => Promise<void>
@@ -366,7 +364,6 @@ export const usePlayer = create<PlayerState>((set, get) => {
     tracks: [],
     activeTrack: -1,
     context: null,
-    speed: 1,
 
     currentSong: () => {
       const { queue, order, cursor } = get()

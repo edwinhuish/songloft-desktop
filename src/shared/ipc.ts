@@ -120,8 +120,6 @@ export interface AppSettings {
   allowInsecureTls: boolean
   /** 侧栏是否折叠 */
   sidebarCollapsed: boolean
-  /** 首页卡片列数 */
-  homeColumns: number
   /** 记住的播放队列（会话恢复） */
   lastQueue: number[]
   lastQueueIndex: number
@@ -147,7 +145,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   quality: 'original',
   allowInsecureTls: false,
   sidebarCollapsed: false,
-  homeColumns: 5,
   lastQueue: [],
   lastQueueIndex: -1,
   lastQueueContext: null,
