@@ -71,6 +71,21 @@ Linux x64 提供三种形态：
 | `AppImage` | 免安装，双击即用 |
 | `.tar.gz` | 解压即用，适合自行放置 |
 
+### 任务栏图标（Linux / GNOME）
+
+GNOME（Wayland）画任务栏图标只认**宿主上**的 `.desktop` 条目：窗口自己声明的图标传不出去
+（`xdg_toplevel` 协议里没有图标字段），GNOME 拿窗口上报的 app_id 去找同名条目，再用条目里的
+`Icon=`（详见 [AGENTS.md](AGENTS.md) §8.11）。
+
+* `.deb`：装好即生效。
+* `AppImage` / `.tar.gz` / 开发态：都不往系统里装任何东西，所以**直接双击运行时任务栏里是一个
+  占位齿轮** —— 这是 GNOME 的已知限制，不是产物坏了。要显示成应用图标，二选一：
+  * 用 AppImageLauncher / Gear Lever 之类的集成工具接管这个 AppImage（产物里已经带了合规的
+    条目与 hicolor 图标）；
+  * 或者在本仓库里跑一次 `pnpm run desktop:install`（`bash scripts/desktop-integration.sh
+    install /path/to/Songloft.Desktop-x.AppImage` 可指向某个 AppImage；卸载用
+    `pnpm run desktop:uninstall`）。它只写 `~/.local/share` 下两份文件，并把路径打出来。
+
 **目前没有自动更新**，升级需要手动替换。自行构建的方式见 [`docs/development.md`](docs/development.md)。
 
 ---

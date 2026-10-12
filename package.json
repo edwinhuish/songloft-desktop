@@ -33,6 +33,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "icons": "bash scripts/make-icons.sh",
+    "desktop:install": "bash scripts/desktop-integration.sh install",
+    "desktop:uninstall": "bash scripts/desktop-integration.sh uninstall",
     "pack:linux": "pnpm run build && electron-builder --linux --publish never",
     "pack:deb": "pnpm run build && electron-builder --linux deb --publish never",
     "pack:appimage": "pnpm run build && electron-builder --linux AppImage --publish never",

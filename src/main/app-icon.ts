@@ -1,14 +1,15 @@
 /**
- * 应用图标（任务栏 / Dock / Alt-Tab 列表里那一枚）。
+ * 窗口自己声明的应用图标（X11 / Windows / macOS 的任务栏、Alt-Tab、Dock 用它）。
  *
- * ★ 为什么必须显式交给窗口：任务栏图标来自**应用自己声明的**那一份；不给就退回
- *   Electron 自带那枚 —— 开发态最容易看见（任务栏与 Alt-Tab 里写着 Electron，而不是
- *   本应用）。打包态虽然 .desktop 与 app_id 对齐后 GNOME 会据此合并图标，但那是
- *   「装了 .desktop 的桌面环境」额外给的好处；窗口自己报出的这一份才是兜底。
+ * ★ 但**Wayland 下这份图标根本传不出去**：`xdg_toplevel` 协议里没有图标字段
+ *   （合成器至今也没有 `xdg-toplevel-icon-v1`）。GNOME 那边认的是
+ *   「窗口 app_id → 宿主上同名的 .desktop 条目 → 条目里的 Icon=」这条链，
+ *   跟窗口自己报了什么无关 —— 详见 AGENTS.md §8.11。
+ *   两条路都要留着：任一平台缺一条，症状都只是「图标没生效」，没有任何报错。
  *
  * 候选按「打包态 → 开发态」排：打包态 build/ 不进包，图标由 extraResources 投到
  * resources/icon.png；开发态直接读仓库里的位图母版（build/ 永远在，不会被 gitignore）。
- * ⚠️ 少写任何一条候选，症状都只是「图标没生效」，没有任何报错 —— 宁可多留几条。
+ * ⚠️ 少写任何一条候选，症状同样只是「图标没生效」，宁可多留几条。
  */
 
 import { app, nativeImage, type NativeImage } from 'electron'
@@ -28,6 +29,8 @@ function candidatePaths(): string[] {
 /**
  * 读一枚可用的应用图标。拿不到就返回 null —— 图标问题不该拦住应用启动，
  * 窗口用系统默认图标照常开。
+ *
+ * ⚠️ 只对 X11 / Windows / macOS 有效：Wayland 没有「窗口图标」这个概念（见文件头）。
  */
 export function loadAppIcon(): NativeImage | null {
   for (const file of candidatePaths()) {

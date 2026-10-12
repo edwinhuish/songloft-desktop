@@ -55,6 +55,8 @@ pnpm run pack:win         # 打 NSIS 安装包（要在 Windows 上跑；Linux/m
 pnpm run pack:mac         # 打 dmg / zip（要在 macOS 上跑）
 pnpm run verify:package   # 校验打包产物的桌面集成项（只覆盖 Linux 产物）
 pnpm run icons            # 由 build/icon.svg 生成全套图标 + 托盘图
+pnpm run desktop:install  # 把本应用注册到当前用户桌面目录（GNOME 任务栏图标要它，见 §8.11）
+pnpm run desktop:uninstall
 
 pnpm run release          # ★ 发版：升版本 + 提交 + 打 v* 标签 + 推送，之后由 CI 三平台发布
 ```
@@ -99,7 +101,7 @@ src/
 ├─ main/          Electron 主进程（Node 环境，唯一持有系统权限的地方）
 │  ├─ index.ts        生命周期、窗口创建、安全策略与 CSP、setDesktopName、userData 覆盖
 │  ├─ windows.ts      BrowserWindow 构造（contextIsolation / sandbox / nodeIntegration）
-│  ├─ app-icon.ts     应用图标定位（窗口 / 任务栏用；打包态读 extraResources 投的 icon.png）
+│  ├─ app-icon.ts     窗口图标定位（只对 X11 / Windows / macOS 生效；Wayland 见 §8.11）
 │  ├─ media-keys.ts   媒体键（globalShortcut 兜底；优先走 Media Session 自动映射）
 │  ├─ store.ts        本地持久化：设置 / 凭据 / 服务器列表（JSON，落在 userData）
 │  ├─ probe.ts        后端探测（本地 Blob 解码，避免为它关掉 webSecurity）
@@ -256,11 +258,50 @@ ImageMagick 渲 SVG 可能整体渲成黑白**且退出码为 0**。`scripts/mak
 3. **路径含空格就别按空白切列** —— productName 是 `Songloft Desktop`，落地成 `/opt/Songloft Desktop/…`，
    `awk '{print $1}'` 会截断。
 
+### 8.11 任务栏图标：Wayland 下只能靠**宿主上**的 `.desktop`，窗口 icon 传不出去
+
+GNOME / Wayland 画任务栏（Dock / Alt-Tab）图标**不看窗口**：`xdg_toplevel` 协议里没有图标字段，
+合成器至今也没提供 `xdg-toplevel-icon-v1`（本机 `WAYLAND_DEBUG=1` 抓到的全局列表里就没有它），
+所以 `BrowserWindow({ icon })`（落到 X11 的 `_NET_WM_ICON`）只在 X11 / Windows / macOS 生效。
+GNOME 认图标只有一条链，**任何一环断掉都只是画一个占位齿轮，没有任何报错**：
+
+```
+窗口上报的 app_id（= app.setDesktopName() 的入参 = package.json 的 desktopName）
+  → 宿主上 $XDG_DATA_DIRS/applications/<app_id>.desktop（以及 ~/.local/share 那份）
+  → 条目里的 Icon=（图标名）交给图标主题解析
+```
+
+关键是「宿主上」：gnome-shell 进程的 `XDG_DATA_DIRS` 是登录时就定下的（flatpak 导出目录 +
+`/usr/local/share` + `/usr/share` + snapd），**不含任何 AppImage 挂载点**，而挂载点
+（`/tmp/.mount_*`）在应用退出后还会消失。所以「双击即用」的 AppImage / tar.gz / 开发态在
+GNOME 上必然只剩齿轮 —— 这是 GNOME 的已知限制（KDE 宽容是因为 KWin 会回退到窗口自己报的
+图标，GNOME 不会）。`.deb` 例外：electron-builder 会装系统级条目 + hicolor 图标。
+
+于是本仓库的策略是「**产物自身合规 + 显式集成**」，刻意**不在运行时偷偷往 `$HOME` 写文件**：
+
+* `linux.icon` 指 `build/icons`（**目录**，16…512）而不是单张母版。electron-builder 会把目录里
+  每个文件按它自声明的尺寸投进 `usr/share/icons/hicolor/<size>/apps/`；给单张 1024×1024 时
+  产物里只会出现 `hicolor/1024x1024/` 这一个目录，而 hicolor 的 `index.theme` **没有声明**
+  1024x1024 —— 「`Icon=` → 图标文件」这一步就会静默查不到（桌面集成工具照搬这套目录结构，
+  一样查不到；1.0.0 的 AppImage 正是这个毛病）。`scripts/verify-package.sh` 的
+  `check_icon_link` 同时断言「`Icon=` 有同名文件」和「落在被声明过的尺寸目录里」。
+* 想让**开发态**或某个 AppImage 真的显示图标，跑显式命令 `pnpm run desktop:install`
+  （`install [启动目标]` / `uninstall`，见 `scripts/desktop-integration.sh`）。它只写
+  `$XDG_DATA_HOME/{applications,icons/hicolor/512x512/apps}` 两份文件、把路径打出来，
+  不碰 `/usr`、不要 sudo，也不覆盖用户手工维护的条目（认 `X-Songloft-Managed=true` 标记）。
+
+⚠️ 别把 `BrowserWindow` 的 `icon` 当成任务栏图标的解决方案（见 §9）：它解决的是另外三个平台；
+Wayland 下缺的永远是宿主上那份 `.desktop`。
+
 ---
 
 ## 9. 不要做
 
 * 不要只改 `.desktop` 相关的三处之一（见 8.1）。
+* 不要把「窗口 icon」当成任务栏图标的解决方案：Wayland 下它传不出去，缺的永远是宿主上
+  那份 `.desktop`（见 8.11）。
+* 不要让应用在启动时自行往 `~/.local/share` 之类的用户目录写桌面条目 / 图标：桌面集成走
+  `pnpm run desktop:install`（显式命令，§8.11）。
 * 不要给渲染层开 Node 能力，也不要为了省事把 `contextIsolation` / `sandbox` 关掉。
 * 不要在渲染层把 token 拼进请求头去取封面/音频 —— 那两处只能走查询参数。
 * 不要把 `build/` 当运行期资源目录。
