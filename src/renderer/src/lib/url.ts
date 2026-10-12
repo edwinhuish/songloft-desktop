@@ -47,7 +47,10 @@ export function buildCoverUrl(
     !/^https?:\/\//i.test(coverUrl ?? '') || full.startsWith(trimTrailingSlash(ctx.baseUrl))
   if (!isBackendUrl) return full
   if (/[?&]w=\d+/.test(full)) return full
-  return `${full}&w=${Math.round(width)}`
+  // ★ 分隔符必须判断：同源的**绝对**地址（`http://host/c.jpg`）本身不带 query，
+  //   直接拼 `&w=` 会得到 `http://host/c.jpg&w=96` —— 少了 `?`，这一串会被当成路径的一部分，
+  //   后端只会回 404。相对路径走的是上面带 token 的分支，那里已经有 query 才没暴露出来。
+  return `${full}${full.includes('?') ? '&' : '?'}w=${Math.round(width)}`
 }
 
 /** 歌词地址 */
