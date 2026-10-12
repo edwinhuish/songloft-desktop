@@ -37,7 +37,7 @@ linux:
   synopsis: 插件化、无广告的免费音乐播放器
   description: >-
     Songloft Desktop 是 Songloft 音乐播放器的 Electron 桌面客户端。连接自建 Songloft 后端
-    （默认 http://localhost:58091），支持曲库浏览、歌单管理、逐字歌词、文件夹浏览与离线播放。
+    （默认 http://localhost:58091），支持曲库浏览、歌单管理、逐字歌词、文件夹浏览与播放队列。
   # ★ 决定产物 .desktop 的文件名。默认 false → 会被命名成 executableName（songloft-desktop），
   #   与 app.setDesktopName() 报出的 app_id 对不上，GNOME 下静默回落成占位图标。
   #
