@@ -5,7 +5,7 @@
  * 这样顺带验证了事件绑定、路由跳转、无障碍标记是否真的接对，
  * 而不是"我调了函数所以应该渲染了"。
  *
- * ★ 两条设计约束（都是踩过坑之后的结论）：
+ * ★ 三条设计约束（都是踩过坑之后的结论）：
  *
  *   1. **一个 STEP 只做一次点击**，靠该步自己的 wait 等渲染落定。
  *      不要写"点 A 再点 B"的 helper —— 曾有一个 clickWait(A, …, B) 只点第一个参数，
@@ -15,6 +15,16 @@
  *   2. **断言必须能区分内容，不能只数个数**。
  *      「歌手分面」和「流派分面」都是 5 张卡，只断言 `cards === 5` 的话，
  *      点没点中「流派」这个 chip 是看不出来的。所以下面用 cardTitles 按文字断言。
+ *
+ *   3. **改了这份脚本，必须在本地跑一次 `pnpm run e2e` 才能提交。**
+ *      断言不是代码：选择器或文案对不上时不会编译报错，只会「静默地永远为假」——
+ *      界面改动把脚本落在后面，整条 CI 就一直红、且没人知道红在哪一步。
+ *      两类最常见的漂移，改动时都得盯住：
+ *        · **界面的前提变了**（例如「双击歌曲行会自动打开面板」，实际并不会），
+ *          照旧写法会把断言压在根本不成立的前提上；
+ *        · **选择器撞名**：`document.querySelector('[aria-label=…]')` 会命中 DOM 里
+ *          第一个同名元素 —— 控制栏和面板自己的页签都叫「播放队列」，所以一律限定
+ *          作用域（`.playerbar button[aria-label="播放队列"]`）。
  *
  * ★ 为什么必须有断言：mock 的 lyric 有 10 行、lxlyric 只覆盖其中 4 行 —— 这是
  *   「逐字源覆盖不全时主歌词被整行丢掉」的精确复现条件。没有断言时，这类**静默**
@@ -46,6 +56,17 @@ const equals = (...want) =>
     (v) => Array.isArray(v) && v.length === want.length && want.every((x, i) => v[i] === x),
     { label: `=[${want.join(' > ')}]` }
   )
+/**
+ * 控制栏已显示真实曲目（而不是「未在播放」这句占位文案）。
+ *
+ * 双击歌曲行那一步的判据只能看这儿：播放**不会**顺带打开面板，所以那时数不到队列条目、
+ * 也数不到歌词，只有控制栏一定会换成当前曲目。占位文案是文案层的东西，改文案就要改这里 ——
+ * 但这正是想要的效果：占位文案一改，这条断言立刻红，不会静默失效。
+ */
+const hasSong = Object.assign(
+  (v) => typeof v === 'string' && v.trim() !== '' && v.trim() !== '未在播放',
+  { label: '有当前曲目' }
+)
 /** 断言数组里每一项都包含某个子串（用于区分"哪个分面"） */
 const containsAll = (...names) =>
   Object.assign(
@@ -77,6 +98,26 @@ window.__t = {
     const el = document.querySelector('[aria-label="' + label + '"]');
     if (!el) return 'NOT_FOUND:' + label;
     el.click();
+    return 'OK';
+  },
+  /**
+   * 悬浮（不点击）某个元素，用于展开「悬浮即展开」的二级菜单。
+   *
+   * ⚠️ 派发的必须是**会冒泡的 pointerover**：React 的 onPointerEnter 是拿 pointerover
+   *    合成出来的，而原生 pointerenter 不冒泡、根本到不了 React 挂根节点上的监听器 ——
+   *    直接派发 pointerenter 会「什么也没发生」，断言则表现为「二级菜单没打开」。
+   */
+  hover: (sel, text) => {
+    const el = text ? window.__t.byText(sel, text) : document.querySelector(sel);
+    if (!el) return 'NOT_FOUND:' + sel + (text ? '/' + text : '');
+    el.dispatchEvent(
+      new PointerEvent('pointerover', {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        pointerType: 'mouse'
+      })
+    );
     return 'OK';
   },
   dbl: (sel) => {
@@ -146,6 +187,11 @@ window.__t = {
     queueItems: document.querySelectorAll('.queue-item').length,
     // 面板关闭时整个不渲染，所以数个数就是「开没开」
     panel: document.querySelectorAll('.panel').length,
+    // 折叠菜单里「双面」项（悬浮出二级菜单）的个数。菜单只断言文字的话，
+    // 「歌单」从双面项退化成普通跳转项也看不出来 —— 二级菜单就那样静默消失。
+    submenuTriggers: document.querySelectorAll('.context-menu button[aria-haspopup="menu"]').length,
+    // 控制栏上的当前曲目。面板关着时，这是「双击真的开始播放了」的唯一可断言口径。
+    playerTitle: (document.querySelector('.playerbar-title') || {}).textContent || '',
     // 折叠侧栏的居中偏差（px），回归"封面被 auto 外边距顶到左边"
     offCenter: window.__t.offCenter(),
     cardTitles: window.__t.cardTitles(),
@@ -312,18 +358,23 @@ const STEPS = [
     "window.__t.clickLabel('导航菜单')",
     900,
     {
-      menuItems: equals('首页', '曲库', '歌单', '我的歌单', '我喜欢', '最近播放', '设置'),
+      menuItems: equals('首页', '曲库', '歌单', '我喜欢', '最近播放', '设置'),
       // 设置与上面那串之间要有分割线（条目文字看不出这条线，得单独数）
-      menuDividers: exactly(1)
+      menuDividers: exactly(1),
+      // 菜单里**没有**单独的「我的歌单」：它并进了「歌单」这个双面项（悬浮列名单、
+      // 单击进歌单页）。只断言条目文字的话，「歌单」退化成普通跳转项也看不出来。
+      submenuTriggers: exactly(1)
     }
   ],
-  // 「我的歌单」的二级菜单 = 那份歌单名单。这里同样用 equals：断言的是名单内容与顺序，
+  // 「歌单」的二级菜单 = 那份歌单名单。这里同样用 equals：断言的是名单内容与顺序，
   // 只数个数的话「混进电台收藏之类的非普通歌单」也可能碰巧一样多。
+  // ★ 二级菜单靠 onPointerEnter 展开，所以这一步是**悬浮**而不是点击
+  //   （点它是「进歌单页」，菜单会整份关掉，二级菜单根本没机会出现）。
   [
     '16-nav-my-playlists',
-    "window.__t.click('.context-menu button', '我的歌单')",
-    700,
-    // 顺序 = store 的顺序（置顶的「深夜写码」在最前，其余按后端给的 position 次序）
+    "window.__t.hover('.context-menu button', '歌单')",
+    900,
+    // 顺序 = store 的顺序（置顶的「深夜写码」在最前，其余按后端给的次序）
     { subMenuItems: equals('深夜写码', '我喜欢的音乐', '通勤路上') }
   ],
   // 二级菜单开着也不影响接着点上一层的项（设置入口就在那儿）
@@ -344,24 +395,32 @@ const STEPS = [
 
   // ── 播放 / 面板 ────────────────────────────────────────────────────────
   ['21-playing', "window.__t.click('.nav-item', '曲库')", 2400],
-  // 双击歌曲行 = 开始播放并打开面板，页签就落在「正在播放」，歌词在这一页里。
-  // 断言必须在这一步做：下一行会把页签切走。
+  // ⚠️ 双击歌曲行**只**开始播放，不会顺带打开右侧面板 —— 面板是显式的视图开关
+  //    （控制栏的「歌词面板 / 播放队列」、左侧封面、Ctrl+L）。原先这里把歌词断言压在
+  //    「双击」上，前提就不成立（那种写法跑出来 panel 恒为 0、歌词也恒为 0）。
+  //    于是拆成两步：先确认真播上了，再显式打开面板看歌词。
+  ['22-playing-dblclick', "window.__t.dbl('.song-row')", 1800, { playerTitle: hasSong }],
+  // 打开歌词面板：面板关着时 togglePanel 会打开并落在「正在播放」——歌词就在这一页。
+  // ★ 选择器必须限定 .playerbar：面板自己的页签按钮也叫「播放队列 / 正在播放」，
+  //   不限定就会命中面板里那个（DOM 里 .panel 排在 .playerbar 之前），
+  //   于是「再点一次收起面板」这类断言会点错元素而假失败。
   [
-    '22-now-playing-panel',
-    "window.__t.dbl('.song-row')",
+    '23-now-playing-panel',
+    'window.__t.click(\'.playerbar button[aria-label="歌词面板"]\')',
     2600,
-    { lyricLines: exactly(10), lyricWords: atLeast(20) }
+    { panel: exactly(1), lyricLines: exactly(10), lyricWords: atLeast(20) }
   ],
+  // 面板开着但页签在「正在播放」→ 点队列按钮是**切页签**（不是收起）
   [
-    '23-queue-panel',
-    'window.__t.click(\'button[aria-label="播放队列"]\')',
+    '24-queue-panel',
+    'window.__t.click(\'.playerbar button[aria-label="播放队列"]\')',
     1400,
-    { queueItems: atLeast(1) }
+    { panel: exactly(1), queueItems: atLeast(1) }
   ],
   // 控制栏的页签在「已激活」时再点一次 = 收起面板（不是什么都不做）
   [
-    '24-panel-closed',
-    'window.__t.click(\'button[aria-label="播放队列"]\')',
+    '25-panel-closed',
+    'window.__t.click(\'.playerbar button[aria-label="播放队列"]\')',
     1400,
     { panel: exactly(0) }
   ],
@@ -370,13 +429,13 @@ const STEPS = [
   // 放在命令面板之前：面板的 Escape 绑在它自己的输入框上，从 window 派发关不掉，
   // 先折叠就不会让它盖在侧栏截图上。
   [
-    '25-sidebar-collapsed',
+    '26-sidebar-collapsed',
     "window.__t.click('.sidebar-foot .nav-item', '收起侧栏')",
     1600,
     { offCenter: atMost(1) }
   ],
   [
-    '26-command-palette',
+    '27-command-palette',
     "window.__t.key('k', { ctrlKey: true })",
     1400,
     { paletteItems: atLeast(1) }
