@@ -147,6 +147,11 @@ a {
   overflow-x: hidden;
   min-height: 0;
   scroll-behavior: smooth;
+  /* ★ 滚动槽常驻。滚动条是 10px 的实体（见 ::-webkit-scrollbar），所以「有没有滚动条」
+     会直接改变内容宽度 —— 曲库与文件夹两个标签的内容高度不同，一个能滚一个不能滚，
+     来回切的时候整页会左右抖 10px。scrollbar-gutter 把这份宽度一直留着，跟滚动条
+     现不出现无关。 */
+  scrollbar-gutter: stable;
 }
 
 .page {
