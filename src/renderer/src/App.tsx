@@ -220,7 +220,6 @@ function Shell(): React.JSX.Element {
   const route = useUi((s) => s.route)
   const panelOpen = useUi((s) => s.panelOpen)
   const sidebarCollapsed = useUi((s) => s.sidebarCollapsed)
-  const panelTab = useUi((s) => s.panelTab)
 
   const content = useMemo(() => renderRoute(route), [route])
 
@@ -237,7 +236,10 @@ function Shell(): React.JSX.Element {
 
         <div className="main-column">
           <Toolbar />
-          <div className="main-scroll" key={`${route.name}-${panelTab}`}>
+          {/* key 只跟路由走。页签切换只影响右边抽屉，把 panelTab 也算进来的话，
+              切一次页签主内容区就整体卸载重建一次 —— 列表和封面全被冲掉，
+              看上去就是「左边闪一下」 */}
+          <div className="main-scroll" key={route.name}>
             {content}
           </div>
         </div>
