@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-import { IconChevronLeft, IconListMusic, IconMusic, IconQueue, IconTrash } from './Icons'
+import { IconChevronRight, IconListMusic, IconMusic, IconQueue, IconTrash } from './Icons'
 import { Cover, EmptyState } from './primitives'
 import { LyricsView } from './LyricsView'
 import { openMenuFromEvent } from './ContextMenu'
@@ -24,7 +24,8 @@ export function Panel(): React.JSX.Element | null {
     <aside className="panel" aria-label={panelTab === 'queue' ? '播放队列' : '正在播放'}>
       <div className="panel-head">
         {/* 「收起」在左、页签在右：收起是把这块整个移走，跟「在面板内部换页」不是
-            一类操作，分开摆就不容易点错 */}
+            一类操作，分开摆就不容易点错。箭头朝右 —— 抽屉在窗口右边，收起就是往右走
+            （侧栏在左边，它的收起箭头朝左，两边一致） */}
         <button
           type="button"
           className="icon-btn"
@@ -32,7 +33,7 @@ export function Panel(): React.JSX.Element | null {
           aria-label="收起面板"
           onClick={() => setPanelOpen(false)}
         >
-          <IconChevronLeft size={16} />
+          <IconChevronRight size={16} />
         </button>
         <div className="row grow" style={{ gap: 4 }}>
           <button
