@@ -64,7 +64,7 @@ jobs:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
       # pnpm 版本取自 package.json 的 packageManager，这里不重复声明版本号
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v7
         with:
@@ -134,7 +134,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v7
         with:
