@@ -51,8 +51,12 @@ pnpm run check            # ★ 提交前必跑：typecheck + lint + format:chec
 pnpm run build            # 产出 out/（main + preload + renderer）
 pnpm run e2e              # 端到端 UI 巡检（起 mock 后端 + 截图 + 断言）
 pnpm run pack:linux       # 打 deb / AppImage / tar.gz 到 release/
-pnpm run verify:package   # 校验打包产物的桌面集成项
+pnpm run pack:win         # 打 NSIS 安装包（要在 Windows 上跑；Linux/macOS 上跑不动）
+pnpm run pack:mac         # 打 dmg / zip（要在 macOS 上跑）
+pnpm run verify:package   # 校验打包产物的桌面集成项（只覆盖 Linux 产物）
 pnpm run icons            # 由 build/icon.svg 生成全套图标 + 托盘图
+
+pnpm run release          # ★ 发版：升版本 + 提交 + 打 v* 标签 + 推送，之后由 CI 三平台发布
 ```
 
 | 想改的东西 | 至少跑这些 |
@@ -61,6 +65,30 @@ pnpm run icons            # 由 build/icon.svg 生成全套图标 + 托盘图
 | 渲染层组件 / 页面 | `pnpm run check` + `pnpm run e2e` |
 | 主进程、preload、IPC | `pnpm run check` + `pnpm run e2e` |
 | `package.json` / `electron-builder.yml` / `build/` | 上面全部 + `pnpm run pack:linux` + `pnpm run verify:package` |
+| `.github/workflows/` | 上面全部；`release.yml` 只能在真实 runner 上验证（见下） |
+
+### 3.1 发版
+
+`pnpm run release`（[bumpp](https://github.com/antfu-collective/bumpp)，配置见 `bump.config.ts`）
+一步做四件事：**升 `package.json` 版本 → 提交 → 打 `v<版本>` 标签 → 推送**。
+推送标签即触发 `.github/workflows/release.yml`：
+
+| job | 做什么 |
+|---|---|
+| `preflight` | 先校验「标签 ↔ `package.json` 版本」一致（不一致就失败，不进入构建），再跑一遍 `pnpm run check` |
+| `build` | **三平台并行**构建：`pack:linux` / `pack:win` / `pack:mac`，各自 `--publish never`，只把产物放进 `release/` 再作为 artifact 上传 |
+| `release` | 三份都成功后汇总：`get-tags.sh` 查出前一个版本标签 → `generate-changelog.sh` 从提交历史按 `feat` / `fix` / … 分类生成发布说明 → 断言 deb / AppImage / tar.gz / exe / dmg 一样不缺 → 创建 Release 并上传（含 `SHA256SUMS.txt`）→ 最后再断言发布说明与资产都在 |
+
+为什么要「先全部构建成功、再统一上传」：任何一个平台失败时都不该留下半份已发布的 Release
+（已发布的 Release 收不回，用户可能已经下载）。
+
+⚠️ **Windows / macOS 的构建只有 CI 能真正验证**，本地 Linux 只能跑通 `pack:linux` 那一条。
+所以改了 `electron-builder.yml` 的 `win` / `mac` / `nsis` 段之后，别只跑 `pnpm run check`
+就算完事 —— 要么推一个 tag，要么在 Actions 里手动触发 release 工作流（`workflow_dispatch`）。
+
+⚠️ macOS 产物目前**未签名**（CI 里没有证书，`CSC_IDENTITY_AUTO_DISCOVERY=false`）。
+用户首次打开会被 Gatekeeper 拦下；要正式分发得补签名与公证，见 `electron-builder.yml` 的 `mac` 段。
+
 
 ---
 

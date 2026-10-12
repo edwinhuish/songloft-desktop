@@ -11,6 +11,11 @@ coverage/
 # 端到端巡检的产物（截图 / 日志 / 临时 userData）
 .e2e/
 
+# 发布说明：由 .github/scripts/generate-changelog.sh 生成，release 工作流再用
+# `gh release --notes-file` 把它写进 Release。本地手动跑脚本时也会落到仓库根，不该进版本库
+# （bumpp 又要求工作区干净，留着它会让 `pnpm run release` 直接拒绝执行）。
+release-notes.md
+
 # electron-vite 每次加载配置都会在根目录生成一份「转译副本」再 import，
 # 正常情况下跑完就删。若进程被中断（或删除动作被拦），它就会留下来污染 git status ——
 # 它们只是 electron.vite.config.ts 的产物，删掉即可，下次构建自动重建。

@@ -63,6 +63,41 @@ linux:
       Keywords: music;player;songloft;audio;
       MimeType: x-scheme-handler/songloft;
 
+# ── Windows ──────────────────────────────────────────────────────────────────
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  # electron-builder 会把这个 1024×1024 的 PNG 转成 .ico。**必须显式写**：不写时它去找
+  # build/icon.ico / build/icon.png，而本仓库这两份都没有 —— 那样 Windows 产物会静默退回
+  # Electron 默认图标，且只有装到别人机器上才看得出来。
+  icon: build/icon-source.png
+
+nsis:
+  # 不做「点一下装完」：播放器不是运行时组件，用户需要能挑安装目录。
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  # 按当前用户安装，避免每次安装都弹 UAC
+  perMachine: false
+  installerLanguages: [zh_CN, en_US]
+  # 卸载时保留用户数据：设置 / 凭据 / 服务器列表都在 %APPDATA%，删掉等于让用户重登一遍
+  deleteAppDataOnUninstall: false
+
+# ── macOS ────────────────────────────────────────────────────────────────────
+mac:
+  target:
+    # dmg 供人工下载安装；zip 供不便挂载 dmg 的场景（脚本化分发 / 后续自动更新）
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  category: public.app-category.music
+  # 与 win / linux 同一份母版，electron-builder 自行转 .icns
+  icon: build/icon-source.png
+  # ⚠️ 产物**未签名**：CI 里没有证书，release.yml 用 CSC_IDENTITY_AUTO_DISCOVERY=false
+  #   关掉身份探测。将来要签名 / 公证时：补 CSC_LINK 与 CSC_KEY_PASSWORD secrets、
+  #   删掉那一行，并重新评估 hardenRuntime 与 entitlements。
+
 # AppImage 的静态 runtime：彻底去掉对 libfuse2（Ubuntu 24.04+ 已改名 libfuse2t64）的依赖。
 # 固定版本而不是等默认值，避免某次升级静默改变产物行为。
 toolsets:

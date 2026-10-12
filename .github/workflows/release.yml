@@ -1,0 +1,310 @@
+# Release：把一个 `v*` 标签变成三平台的发布产物。
+#
+# 触发（两个入口，正常只用第一个）：
+#   1. 推送 `v*` 标签 —— 由 `pnpm run release`（bumpp）推送，见 bump.config.ts；
+#   2. 手动触发（workflow_dispatch），对**已存在**的标签重跑或补发。
+#
+# 三个 job 刻意分开，「产物是否齐全」由最后一个 job 兜底：
+#   preflight  校验「标签 ↔ package.json 版本」一致，并跑一遍 check
+#   build      三平台并行构建，每份产物只落在自己的 release/ 目录里
+#   release    生成发布说明 → 断言产物齐全 → 创建 Release 并上传 → 再断言说明与资产都在
+#
+# 为什么不用 electron-builder 的 GitHub publisher（`--publish always`）直接上传：
+#   跨三平台时，那样会出现「某个平台先传完、另一个平台随后失败」的半份 Release，而 Release
+#   一旦发布就收不回（用户可能已经在下载）。于是改成「各平台 `--publish never` 只产出文件
+#   → 汇总到最后一个 job 统一上传」：
+#     * 好处：任何一个平台构建失败，都不会留下半份已发布的 Release；
+#     * 代价：没有 electron-builder 顺带生成的 latest*.yml —— 本仓库没有 electron-updater，
+#       暂时不需要那份清单。将来接入自动更新时，把上传改回 publisher 或另行生成它。
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 要发布的已存在标签（如 v0.2.0）。留空则用当前触发引用的标签
+        required: false
+        default: ''
+        type: string
+
+# 创建 / 更新 Release 与上传产物都需要写权限；默认的 `read` 会让最后一步 403。
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  # electron-builder 的 publisher 与 `gh` 都认这个变量
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # 打包不需要遥测；也避免 Electron 启动噪声混进日志
+  ELECTRON_ENABLE_LOGGING: '0'
+  # ★ macOS 产物**未签名**：CI 里没有证书，显式关掉身份自动探测，免得 electron-builder
+  #   去钥匙串里翻证书（翻不到只是一条警告，但会拖慢构建）。
+  #   将来要签名/公证时删掉这一行，并补上 CSC_LINK / CSC_KEY_PASSWORD secrets。
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+jobs:
+  preflight:
+    name: 校验标签与版本
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # 要能解析出标签本身（还要判断标签指向的提交是否含最新 package.json），
+          # 默认的浅克隆拿不到。
+          fetch-depth: 0
+          # 手动触发时按输入的标签取代码，保证 package.json 里的版本与该标签一致
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      # pnpm 版本取自 package.json 的 packageManager，这里不重复声明版本号
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # ⚠️ 必须排在安装依赖与构建**之前**：手动触发时填错标签，这个错误会被后面的失败盖住，
+      #    报出来的是一句和标签毫无关系的报错（检出被拉回旧提交，用旧的 Node 跑旧的测试）。
+      - name: 校验标签与 package.json 版本一致
+        id: version
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+
+          tag="$INPUT_TAG"
+          if [ -z "$tag" ] && [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag="$GITHUB_REF_NAME"
+          fi
+
+          version="v$(node -p "require('./package.json').version")"
+          [ -n "$tag" ] || tag="$version"
+
+          if [ "$tag" != "$version" ]; then
+            echo "::error::标签 $tag 与 package.json 的版本 $version 不一致。请先在本地跑 pnpm run release（它会连带打标签并推送），不要手工改版本号。"
+            exit 1
+          fi
+
+          if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::标签 $tag 不存在。发布只针对已推送的标签：先 pnpm run release，或 git push origin $tag。"
+            exit 1
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "✅ 发布标签：$tag"
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # 与 CI 相同的一套检查。发布前再跑一次是刻意的 —— 这是产物离开本机之前的最后一道闸。
+      - name: 静态检查与单测
+        run: pnpm run check
+
+  build:
+    name: 构建 ${{ matrix.platform }}
+    needs: preflight
+    strategy:
+      # 一个平台失败**不**取消其余平台：完整性判断需要看到三份结果，
+      # 而不是第一份失败就收场（否则日志里只剩一半信息）。
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux
+            script: pack:linux
+          - os: windows-latest
+            platform: windows
+            script: pack:win
+          - os: macos-latest
+            platform: macos
+            script: pack:mac
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # 三个 pack:* 脚本都带 `--publish never`：产物只落到 release/ 目录，
+      # 由最后一个 job 统一上传 —— 任何一个平台都不该自己往 Release 上写东西。
+      - name: 构建 ${{ matrix.platform }} 产物
+        run: pnpm run ${{ matrix.script }}
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.platform }}
+          # 构建成功却一个文件都没有，说明平台配置写错了 —— 这种情况要报错而不是忽略。
+          # 只列举产物扩展名，避免把 linux-unpacked/ 这类中间目录（几百 MB）一起传上去。
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            release/*.deb
+            release/*.AppImage
+            release/*.tar.gz
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+
+  release:
+    name: 创建 Release 并上传
+    needs: [preflight, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      # fetch-depth: 0 —— 生成发布说明要能跑 `git log <前一个标签>..<当前标签>`，也要能
+      # 解析出前一个标签；默认的浅克隆（fetch-depth: 1）两条都拿不到。
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: 下载三平台产物
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: artifacts
+          # 平铺到一个目录：后面按扩展名断言与上传，不需要知道某个文件来自哪个平台
+          merge-multiple: true
+
+      # 「三个平台都绿了」不等于「三份产物都在」——比如某个平台的 target 配错了、
+      # 构建过程没报错但没产出文件。这是跨平台发布最典型的静默失败，所以断言到扩展名一级。
+      - name: 断言三平台产物齐全
+        run: |
+          set -euo pipefail
+          ls -la artifacts
+
+          missing=""
+          for pattern in '*.deb' '*.AppImage' '*.tar.gz' '*.exe' '*.dmg'; do
+            # 先落成判断，别在管道里用 grep（pipefail 下 SIGPIPE 会假阴性）
+            if ! ls artifacts/$pattern >/dev/null 2>&1; then
+              missing="$missing $pattern"
+            fi
+          done
+
+          if [ -n "$missing" ]; then
+            echo "::error::缺少这些产物：${missing# }。检查对应平台的构建 job 是否真的产出了文件。"
+            exit 1
+          fi
+
+          echo "✅ 三平台产物齐全"
+
+      # 前一个版本标签由脚本查，而不是在 workflow 里塞一行 `git describe`：版本号比较有几种
+      # 特殊情形 —— `X.Y.0` 要跨越到上一个 minor 系列（v0.2.0 的说明应当涵盖 v0.1.x 的全部
+      # 改动，而不只是紧邻的那个标签），预发布标签（beta / rc / alpha / dev）要从"稳定标签"
+      # 里剔除。--minor 就是这套策略的开关，细节见 .github/scripts/get-tags.sh。
+      #
+      # 首个版本（仓库里没有更早的 v* 标签）时它输出空的 previous_tag，发布说明会退化成
+      # "该标签的全部历史"，不会让发布失败。
+      - name: 查找前一个版本标签
+        id: get_tags
+        env:
+          TAG: ${{ needs.preflight.outputs.tag }}
+        run: |
+          chmod +x .github/scripts/get-tags.sh
+          .github/scripts/get-tags.sh --minor "$TAG"
+
+      # 发布说明由脚本从提交历史生成（分类规则见 .github/scripts/generate-changelog.sh）。
+      # 刻意不交给 electron-builder 的 releaseInfo.releaseNotesFile：那个键在文件不存在时
+      # 是**抛错**而不是跳过，而每次构建都会读它 —— 连本地 `pnpm run pack:linux` 都会跟着红。
+      - name: 生成发布说明
+        id: changelog
+        env:
+          TAG: ${{ steps.get_tags.outputs.current_tag }}
+          PREVIOUS_TAG: ${{ steps.get_tags.outputs.previous_tag }}
+        run: |
+          chmod +x .github/scripts/generate-changelog.sh
+          # 两个标签都由上一步给出；脚本只在第二个参数为空时才自己兜底推断
+          .github/scripts/generate-changelog.sh "$TAG" "$PREVIOUS_TAG" release-notes.md
+
+      - name: 生成校验值
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: 创建 Release 并上传产物
+        env:
+          TAG: ${{ steps.get_tags.outputs.current_tag }}
+        run: |
+          set -euo pipefail
+
+          # 幂等：标签对应的 Release 已存在（重跑 / 补发）就复用它，避免 create 直接失败。
+          # 两条路都把发布说明显式写成「本次生成的那一份」，与创建路径无关。
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG 已存在，刷新发布说明与产物"
+            gh release edit "$TAG" --notes-file release-notes.md
+          else
+            # --verify-tag：标签必须已经在远端存在，防止发布到一个不存在的版本上。
+            gh release create "$TAG" --title "$TAG" --notes-file release-notes.md --verify-tag
+          fi
+
+          gh release upload "$TAG" artifacts/* --clobber
+
+      # 只看退出码会把「静默跳过上传」当成成功：Release 页面看着已发布，实际缺文件。
+      # 所以把终态断言出来 —— 与 verify-package.sh 拦打包问题同理。
+      - name: 验证 Release 状态、发布说明与产物
+        env:
+          TAG: ${{ steps.get_tags.outputs.current_tag }}
+        run: |
+          set -euo pipefail
+
+          draft=$(gh release view "$TAG" --json isDraft --jq .isDraft)
+          if [ "$draft" != "false" ]; then
+            echo "::error::Release $TAG 仍是草稿：Releases 页面上看不到，用户也下载不到。"
+            exit 1
+          fi
+
+          # 发布说明为空时页面只剩一堆产物、没有变更内容，而这正是「用户看不到改了什么」
+          # 的那种静默失败。生成的说明里必定带本次标签（分类小节或末尾的对比链接），用它当判据。
+          body=$(gh release view "$TAG" --json body --jq .body)
+          if [ -z "$body" ] || [[ "$body" != *"$TAG"* ]]; then
+            echo "::error::Release $TAG 的发布说明为空或与本次标签无关（body 长度 ${#body}）。检查「生成发布说明」那一步。"
+            exit 1
+          fi
+
+          assets=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          echo "$assets"
+
+          missing=""
+          for pattern in '\.deb$' '\.AppImage$' '\.tar\.gz$' '\.exe$' '\.dmg$' 'SHA256SUMS\.txt'; do
+            grep -qE "$pattern" <<< "$assets" || missing="$missing $pattern"
+          done
+
+          if [ -n "$missing" ]; then
+            echo "::error::Release $TAG 缺少：${missing# }。实际上传的是：$(tr '\n' ' ' <<< "$assets")"
+            exit 1
+          fi
+
+          echo "✅ Release $TAG 已发布，三平台产物齐全：$(gh release view "$TAG" --json url --jq .url)"
+
+      # 产物同时存档 30 天，防止 Release 被误删后无从追溯
+      - name: 归档产物
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            artifacts/**
+            release-notes.md
