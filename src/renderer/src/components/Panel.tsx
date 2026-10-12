@@ -23,6 +23,17 @@ export function Panel(): React.JSX.Element | null {
   return (
     <aside className="panel" aria-label={panelTab === 'queue' ? '播放队列' : '正在播放'}>
       <div className="panel-head">
+        {/* 「收起」在左、页签在右：收起是把这块整个移走，跟「在面板内部换页」不是
+            一类操作，分开摆就不容易点错 */}
+        <button
+          type="button"
+          className="icon-btn"
+          title="收起面板"
+          aria-label="收起面板"
+          onClick={() => setPanelOpen(false)}
+        >
+          <IconChevronLeft size={16} />
+        </button>
         <div className="row grow" style={{ gap: 4 }}>
           <button
             type="button"
@@ -45,15 +56,6 @@ export function Panel(): React.JSX.Element | null {
             <IconQueue size={16} />
           </button>
         </div>
-        <button
-          type="button"
-          className="icon-btn"
-          title="收起面板"
-          aria-label="收起面板"
-          onClick={() => setPanelOpen(false)}
-        >
-          <IconChevronLeft size={16} />
-        </button>
       </div>
 
       <div

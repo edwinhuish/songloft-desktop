@@ -645,6 +645,12 @@
   flex: none;
 }
 
+/* 面板头的分组按钮推到右边，左侧只留「收起面板」。
+   收起的语义是把这块整个移走，跟「在面板内部换页」不是一类操作，分开摆不易点错。 */
+.panel-head .row {
+  justify-content: flex-end;
+}
+
 .panel-title {
   font-size: 12.5px;
   font-weight: 640;
