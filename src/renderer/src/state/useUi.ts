@@ -29,6 +29,13 @@ interface UiState {
   panelOpen: boolean
   panelTab: PanelTab
   sidebarCollapsed: boolean
+  /**
+   * 侧栏是被「窗口太窄」自动收起的（见 hooks/useResponsiveSidebar.ts）。
+   *
+   * 刻意与用户偏好分开存：窗口重新变宽时只该回滚**自动收的那一次**，
+   * 而不能把用户手动收起的选择也一起改掉。
+   */
+  sidebarAutoCollapsed: boolean
   paletteOpen: boolean
   /** 「加入歌单」对话框的待加入歌曲 id；null = 对话框关闭 */
   addToPlaylistTarget: number[] | null
@@ -42,8 +49,11 @@ interface UiState {
   setPanelOpen: (open: boolean) => void
   togglePanel: (tab?: PanelTab) => void
   setPanelTab: (tab: PanelTab) => void
+  /** 用户偏好（启动回填 / 手动切换），会一并清掉「自动收起」标记 */
   setSidebarCollapsed: (collapsed: boolean) => void
   toggleSidebar: () => void
+  /** 由布局自动收起 / 展开：只动界面状态，不写设置 */
+  setSidebarAutoCollapsed: (collapsed: boolean) => void
   setPaletteOpen: (open: boolean) => void
   setAddToPlaylistTarget: (songIds: number[] | null) => void
   setSelection: (selection: number[], anchor?: number | null) => void
@@ -58,6 +68,7 @@ export const useUi = create<UiState>((set, get) => ({
   panelOpen: false,
   panelTab: 'now-playing',
   sidebarCollapsed: false,
+  sidebarAutoCollapsed: false,
   paletteOpen: false,
   addToPlaylistTarget: null,
   selection: [],
@@ -90,8 +101,12 @@ export const useUi = create<UiState>((set, get) => ({
     }),
 
   setPanelTab: (tab) => set({ panelTab: tab, panelOpen: true }),
-  setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
-  toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+  setSidebarCollapsed: (collapsed) =>
+    set({ sidebarCollapsed: collapsed, sidebarAutoCollapsed: false }),
+  toggleSidebar: () =>
+    set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed, sidebarAutoCollapsed: false })),
+  setSidebarAutoCollapsed: (collapsed) =>
+    set({ sidebarCollapsed: collapsed, sidebarAutoCollapsed: collapsed }),
   setPaletteOpen: (open) => set({ paletteOpen: open }),
   setAddToPlaylistTarget: (songIds) => set({ addToPlaylistTarget: songIds }),
   setSelection: (selection, anchor) =>

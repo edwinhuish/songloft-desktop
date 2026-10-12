@@ -304,11 +304,15 @@ a {
 .sidebar {
   display: flex;
   flex-direction: column;
+  gap: 6px;
   min-height: 0;
-  padding: 10px 10px 8px;
+  padding: 12px 12px 10px;
   background: var(--glass-tint);
   backdrop-filter: blur(var(--glass-blur));
   border-right: 1px solid var(--line-1);
+  /* ★ 折叠动画的关键：文字交给这里裁，而不是 display:none 让它瞬间消失。
+     列宽由 .shell-body 的 grid-template-columns 过渡，内容跟着被切掉 ——
+     两件事同时发生才像抽屉拉开，而不是元素一个个「闪」掉。 */
   overflow: hidden;
 }
 
@@ -319,31 +323,64 @@ a {
 }
 
 .nav-label {
-  padding: 14px 12px 6px;
   font-size: 11px;
-  font-weight: 640;
-  letter-spacing: 0.06em;
+  font-weight: 600;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+
+/* 分组标题行：左标题、右「+」。高度固定，折叠时也不塌陷 —— 高度跳变本身就是一次抖动 */
+.nav-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-height: 32px;
+  padding: 6px 2px 2px 12px;
+}
+
+/* 「+」在图标条里没有位置：用 visibility 而不是 display，
+   好让它等淡出结束之后再退出（顺带退出 tab 顺序） */
+.nav-section-add {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  transition:
+    opacity var(--dur-2) var(--ease) var(--dur-2),
+    visibility 0s linear;
+}
+
+.sidebar[data-collapsed='true'] .nav-section-add {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity var(--dur-1) var(--ease),
+    visibility 0s linear var(--dur-1);
+}
+
+.nav-empty {
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.8;
   color: var(--text-4);
 }
 
-.sidebar[data-collapsed='true'] .nav-label {
-  padding: 12px 0 4px;
-  text-align: center;
-  font-size: 10px;
-  letter-spacing: 0;
-  text-transform: none;
-  overflow: hidden;
+/* 整块文字在图标条里塞不下，直接不显示 */
+.sidebar[data-collapsed='true'] .nav-empty {
+  display: none;
 }
 
 .nav-item {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 12px;
   height: 38px;
-  padding: 0 11px;
-  border: none;
+  padding: 0 12px;
+  border: 0;
   background: transparent;
   color: var(--text-2);
   border-radius: var(--r-sm);
@@ -351,14 +388,26 @@ a {
   font-weight: 520;
   text-align: left;
   cursor: pointer;
+  /* 折叠时靠父级裁切，所以这里绝不能换行 */
+  white-space: nowrap;
+  /* 侧栏与歌单两个列表都是 flex 容器，导航项一律不参与伸缩 */
+  flex: none;
   transition:
     background var(--dur-1) var(--ease),
-    color var(--dur-1) var(--ease);
+    color var(--dur-1) var(--ease),
+    transform var(--dur-1) var(--ease),
+    padding var(--dur-3) var(--ease),
+    gap var(--dur-3) var(--ease);
 }
 
 .nav-item:hover {
   background: var(--surface-hover);
   color: var(--text-1);
+}
+
+/* 按下时轻微内缩：比只换背景色更有实体感 */
+.nav-item:active {
+  transform: scale(0.985);
 }
 
 .nav-item[aria-current='true'] {
@@ -367,20 +416,31 @@ a {
   font-weight: 600;
 }
 
+/* 当前项左侧的强调条：贴在侧栏边缘，与圆角背景之间留出呼吸 */
 .nav-item[aria-current='true']::before {
   content: '';
   position: absolute;
-  left: -10px;
+  left: -12px;
   top: 50%;
-  transform: translateY(-50%);
   width: 3px;
-  height: 19px;
+  height: 18px;
   border-radius: 0 3px 3px 0;
   background: var(--accent);
+  transform: translateY(-50%);
 }
 
 .nav-item svg {
   flex: none;
+  transition: color var(--dur-1) var(--ease);
+}
+
+/* 悬停 / 选中时图标先「亮」起来 —— 层次感来自图标与文字的色差，而不是加粗加边框 */
+.nav-item:hover svg {
+  color: var(--text-1);
+}
+
+.nav-item[aria-current='true'] svg {
+  color: var(--accent);
 }
 
 .nav-item .nav-count {
@@ -390,32 +450,84 @@ a {
   color: var(--text-4);
 }
 
+/* 歌单封面：一圈极淡的内描边，深浅封面上都能看清边界 */
+.nav-cover {
+  flex: none;
+  box-shadow: inset 0 0 0 1px var(--line-1);
+  transition: box-shadow var(--dur-1) var(--ease);
+}
+
+.nav-item:hover .nav-cover,
+.nav-item[aria-current='true'] .nav-cover {
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+
+/* ── 折叠态：图标条 ─────────────────────────────────────────────── */
+
 .sidebar[data-collapsed='true'] .nav-item {
   justify-content: center;
   padding: 0;
   gap: 0;
 }
 
-.sidebar[data-collapsed='true'] .nav-item .nav-text,
-.sidebar[data-collapsed='true'] .nav-item .nav-count {
-  display: none;
+.sidebar[data-collapsed='true'] .nav-section-head {
+  min-height: 20px;
+  padding: 4px 0 0;
 }
 
+/* 文字与计数：淡出，同时让出宽度。
+   「让出宽度」不是多此一举 —— flex 子项的 min-width 默认是 auto，不减到 0 的话
+   那行看不见的文字会继续占位，图标被顶偏、居中就废了。 */
+.sidebar[data-collapsed='true'] .nav-text,
+.sidebar[data-collapsed='true'] .nav-count,
+.sidebar[data-collapsed='true'] .nav-section-head .nav-label {
+  opacity: 0;
+  flex: 0 0 0;
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.nav-text,
+.nav-count,
+.nav-section-head .nav-label {
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+/* 展开时等列宽先回去再淡入（延迟 ≈ 列动画的一半）：否则文字会先在「半宽的栏」里
+   被压出省略号、再淡入，看着像卡了一下 */
+.sidebar[data-collapsed='false'] .nav-text,
+.sidebar[data-collapsed='false'] .nav-count,
+.sidebar[data-collapsed='false'] .nav-section-head .nav-label {
+  transition: opacity var(--dur-2) var(--ease) var(--dur-2);
+}
+
+/* 歌单滚动区。左侧让出 12px（负 margin + 正 padding）不是绕弯：
+   .nav-item[aria-current] 的强调条画在 left:-12px，而滚动容器本身就是裁切线 ——
+   不让出来的话歌单项的强调条会被裁掉（导航项有、歌单项没有，看着像 bug）。 */
 .sidebar-playlists {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  margin-top: 4px;
+  overflow-x: hidden;
+  margin-left: -12px;
+  padding: 0 0 4px 12px;
 }
 
 .sidebar-foot {
-  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 10px;
   border-top: 1px solid var(--line-1);
 }
 
 /* 拖拽放置提示：从歌曲行拖到侧栏歌单上 */
 .nav-item[data-drop='true'] {
-  background: var(--accent-soft);
+  background: var(--accent-softer);
   box-shadow: inset 0 0 0 1px var(--accent-line);
 }
 

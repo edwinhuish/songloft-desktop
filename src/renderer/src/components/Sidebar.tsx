@@ -29,6 +29,15 @@ import { useUi } from '@/state/useUi'
 import { useToasts } from '@/state/useToasts'
 import { Cover } from './primitives'
 
+/** 服务器只露 host：完整 URL 太长，会把一行挤成两行 */
+function serverHost(url: string): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return url
+  }
+}
+
 export function Sidebar(): React.JSX.Element {
   const { route, navigate, sidebarCollapsed, toggleSidebar } = useUi()
   const { playlists, load, create } = usePlaylists()
@@ -126,37 +135,25 @@ export function Sidebar(): React.JSX.Element {
         </button>
       </div>
 
-      <div className="nav-group" style={{ marginTop: 6 }}>
-        <div className="row-between" style={{ padding: '0 4px 0 12px', minHeight: 26 }}>
-          {sidebarCollapsed ? null : (
-            <span className="nav-label" style={{ padding: 0 }}>
-              我的歌单
-            </span>
-          )}
-          {sidebarCollapsed ? null : (
-            <button
-              type="button"
-              className="icon-btn"
-              style={{ width: 24, height: 24 }}
-              title="新建歌单"
-              aria-label="新建歌单"
-              onClick={() => void handleCreate()}
-            >
-              <IconPlus size={15} />
-            </button>
-          )}
+      <div className="nav-group">
+        {/* 标题与「+」始终渲染，由 CSS 在折叠态淡出：条件渲染的话它们会在列宽
+            还没收完时先一步消失，「弹一下」的观感正是这么来的 */}
+        <div className="nav-section-head">
+          <span className="nav-label">我的歌单</span>
+          <button
+            type="button"
+            className="icon-btn nav-section-add"
+            title="新建歌单"
+            aria-label="新建歌单"
+            onClick={() => void handleCreate()}
+          >
+            <IconPlus size={15} />
+          </button>
         </div>
 
         <div className="sidebar-playlists">
-          {regularPlaylists.length === 0 && !sidebarCollapsed ? (
-            <div
-              style={{
-                padding: '10px 12px',
-                fontSize: 12,
-                color: 'var(--text-4)',
-                lineHeight: 1.8
-              }}
-            >
+          {regularPlaylists.length === 0 ? (
+            <div className="nav-empty">
               还没有歌单
               <br />
               点右上角 + 新建
@@ -168,7 +165,6 @@ export function Sidebar(): React.JSX.Element {
               key={playlist.id}
               type="button"
               className="nav-item"
-              style={{ height: 40 }}
               aria-current={route.name === 'playlist' && route.id === playlist.id}
               data-drop={dropTarget === playlist.id}
               title={playlist.name}
@@ -225,36 +221,29 @@ export function Sidebar(): React.JSX.Element {
               <Cover
                 coverUrl={playlist.cover_url}
                 width={48}
-                size={sidebarCollapsed ? 28 : 26}
+                size={26}
                 radius={6}
+                className="nav-cover"
               />
               <span className="nav-text truncate grow">{playlist.name}</span>
-              {sidebarCollapsed ? null : (
-                <span className="nav-count">{playlist.song_count || ''}</span>
-              )}
+              <span className="nav-count">{playlist.song_count || ''}</span>
             </button>
           ))}
         </div>
       </div>
 
       <div className="sidebar-foot">
-        {!sidebarCollapsed && settings.activeServerUrl ? (
+        {/* 服务器入口在图标条里也保留（图标 + title 提示）：底部留一块空位，
+            比少一个入口更糟 */}
+        {settings.activeServerUrl ? (
           <button
             type="button"
             className="nav-item"
             title={settings.activeServerUrl}
             onClick={() => navigate({ name: 'settings', section: 'server' })}
           >
-            <IconSparkle size={16} />
-            <span className="nav-text truncate">
-              {(() => {
-                try {
-                  return new URL(settings.activeServerUrl).host
-                } catch {
-                  return settings.activeServerUrl
-                }
-              })()}
-            </span>
+            <IconSparkle size={18} />
+            <span className="nav-text truncate">{serverHost(settings.activeServerUrl)}</span>
           </button>
         ) : null}
 
@@ -280,7 +269,8 @@ export function Sidebar(): React.JSX.Element {
           title={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
         >
           {sidebarCollapsed ? <IconChevronRight size={18} /> : <IconChevronLeft size={18} />}
-          <span className="nav-text">收起侧栏</span>
+          {/* 文字要跟着状态走：折叠着还写「收起侧栏」是自相矛盾的 */}
+          <span className="nav-text">{sidebarCollapsed ? '展开侧栏' : '收起侧栏'}</span>
         </button>
       </div>
     </nav>

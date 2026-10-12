@@ -25,6 +25,7 @@ import { PlayerBar } from './components/PlayerBar'
 import { Sidebar } from './components/Sidebar'
 import { TitleBar } from './components/TitleBar'
 import { Toasts } from './components/Toasts'
+import { useResponsiveSidebar } from './hooks/useResponsiveSidebar'
 import { FavoritesPage } from './pages/FavoritesPage'
 import { FoldersPage } from './pages/FoldersPage'
 import { HomePage } from './pages/HomePage'
@@ -212,6 +213,9 @@ export function App(): React.JSX.Element {
 /* ─────────────────────────── 已登录后的外壳 ─────────────────────────── */
 
 function Shell(): React.JSX.Element {
+  // 窄窗口自动收成图标条。只动界面状态，不覆盖用户保存的偏好。
+  useResponsiveSidebar()
+
   const route = useUi((s) => s.route)
   const panelOpen = useUi((s) => s.panelOpen)
   const sidebarCollapsed = useUi((s) => s.sidebarCollapsed)
