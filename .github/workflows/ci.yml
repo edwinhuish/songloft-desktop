@@ -69,7 +69,7 @@ jobs:
       - run: pnpm run e2e
       - name: 失败时把截图与日志带出来
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-artifacts
           path: .e2e
