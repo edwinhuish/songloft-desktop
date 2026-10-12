@@ -140,6 +140,22 @@ export interface PlaylistListResponse {
   total: number
 }
 
+/**
+ * 把后端返回的歌单补成「可以直接用」的形状。
+ *
+ * ★ 为什么必须有这一步：Go 的 encoding/json 会把 **nil slice 序列化成 `null`**，
+ *   所以 `labels` 在实际响应里可能是 `null`，而类型上写的是 `string[]` —— 类型在这里
+ *   是撒谎的，于是没有任何调用方会去防御 `p.labels.includes(...)`，一读就抛
+ *   TypeError 把整棵组件树干掉（Sidebar / HomePage / PlaylistDetail / AddToPlaylistDialog
+ *   四处都在读它，任何一处被渲染到都会白屏）。
+ *
+ *   容错放在**数据进入应用的那一个入口**（`api/endpoints.ts` 里所有返回 Playlist 的函数），
+ *   而不是散在四个调用点 —— 后者是「这次修好了，下次新加一个调用点又踩一遍」。
+ */
+export function normalizePlaylist(raw: Playlist): Playlist {
+  return { ...raw, labels: Array.isArray(raw.labels) ? raw.labels : [] }
+}
+
 /** 歌词来源 */
 export type LyricSource = 'manual' | 'cached' | 'url'
 

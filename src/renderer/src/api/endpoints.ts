@@ -29,7 +29,7 @@ import type {
   TokenListResponse,
   VolumeNormalizeSetting
 } from '@shared/types'
-import type { FacetField } from '@shared/types'
+import { normalizePlaylist, type FacetField } from '@shared/types'
 import type { ApiClient } from './client'
 
 /* ───────────────────────────── 认证 ───────────────────────────── */
@@ -274,27 +274,35 @@ export function getPlaylists(
     offset?: number
   } = {}
 ): Promise<PlaylistListResponse> {
-  return client.request<PlaylistListResponse>('/playlists', {
-    query: {
-      type: options.type,
-      song_source: options.songSource,
-      exclude_labels: options.excludeLabels,
-      keyword: options.keyword || undefined,
-      limit: options.limit ?? 100,
-      offset: options.offset ?? 0
-    }
-  })
+  return (
+    client
+      .request<PlaylistListResponse>('/playlists', {
+        query: {
+          type: options.type,
+          song_source: options.songSource,
+          exclude_labels: options.excludeLabels,
+          keyword: options.keyword || undefined,
+          limit: options.limit ?? 100,
+          offset: options.offset ?? 0
+        }
+      })
+      // 列表本身也兜一层：nil slice 序列化成 null 是同一个后端、同一种行为，
+      // 少了它 usePlaylists 里的 `[...res.playlists]` 会抛「null is not iterable」
+      .then((res) => ({ ...res, playlists: (res.playlists ?? []).map(normalizePlaylist) }))
+  )
 }
 
 export function getPlaylist(client: ApiClient, id: number): Promise<Playlist> {
-  return client.request<Playlist>(`/playlists/${id}`)
+  return client.request<Playlist>(`/playlists/${id}`).then(normalizePlaylist)
 }
 
 export function createPlaylist(
   client: ApiClient,
   payload: { type: PlaylistType; name: string; description?: string }
 ): Promise<Playlist> {
-  return client.request<Playlist>('/playlists', { method: 'POST', body: payload })
+  return client
+    .request<Playlist>('/playlists', { method: 'POST', body: payload })
+    .then(normalizePlaylist)
 }
 
 export function updatePlaylist(
@@ -302,13 +310,17 @@ export function updatePlaylist(
   id: number,
   payload: { name?: string; description?: string; cover_song_id?: number; cover_url?: string }
 ): Promise<Playlist> {
-  return client.request<Playlist>(`/playlists/${id}`, { method: 'PUT', body: payload })
+  return client
+    .request<Playlist>(`/playlists/${id}`, { method: 'PUT', body: payload })
+    .then(normalizePlaylist)
 }
 
 export function uploadPlaylistCover(client: ApiClient, id: number, file: File): Promise<Playlist> {
   const formData = new FormData()
   formData.append('file', file, file.name)
-  return client.request<Playlist>(`/playlists/${id}/cover`, { method: 'POST', formData })
+  return client
+    .request<Playlist>(`/playlists/${id}/cover`, { method: 'POST', formData })
+    .then(normalizePlaylist)
 }
 
 export function deletePlaylist(client: ApiClient, id: number, deleteSongs = false): Promise<void> {
@@ -391,7 +403,9 @@ export function setPlaylistPinned(
   id: number,
   pinned: boolean
 ): Promise<Playlist> {
-  return client.request<Playlist>(`/playlists/${id}/pin`, { method: 'PUT', body: { pinned } })
+  return client
+    .request<Playlist>(`/playlists/${id}/pin`, { method: 'PUT', body: { pinned } })
+    .then(normalizePlaylist)
 }
 
 export function setPlaylistVisibility(
@@ -399,10 +413,9 @@ export function setPlaylistVisibility(
   id: number,
   hidden: boolean
 ): Promise<Playlist> {
-  return client.request<Playlist>(`/playlists/${id}/visibility`, {
-    method: 'PUT',
-    body: { hidden }
-  })
+  return client
+    .request<Playlist>(`/playlists/${id}/visibility`, { method: 'PUT', body: { hidden } })
+    .then(normalizePlaylist)
 }
 
 /** 拖动重排歌单顺序（侧栏/歌单页共用） */
