@@ -71,6 +71,8 @@ export interface PlayerState {
   jumpTo: (index: number) => Promise<void>
   setActiveTrack: (track: number) => Promise<void>
   restoreLastQueue: () => Promise<void>
+  /** 重新拉一次当前歌曲的歌词（歌词加载失败时界面上的「重试」） */
+  reloadLyrics: () => Promise<void>
 }
 
 const audio = new Audio()
@@ -421,6 +423,19 @@ export const usePlayer = create<PlayerState>((set, get) => {
     },
 
     seekBy: (delta) => get().seek(audio.currentTime + delta),
+
+    reloadLyrics: async () => {
+      const song = get().currentSong()
+      if (!song) return
+      // 「重试」的语义是「现在再去后端问一次」，所以要先丢掉这一首的缓存键 ——
+      // 否则后端刚补齐歌词也拿不到（失败态下缓存里虽然没有，但重试前成功过一次的情况需要它）
+      lyricCache.delete(lyricCacheKey(song))
+      set({ lyricsLoading: true, lyricFailed: false })
+      const { parsed, failed } = await loadLyrics(song)
+      // 期间用户可能已经切歌，回来的结果不能再往界面上贴
+      if (get().currentSong()?.id !== song.id) return
+      set({ lyrics: parsed, lyricsLoading: false, lyricFailed: failed })
+    },
 
     setVolume: (volume) => {
       const clamped = Math.max(0, Math.min(1, volume))

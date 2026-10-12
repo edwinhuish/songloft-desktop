@@ -22,6 +22,7 @@ export function LyricsView({ compact = false }: { compact?: boolean }): React.JS
   const failed = usePlayer((s) => s.lyricFailed)
   const currentTime = usePlayer((s) => s.currentTime)
   const seek = usePlayer((s) => s.seek)
+  const reloadLyrics = usePlayer((s) => s.reloadLyrics)
   const settings = useSettings((s) => s.settings)
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -73,18 +74,33 @@ export function LyricsView({ compact = false }: { compact?: boolean }): React.JS
 
   if (lyrics.lines.length === 0) {
     return (
+      /*
+       * 空态与失败态的文案必须只说本应用真的能做到的事。
+       * 这里曾经写着「可以在歌曲菜单里手动指定歌词 / 安装『歌词搜索』插件后会自动补全」——
+       * 但本端既没有手动指定歌词的入口，也还没有插件系统，用户按提示找一圈只会更困惑。
+       */
       <div className="lyrics-empty">
         {failed ? (
           <>
             歌词加载失败
             <br />
-            可以在歌曲菜单里手动指定歌词
+            多半是后端没连上，可以检查服务器设置后重试
+            <div style={{ marginTop: 14 }}>
+              <button
+                type="button"
+                className="btn"
+                data-size="sm"
+                onClick={() => void reloadLyrics()}
+              >
+                重试
+              </button>
+            </div>
           </>
         ) : (
           <>
             这首歌还没有歌词
             <br />
-            安装「歌词搜索」插件后会自动补全
+            后端曲库里这首歌还没有关联到歌词
           </>
         )}
       </div>
