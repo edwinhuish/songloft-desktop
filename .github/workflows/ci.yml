@@ -1,0 +1,95 @@
+# CI：把「提交前该跑的」纳入守门 —— check / e2e / 打包 + 产物校验。
+#
+# 为什么必须自动化：仓库此前没有任何 CI（没有 .github/），三平台打包、依赖审计、
+# 产物校验全靠开发者记得在本地手动执行；而 pnpm-workspace.yaml 的 allowBuilds 注释
+# 本身就把「CI 里用 --frozen-lockfile」当作既有场景来写，却没有 CI 真的这么跑。
+#
+# 三个 job 的分工正对应 AGENTS.md 第 7 节的验证表：
+#   check   → 类型错误 / lint / 格式 / shared 纯函数
+#   e2e     → 界面「真的渲染成了什么」（真实点击 + DOM 断言 + 截图）
+#   package → 打包产物里的桌面集成（解包后断言 .desktop 文件名、StartupWMClass、AppArmor…）
+#
+# ⚠️ 本工作流尚未在真实 runner 上跑过（本地无法执行 GitHub Actions）。
+#    首次推送后按日志微调，重点看 e2e 那一步的图形库是否存在缺项。
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check（类型 / Lint / 格式 / 单测）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # pnpm 版本由 package.json 的 packageManager 字段决定，这里不再重复声明
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: pnpm
+      # --frozen-lockfile：lockfile 与 package.json 不一致时直接失败，而不是悄悄改写它
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+
+  e2e:
+    name: e2e（mock 后端 + 真实界面断言）
+    needs: check
+    # ★ 固定 22.04 而不是 ubuntu-latest：Electron 要的图形库在这批镜像上齐备，
+    #   且 libasound2 还没改名成 libasound2t64（24.04 起改名，直接 apt install 会失败）。
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: 装虚拟显示与 Electron 运行所需的图形库
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libgtk-3-0 \
+            libgbm1 libasound2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 \
+            libxrandr2 libpango-1.0-0 libcairo2
+      # scripts/e2e/run.sh 会在缺 out/renderer/index.html 时直接报错退出，所以先 build
+      - run: pnpm run build
+      - run: pnpm run e2e
+      - name: 失败时把截图与日志带出来
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: .e2e
+          if-no-files-found: ignore
+          retention-days: 7
+
+  package:
+    name: Linux 打包 + 产物校验
+    needs: check
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # 动了 electron-builder.yml / package.json / build/ 就必须重跑这两步：
+      # 「.desktop 文件名 ↔ StartupWMClass ↔ setDesktopName」那一类不一致全是静默的
+      # （不报错、只是用户机器上图标回落成占位符），只有产物级断言抓得住。
+      - run: pnpm run pack:linux
+      - run: pnpm run verify:package

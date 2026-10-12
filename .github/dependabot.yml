@@ -1,0 +1,36 @@
+# 依赖更新的节律。
+#
+# 为什么要它：npm 生态的腐烂速度高于 pub.dev，而本项目的运行期依赖刻意只留了一个
+# （zustand），devDependencies 却有十几个 —— 没人盯着就会长期停在旧版本，
+# 尤其 Electron 是与 Chromium 同步发版的，拖久了就是一堆未修补的 CVE。
+#
+# 注意：本项目**不**把 `pnpm audit` 放进 CI 的必过路径（安全公告会随时新增，
+# 让它挡住构建会让主干无谓变红）。需要时手动跑 `pnpm run audit`。
+
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: 'chore(deps)'
+    groups:
+      # 开发依赖的次要/补丁升级合成一个 PR，避免一周开出一串单文件 PR
+      dev-minor-patch:
+        dependency-type: development
+        update-types: [minor, patch]
+    ignore:
+      # ★ Electron 的大版本必须人工过：它换的是 Chromium 主版本，
+      #   要连带验证媒体栈、Media Session/MPRIS、无边框窗口行为。
+      #   自动合并这类升级等于把「约 8 周一次」的验证责任交给机器人。
+      - dependency-name: electron
+        update-types: [version-update:semver-major]
+      - dependency-name: electron-builder
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

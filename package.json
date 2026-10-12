@@ -29,6 +29,7 @@
     "test": "vitest run",
     "e2e": "bash scripts/e2e/run.sh",
     "lint": "eslint .",
+    "audit": "pnpm audit --audit-level=high",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "icons": "bash scripts/make-icons.sh",
