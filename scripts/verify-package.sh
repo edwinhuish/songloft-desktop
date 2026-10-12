@@ -181,6 +181,10 @@ else
   [ -n "$TRAY" ] \
     && good "resources/tray.png（托盘图标）在包里" \
     || bad "resources/tray.png 缺失 —— 托盘会显示不出图标"
+  APP_ICON="$(find "$WORK/deb" -path '*/resources/icon.png' 2>/dev/null | head -1)"
+  [ -n "$APP_ICON" ] \
+    && good "resources/icon.png（窗口 / 任务栏图标）在包里" \
+    || bad "resources/icon.png 缺失 —— 任务栏与 Alt-Tab 会回落成 Electron 默认图标"
 
   # 5) AppArmor：electron-builder 内建 profile + 我们给 AppImage 准备的那份
   BUILTIN="$(find "$WORK/deb" -path '*/resources/apparmor-profile' -type f 2>/dev/null | head -1)"

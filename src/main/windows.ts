@@ -7,6 +7,7 @@ import { BrowserWindow, app, shell } from 'electron'
 import { join } from 'node:path'
 
 import { IPC, type WindowState } from '@shared/ipc'
+import { loadAppIcon } from './app-icon'
 import type { ConfigStore } from './store'
 
 const MIN_WIDTH = 1080
@@ -25,6 +26,9 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
     height: saved.height,
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
+    // 任务栏 / Alt-Tab / Dock 里的图标由窗口自己声明：不显式给就会退回 Electron 自带
+    // 那枚（开发态尤其明显）。拿不到图标也不拦启动，交给系统默认值。
+    icon: loadAppIcon() ?? undefined,
     // ★ 无边框：标题栏由渲染层自绘，和播放器主题统一
     frame: false,
     // 深色打底，避免加载期白闪（与默认主题一致）

@@ -15,6 +15,10 @@ extraResources:
   # 托盘图标：build/ 不会进包，托盘在运行期要读一个真实文件（skill 第一节）。
   - from: build/icon-source.png
     to: tray.png
+  # 窗口 / 任务栏图标：与托盘同源，但另取一个中性的名字 —— src/main/app-icon.ts 读的是它。
+  # 不合并成同一个文件名，是为了让「谁在读哪一份」一眼可辨（同源两份才 88KB，不值得省）。
+  - from: build/icon-source.png
+    to: icon.png
   # AppImage 专用 AppArmor profile 完整版（deb 那份由 electron-builder 内建生成并自动安装）。
   # 文件名必须与 profile 内声明的名字、以及安装目标 /etc/apparmor.d/<executableName> 三处同源。
   - from: build/apparmor-profile

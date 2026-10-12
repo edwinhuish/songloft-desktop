@@ -71,6 +71,7 @@ src/
 ├─ main/          Electron 主进程（Node 环境，唯一持有系统权限的地方）
 │  ├─ index.ts        生命周期、窗口创建、安全策略与 CSP、setDesktopName、userData 覆盖
 │  ├─ windows.ts      BrowserWindow 构造（contextIsolation / sandbox / nodeIntegration）
+│  ├─ app-icon.ts     应用图标定位（窗口 / 任务栏用；打包态读 extraResources 投的 icon.png）
 │  ├─ media-keys.ts   媒体键（globalShortcut 兜底；优先走 Media Session 自动映射）
 │  ├─ store.ts        本地持久化：设置 / 凭据 / 服务器列表（JSON，落在 userData）
 │  ├─ probe.ts        后端探测（本地 Blob 解码，避免为它关掉 webSecurity）
