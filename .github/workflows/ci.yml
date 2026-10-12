@@ -10,7 +10,9 @@
 #   package → 打包产物里的桌面集成（解包后断言 .desktop 文件名、StartupWMClass、AppArmor…）
 #
 # ⚠️ 本工作流尚未在真实 runner 上跑过（本地无法执行 GitHub Actions）。
-#    首次推送后按日志微调，重点看 e2e 那一步的图形库是否存在缺项。
+#    e2e 那一步的图形库清单已用 ubuntu:22.04 容器按**同一份 apt 清单**验证过：
+#    Electron 起得来、整轮巡检全绿 —— 所以下面那份 apt 行不必再加库；
+#    首次推送后仍按日志核对（runner 镜像与裸 22.04 不完全一样）。
 
 name: CI
 
