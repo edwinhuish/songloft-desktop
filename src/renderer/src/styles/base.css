@@ -488,6 +488,15 @@ a {
   overflow: hidden;
 }
 
+/* 计数在展开态靠 margin-left:auto 顶到最右。折叠态必须把它放开：
+   auto 外边距按行内自由空间的分配规则**先于** justify-content 生效，
+   哪怕宽度已经缩到 0，它也会把整行自由空间全部吃掉 ——
+   于是 justify-content:center 形同虚设，带计数的导航项和歌单项
+   （歌单封面就是「图片」）一律被挤到左边缘，而不是居中。 */
+.sidebar[data-collapsed='true'] .nav-item .nav-count {
+  margin-left: 0;
+}
+
 .nav-text,
 .nav-count,
 .nav-section-head .nav-label {

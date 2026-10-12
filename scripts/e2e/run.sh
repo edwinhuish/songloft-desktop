@@ -99,23 +99,29 @@ ELECTRON_ARGS=(
 if command -v xvfb-run >/dev/null 2>&1; then
   # 用虚拟显示而不是用户的真实会话：巡检不该抢焦点、闪窗口、动到真实 userData。
   # -u WAYLAND_DISPLAY -u XAUTHORITY：不剥掉的话会连回真实会话，Xvfb 白起。
+  # setsid：让这一整棵进程树自成一个进程组，cleanup 才收得干净（原因见 cleanup）。
   env -u ELECTRON_RUN_AS_NODE -u NODE_OPTIONS -u WAYLAND_DISPLAY -u XAUTHORITY \
       SONGLOFT_USER_DATA="$USER_DATA" TMPDIR="${TMPDIR:-/tmp}" \
-      xvfb-run -a --server-args="-screen 0 1680x1050x24 -ac" \
+      setsid xvfb-run -a --server-args="-screen 0 1680x1050x24 -ac" \
       ./node_modules/electron/dist/electron "${ELECTRON_ARGS[@]}" --ozone-platform=x11 >"$APP_LOG" 2>&1 &
   APP_PID=$!
 else
   echo "! 没有 xvfb-run，直接用当前显示（可能会闪窗口）" >&2
   env -u ELECTRON_RUN_AS_NODE -u NODE_OPTIONS \
       SONGLOFT_USER_DATA="$USER_DATA" \
-      ./node_modules/electron/dist/electron "${ELECTRON_ARGS[@]}" >"$APP_LOG" 2>&1 &
+      setsid ./node_modules/electron/dist/electron "${ELECTRON_ARGS[@]}" >"$APP_LOG" 2>&1 &
   APP_PID=$!
 fi
 
+# ── 3. 收尾必须按**进程组**做 ────────────────────────────────────────────────
+# xvfb-run 只是个壳脚本，单独 kill 它只会把 Electron 留成孤儿：它继续占着 CDP_PORT，
+# 下一轮 Electron 就 bind 失败（"地址已在使用"），而 drive 的 findPage 会连到**上一轮
+# 还活着的实例**上 —— 症状极隐蔽：断言看似乱报（歌曲数不对、按钮找不到），
+# 比"起不来"难查得多。所以启动时用 setsid 让整棵树自成一组，这里按组收。
 cleanup() {
-  kill "$APP_PID" 2>/dev/null
+  kill -TERM -- -"$APP_PID" 2>/dev/null
   sleep 1
-  kill -9 "$APP_PID" 2>/dev/null
+  kill -KILL -- -"$APP_PID" 2>/dev/null
   kill "$MOCK_PID" 2>/dev/null
 }
 trap cleanup EXIT

@@ -38,6 +38,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
  */
 const exactly = (n) => Object.assign((v) => v === n, { label: `=${n}` })
 const atLeast = (n) => Object.assign((v) => v >= n, { label: `>=${n}` })
+/** 上限：几何偏差这类量只需要"不超过"，用 = 会把亚像素舍入变成假失败 */
+const atMost = (n) => Object.assign((v) => v <= n, { label: `<=${n}` })
 /** 断言数组里每一项都包含某个子串（用于区分"哪个分面"） */
 const containsAll = (...names) =>
   Object.assign(
@@ -74,6 +76,29 @@ window.__t = {
     window.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key, bubbles: true }, mods || {})));
     return 'OK';
   },
+  /**
+   * 折叠侧栏里图标/封面中心相对「侧栏内容区中心」的最大偏移（px），越小越居中。
+   *
+   * 为什么要专门量它：折叠态下 .nav-count 仍带着 margin-left:auto，而 auto 外边距
+   * 会**先于** justify-content 分配自由空间 —— 哪怕它的宽度已经缩到 0，也能把整行
+   * 余量吃光，让 justify-content:center 形同虚设，歌单封面于是贴到左边缘。
+   * 这种偏差在截图里几乎看不出来（所见即"它就在那儿"），只有量出来才知道。
+   */
+  offCenter: () => {
+    const side = document.querySelector('.sidebar');
+    if (!side) return -1;
+    const sr = side.getBoundingClientRect();
+    const cs = getComputedStyle(side);
+    const left = sr.left + parseFloat(cs.paddingLeft);
+    const right = sr.right - parseFloat(cs.paddingRight);
+    const mid = (left + right) / 2;
+    const covers = [...document.querySelectorAll('.nav-cover')];
+    const icons = [...document.querySelectorAll('.nav-item svg')];
+    return covers.concat(icons).reduce((max, el) => {
+      const r = el.getBoundingClientRect();
+      return Math.max(max, Math.abs((r.left + r.right) / 2 - mid));
+    }, 0);
+  },
   /** 分面卡上显示的标题，用来断言"当前是哪一维分面" */
   cardTitles: () => [...document.querySelectorAll('.card .card-title')].map((e) => (e.textContent || '').trim()),
   /**
@@ -94,6 +119,8 @@ window.__t = {
     lyricWords: document.querySelectorAll('.lyric-word').length,
     // 命令面板：条目数，用于确认 Ctrl+K 真的渲染出了可选项
     paletteItems: document.querySelectorAll('.palette-item').length,
+    // 折叠侧栏的居中偏差（px），回归"封面被 auto 外边距顶到左边"
+    offCenter: window.__t.offCenter(),
     cardTitles: window.__t.cardTitles(),
     chipTitles: window.__t.chipTitles()
   })
@@ -257,8 +284,18 @@ const STEPS = [
     { lyricLines: exactly(10), lyricWords: atLeast(20) }
   ],
   ['21-queue-panel', 'window.__t.click(\'button[aria-label="播放队列"]\')', 1200],
+  // 折叠成图标条后，图标与歌单封面必须仍然居中。带计数的项曾因 .nav-count 的
+  // auto 外边距吃掉整行自由空间而整体左偏，且**只在折叠态**出现 —— 不断言就会静默复发。
+  // 放在命令面板之前：面板的 Escape 绑在它自己的输入框上，从 window 派发关不掉，
+  // 先折叠就不会让它盖在侧栏截图上。
   [
-    '22-command-palette',
+    '22-sidebar-collapsed',
+    "window.__t.click('.sidebar-foot .nav-item', '收起侧栏')",
+    1600,
+    { offCenter: atMost(1) }
+  ],
+  [
+    '23-command-palette',
     "window.__t.key('k', { ctrlKey: true })",
     1400,
     { paletteItems: atLeast(1) }
