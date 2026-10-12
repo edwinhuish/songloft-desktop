@@ -6,7 +6,7 @@
 import { BrowserWindow, app, shell } from 'electron'
 import { join } from 'node:path'
 
-import type { WindowState } from '@shared/ipc'
+import { IPC, type WindowState } from '@shared/ipc'
 import type { ConfigStore } from './store'
 
 const MIN_WIDTH = 1080
@@ -75,7 +75,7 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
       fullscreen: window.isFullScreen(),
       focused: window.isFocused()
     }
-    window.webContents.send('window:state', state)
+    window.webContents.send(IPC.onWindowState, state)
   }
   // 逐个注册而不用「遍历事件名数组」：BrowserWindow.on 是每个事件一个重载，
   // 传联合类型的事件名会匹配不上任何单个重载（TS2769）。
