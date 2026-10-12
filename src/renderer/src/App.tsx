@@ -70,6 +70,10 @@ export function App(): React.JSX.Element {
     void (async () => {
       // 先读设置：主题/强调色要在第一帧就正确，否则会闪一下默认配色
       await useSettings.getState().load()
+      // ★ 侧栏折叠状态的「写」在 Sidebar 里（切一次就 patch 进设置），但界面初值是
+      //   useUi 自己的 state、硬编码 false。不在这里回填的话，那个设置等于写了个寂寞：
+      //   用户收起侧栏 → 重启 → 又展开了。
+      useUi.getState().setSidebarCollapsed(useSettings.getState().settings.sidebarCollapsed)
       watchSystemTheme()
       primeAudio()
 
