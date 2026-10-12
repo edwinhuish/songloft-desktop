@@ -1,0 +1,44 @@
+Songloft Desktop
+Copyright 2026 Songloft Desktop contributors
+
+本产品包含由第三方开发的软件组件。本文件记录随分发产物一同提供的组件的署名与许可信息。
+
+───────────────────────────── 一、本项目自身 ─────────────────────────────
+
+  名称：Songloft Desktop（仓库 songloft-desktop）
+  许可：Apache License 2.0（正文见同目录 LICENSE）
+  说明：本仓库是上游 songloft-org/songloft-player（Flutter 客户端，同为 Apache-2.0）
+        的 Electron 桌面端重写版，后端（Go 服务）不包含在本仓库内。
+        上游项目的版权与署名在此一并致谢。
+
+  ⚠️ 待补齐：Apache-2.0 第 4(d) 条要求派生作品保留原作品 NOTICE 中的署名内容。
+  上游仓库另有 NOTICE 文件，正式发布前应把其中的署名逐条并入本文档。
+
+─────────────────────── 二、随产物一同分发的第三方组件 ───────────────────────
+
+  组件            形态与版本                            许可
+  ─────────────────────────────────────────────────────────────────────────
+  Electron        容器，^44.7.0                         MIT
+  Chromium        随 Electron 提供                      BSD-3-Clause 及其他
+  Node.js / V8    随 Electron 提供                      MIT
+  FFmpeg          以 libffmpeg.so 随 Electron 提供      LGPL-2.1-or-later
+  React / ReactDOM  已打包进渲染层 bundle，^19.3.0       MIT
+  zustand         已打包进渲染层 bundle，^5.0.15        MIT
+
+  Chromium 与 Electron 的完整第三方声明随安装产物提供，
+  见打包目录下的 LICENSES.chromium.html。
+
+────────────────────── 三、需要自行确认的一点：编解码器许可 ──────────────────────
+
+  Electron 官方构建附带的 libffmpeg.so 默认启用了 AAC / H.264 等专有编解码器。
+  这类编解码器的**专利许可**（尤其在美国等地区）属于分发方需要自行确认的事项，
+  不是本文件或 LICENSE 能覆盖的范围 —— 必要时应寻求专业法律意见。
+
+  注：Electron 另提供 downloadAlternateFFmpeg 选项可换成不含专有编解码器的版本，
+  本项目当前**未**使用该选项。
+
+──────────────────────── 四、与上游 Flutter 桌面版的差异 ────────────────────────
+
+  上游 Flutter 桌面包在 Windows / Linux 上通过 just_audio_media_kit 链接 libmpv（LGPL-2.1+）。
+  **本 Electron 版本不使用 libmpv** —— 音频解码由随 Electron 分发的 FFmpeg 承担。
+  因此上游关于 libmpv 的许可提示不适用于本产物，而本产物多了第三节那条编解码器问题。
