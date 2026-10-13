@@ -51,6 +51,12 @@ export interface RequestOptions {
   anonymous?: boolean
 }
 
+/** XHR 回来的东西。fetch 那份 Response 没法在回调里留住，所以只取这两样 */
+interface XhrResult {
+  status: number
+  text: string
+}
+
 const API_PREFIX = '/api/v1'
 
 function serializeQuery(query: Record<string, QueryValue> | undefined): string {
@@ -140,6 +146,57 @@ export class ApiClient {
     }
   }
 
+  /**
+   * 带上传进度的表单提交（走 XHR，不走 fetch）。
+   *
+   * ★ 为什么单开一条而不是塞进 request：fetch 没有上传进度事件，而升级包动辄几十上百兆 ——
+   *   一个不动的「上传中…」跟卡死没有区别。XHR 的 upload.onprogress 是唯一能拿到进度的路径。
+   *   顺带：FormData 交给浏览器序列化，multipart 的 boundary 与 Content-Type 都不用我们碰。
+   */
+  upload<T>(
+    path: string,
+    formData: FormData,
+    onProgress?: (sent: number, total: number) => void
+  ): Promise<T> {
+    const send = (): Promise<XhrResult> => this.sendUpload(path, formData, onProgress)
+    return send().then(async (result) => {
+      if (result.status === 401 && (await this.refreshTokens())) {
+        return this.unwrapXhr<T>(await send(), path)
+      }
+      return this.unwrapXhr<T>(result, path)
+    })
+  }
+
+  private sendUpload(
+    path: string,
+    formData: FormData,
+    onProgress?: (sent: number, total: number) => void
+  ): Promise<XhrResult> {
+    return new Promise<XhrResult>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${this.baseUrl}${API_PREFIX}${path}`)
+      xhr.setRequestHeader('Accept', 'application/json')
+      if (this.tokens?.accessToken) {
+        xhr.setRequestHeader('Authorization', `Bearer ${this.tokens.accessToken}`)
+      }
+      xhr.upload.onprogress = (event) => {
+        // 服务端返回压缩响应时拿不到总长度，那时宁可不报百分比，也别报个错的比例
+        if (event.lengthComputable) onProgress?.(event.loaded, event.total)
+      }
+      xhr.onload = () => {
+        this.noteResolved(xhr.responseURL || '')
+        resolve({ status: xhr.status, text: xhr.responseText })
+      }
+      xhr.onerror = () => reject(new ApiError('上传失败：连接中断', 0, path, null))
+      xhr.onabort = () => reject(new ApiError('上传已取消', 0, path, null))
+      xhr.send(formData)
+    })
+  }
+
+  private unwrapXhr<T>(result: XhrResult, path: string): T {
+    return this.parseBody<T>(result.status, result.text, path)
+  }
+
   async request<T>(path: string, options: RequestOptions = {}): Promise<T> {
     const response = await this.rawRequest(path, options)
 
@@ -193,9 +250,13 @@ export class ApiClient {
   }
 
   private async unwrap<T>(response: Response, path: string): Promise<T> {
-    if (response.status === 204) return undefined as T
+    return this.parseBody<T>(response.status, await response.text(), path)
+  }
 
-    const text = await response.text()
+  /** 「状态码 + 响应体文本」→ 结果或 ApiError。fetch 与 XHR 两条路共用同一套解包 */
+  private parseBody<T>(status: number, text: string, path: string): T {
+    if (status === 204) return undefined as T
+
     let payload: unknown = null
     if (text) {
       try {
@@ -205,8 +266,8 @@ export class ApiClient {
       }
     }
 
-    if (!response.ok) {
-      throw new ApiError(extractMessage(payload, response.status), response.status, path, payload)
+    if (status < 200 || status >= 300) {
+      throw new ApiError(extractMessage(payload, status), status, path, payload)
     }
 
     return payload as T
