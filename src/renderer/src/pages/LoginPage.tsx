@@ -5,21 +5,20 @@
  *   1. **服务器地址是一等公民** —— songloft 后端不是云服务，地址必须手填；
  *   2. **探测按钮**：填完地址先点一下，能立刻分出「地址错了」「服务没起来」
  *      「地址对但需要 TLS 放行」三种情况，而不是登录失败后盲猜；
- *   3. **地址字段本身就是已保存服务器的选择器**（可编辑下拉）：既能手敲，
- *      也能展开历史记录 —— 每条带上「这台机器上次用哪个账号登录的」，免得选错 NAS。
+ *   3. **已保存的登录列表**：登录按钮下面列出用过的服务器（含各自的账号名），
+ *      点一条就用本机凭据直接进去 —— 多台 NAS 之间切换，不该每次重敲地址与密码。
  */
 
 import { useEffect, useState } from 'react'
 
 import type { ServerEntry, ServerProbeResult } from '@shared/ipc'
-import { useContextMenu, type MenuItem } from '@/components/ContextMenu'
 import {
   IconAlert,
   IconCheck,
-  IconChevronDown,
   IconLoader,
   IconServer,
-  IconSparkle
+  IconSparkle,
+  IconTrash
 } from '@/components/Icons'
 import { Switch } from '@/components/primitives'
 import { useAuth } from '@/state/useAuth'
@@ -64,8 +63,8 @@ export function LoginPage(): React.JSX.Element {
       .catch(() => undefined)
   }, [servers])
 
-  /** 从历史记录里选中一台：填地址与备注名，账号名已知时一并填上 */
-  const selectServer = (server: ServerEntry): void => {
+  /** 把一台服务器填进表单（地址、备注名、已知的账号名） */
+  const fillForm = (server: ServerEntry): void => {
     setUrl(server.url)
     setName(server.name)
     const account = accounts[server.url]
@@ -74,38 +73,15 @@ export function LoginPage(): React.JSX.Element {
     setLocalError(null)
   }
 
-  /** 展开已保存的服务器（菜单贴在地址框下方；再点一次同一个按钮收起） */
-  const openSavedServers = (event: React.MouseEvent<HTMLButtonElement>): void => {
-    const menu = useContextMenu.getState()
-    if (menu.open && menu.anchor === event.currentTarget) {
-      menu.hide()
-      return
-    }
-    const anchor = event.currentTarget.closest('.input-combo') ?? event.currentTarget
-    const rect = anchor.getBoundingClientRect()
-    const items: MenuItem[] = servers.map((server) => {
-      const account = accounts[server.url]
-      return {
-        key: server.url,
-        label: account ? `${server.url} · ${account}` : server.url,
-        onClick: () => selectServer(server),
-        // 点击 = 填进表单；「直接进入 / 移除」放二级菜单，免得同一条记录在列表里出现两次
-        children: [
-          {
-            key: `${server.url}#enter`,
-            label: `直接进入（${account ?? '已保存凭据'}）`,
-            onClick: () => void switchServer(server.url)
-          },
-          {
-            key: `${server.url}#forget`,
-            label: '移除该服务器及其本机凭据',
-            variant: 'danger',
-            onClick: () => void forgetServer(server.url)
-          }
-        ]
-      }
-    })
-    useContextMenu.getState().show(rect.left, rect.bottom + 4, items, event.currentTarget)
+  /**
+   * 点一条已保存的登录：先填表单，再用本机凭据直接进。
+   *
+   * 两者都做是有意的 —— 凭据过期或已被清掉时 switchServer 会停在登录页，
+   * 那时表单里已经是对应地址与账号，用户只需要补一个密码。
+   */
+  const quickLogin = (server: ServerEntry): void => {
+    fillForm(server)
+    void switchServer(server.url)
   }
 
   const handleProbe = async (): Promise<void> => {
@@ -188,32 +164,18 @@ export function LoginPage(): React.JSX.Element {
               服务器地址
             </label>
             <div className="row" style={{ gap: 8 }}>
-              <div className="input-combo grow">
-                <input
-                  id="server-url"
-                  className="input"
-                  value={url}
-                  placeholder={DEFAULT_URL}
-                  spellCheck={false}
-                  autoCapitalize="off"
-                  onChange={(event) => {
-                    setUrl(event.target.value)
-                    setProbeResult(null)
-                  }}
-                />
-                {servers.length > 0 ? (
-                  <button
-                    type="button"
-                    className="input-combo-toggle"
-                    title="已保存的服务器"
-                    aria-label="展开已保存的服务器"
-                    aria-haspopup="menu"
-                    onClick={openSavedServers}
-                  >
-                    <IconChevronDown size={15} />
-                  </button>
-                ) : null}
-              </div>
+              <input
+                id="server-url"
+                className="input"
+                value={url}
+                placeholder={DEFAULT_URL}
+                spellCheck={false}
+                autoCapitalize="off"
+                onChange={(event) => {
+                  setUrl(event.target.value)
+                  setProbeResult(null)
+                }}
+              />
               <button
                 type="button"
                 className="btn"
@@ -318,6 +280,52 @@ export function LoginPage(): React.JSX.Element {
             {busy ? <IconLoader size={16} /> : null}
             {busy ? '正在登录…' : '登录'}
           </button>
+
+          {servers.length > 0 ? (
+            <>
+              <div className="divider" />
+              <div className="saved-logins">
+                <div>
+                  <div className="field-label">已保存的登录</div>
+                  <div className="field-hint">点一条就用本机凭据直接进入，不用再输密码</div>
+                </div>
+                <div className="saved-server-list">
+                  {servers.map((server) => {
+                    const account = accounts[server.url]
+                    return (
+                      <div key={server.url} className="saved-server">
+                        <button
+                          type="button"
+                          className="saved-server-main"
+                          disabled={busy}
+                          title={`用已保存的凭据登录 ${server.url}`}
+                          onClick={() => quickLogin(server)}
+                        >
+                          <span className="saved-server-title">
+                            <span className="truncate">{server.name}</span>
+                            <span className="badge">{account ?? '未记录账号'}</span>
+                          </span>
+                          <span className="saved-server-url truncate">{server.url}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn"
+                          title="移除该服务器及其本机凭据"
+                          aria-label={`移除 ${server.name}`}
+                          onClick={() => {
+                            if (window.confirm(`移除「${server.name}」及其本机凭据？`))
+                              void forgetServer(server.url)
+                          }}
+                        >
+                          <IconTrash size={15} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </>
+          ) : null}
         </form>
       </div>
     </div>

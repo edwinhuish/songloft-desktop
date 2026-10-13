@@ -188,8 +188,7 @@ export function App(): React.JSX.Element {
   }, [status])
 
   /* 未登录 / 启动中：同样是 frameless 窗口，必须带上标题栏才有拖拽区与窗口控制。
-     少了它，登录页会变成一个既拖不动也关不掉的窗口（只能 Alt+F4）。
-     ContextMenuHost 也要挂：登录页的服务器地址是个下拉，菜单宿主是全局单例。 */
+     少了它，登录页会变成一个既拖不动也关不掉的窗口（只能 Alt+F4）。 */
   if (status !== 'authenticated') {
     return (
       <div className="shell">
@@ -204,8 +203,6 @@ export function App(): React.JSX.Element {
             <LoginPage />
           )}
         </div>
-
-        <ContextMenuHost />
       </div>
     )
   }
