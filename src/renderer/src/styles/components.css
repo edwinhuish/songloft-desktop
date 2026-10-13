@@ -2361,3 +2361,32 @@ select.input option {
   font-size: 11.5px;
   color: var(--text-2);
 }
+
+/* 订阅源的一行：开关 │ 三个输入竖排 │ 删除。
+   输入竖排而不是横排四个：订阅源地址动辄六七十个字符，横着摆会被截成两段认不出来，
+   而「这到底是哪个源」全靠那串地址认。
+   行与行的间距由 .modal-body 的 gap 给（它是 flex 列），这里只管行内。 */
+.source-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+
+.source-fields {
+  display: grid;
+  gap: 6px;
+}
+
+/* 新增那一行：名称 + 地址 + 添加。align-items: center 是为了让 29px 的按钮
+   落在 38px 输入的垂直中线上，不然后者会把按钮顶到偏上 */
+.source-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.8fr) auto;
+  gap: 10px;
+  align-items: center;
+}

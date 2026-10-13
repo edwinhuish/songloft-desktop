@@ -129,7 +129,8 @@ src/
    ├─ components/    Sidebar / TitleBar / SongTable / PlayerBar / LyricsView / CommandPalette /
    │                 Panel / ContextMenu / Modal / Toasts / SelectionBar /
    │                 ExtensionFrame（扩展主框架：左侧栏 + 右内容面）/
-   │                 PluginSurface（扩展 webview 栈）/ PluginIcon
+   │                 PluginSurface（扩展 webview 栈）/ PluginIcon /
+   │                 RegistrySourcesDialog（管理订阅源）
    ├─ hooks/         useSongList / usePlaylistSongs / useAsync / useResponsiveSidebar
    ├─ lib/           url（资源 URL 拼接）/ color / accent / format / concurrency
    └─ styles/        tokens.css / base.css / components.css / index.css
@@ -369,6 +370,14 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
 （宁肯名字被省略号吃掉，也不许把窗口按钮顶出去），外加 `.titlebar { overflow: hidden }` 兜底：
 标题栏里任何一项都不许把布局撑出去。
 
+**订阅源**（`api/plugins.ts` 的 `getPluginRegistries` / `updatePluginRegistries`）：后端只有
+「整表读 / 整表写」两个口子（`GET|PUT /settings/plugin-registries`），没有单条增删改，也不是
+`/jsplugins/*` 那一家 —— 界面上那个对话框因此是一张**草稿表**，点保存才整份 PUT 回去。
+两条语义别弄错：**URL 就是身份**（后端按 URL 匹配条目来源、按 URL 查它自己的 token），所以
+改地址等于换一个源、重复地址必须在客户端先拦住；**单源筛选**（`all_sources: false` +
+`registry_url`）时后端**不会**去读它存的那份配置，私有源的 token 必须由调用方一起带上 ——
+漏了只会得到一句「拉取注册表失败」，完全看不出是缺 token。
+
 ---
 
 ## 9. 不要做
@@ -402,12 +411,14 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
 已对齐：曲库浏览（类型 / 分面 / 排序 / 无限滚动）、歌单增删改与拖拽重排、收藏、最近播放、
 文件夹浏览、逐字歌词与点击跳转、播放队列、命令面板、扫描与重复检测、设置项。
 
-**JS 插件（扩展）**：已实现「列表 / 启用停用 / 卸载 / 上传 zip / 从商店安装 / 调整顺序」
-与「扩展主框架（插件商店 + 插件管理 + 扩展侧栏）」。与上游的形态差异是**入口位置**：
-上游把插件挂在底部导航栏的 Tab 上，本仓库没有底部导航栏，改成标题栏左上角一个入口，
-点下去把标题栏以下整块换成扩展主框架（布局与坑见 §8.12）。未做的部分：插件的商店
-「全部更新」、清理孤儿数据、以及各个源的单独管理界面。插件的**页面本身**仍由服务端提供
-（渲染在 webview 里），所以上游那些插件自带的 UI 一行都不用重写。
+**JS 插件（扩展）**：已实现「列表 / 启用停用 / 卸载 / 上传 zip / 从商店安装 / 调整顺序 /
+批量更新 / 清理残留数据」与「扩展主框架（插件商店 + 插件管理 + 扩展侧栏）」，商店那一栏还能
+管理订阅源（增删启停 + 私有源 token）并按源筛选。与上游的形态差异是**入口位置**：上游把插件
+挂在底部导航栏的 Tab 上，本仓库没有底部导航栏，改成标题栏左上角一个入口，点下去把标题栏以下
+整块换成扩展主框架（布局与坑见 §8.12）。仍缺一件：商店里标着「有新版本」的条目只能逐个装 ——
+「全部更新」调的是后端的批量更新，它只覆盖**声明了远程更新源**（manifest 的 `updateUrl`）的
+插件，其余的按 skipped 计。插件的**页面本身**仍由服务端提供（渲染在 webview 里），所以上游那些
+插件自带的 UI 一行都不用重写。
 
 未实现（换栈后需重做）：均衡器、无缝播放 / 淡入淡出、DLNA 投送、桌面歌词、
 「缓存到本机」（把单曲下载到设备本地离线播放 —— 设置页里那份「本地缓存」是**另一回事**，

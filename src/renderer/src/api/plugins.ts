@@ -1,10 +1,10 @@
 /**
  * JS 插件（扩展）的后端调用点。
  *
- * 端点来自 songloft 服务端 `internal/handlers/jsplugin.go` 与 `jsplugin_registry.go`。
- * 这里只做两件事：拼路径、把线格式（snake_case）收成渲染层用得顺手的模型。业务判断
- * （谁能装、能不能更新）一律依赖后端返回的 `installed / has_update / conflict` 三个字段，
- * 前端不自己算版本 —— 版本比较规则在后端，自己算必然漂移。
+ * 端点来自 songloft 服务端 `internal/handlers/jsplugin.go`、`jsplugin_registry.go` 与
+ * `internal/app/routers.go` 里 `/settings/plugin-registries` 那两条。这里只做两件事：
+ * 拼路径、把线格式（snake_case）收成渲染层用得顺手的模型。业务判断（谁能装、能不能更新、
+ * 某个源是公开还是私有）一律依赖后端 —— 版本比较与身份判定的规则都在后端，自己算必然漂移。
  */
 
 import { toPlugin, toPluginList, type JSPlugin, type PluginWire } from '@shared/plugin'
@@ -111,6 +111,171 @@ export function uploadPlugin(
     .then(toUploadResponse)
 }
 
+/* ─────────────────────────── 批量更新 / 清理 ─────────────────────────── */
+
+/** 批量更新里的一条（后端 jsPluginBatchUpdateResult） */
+export interface PluginBatchUpdateItem {
+  pluginId: number
+  pluginName: string
+  entryPath: string
+  success: boolean
+  /** 这一条确实被检查出有新版本（false 且 success=false 的那些是「没更新源」或「已最新」） */
+  hasUpdate: boolean
+  currentVersion: string
+  newVersion: string
+  error: string
+}
+
+export interface PluginBatchUpdate {
+  total: number
+  updated: number
+  failed: number
+  /** 没有远程更新源、或已经是最新版的那些。**不是失败**，见 updateAllPlugins */
+  skipped: number
+  message: string
+  results: PluginBatchUpdateItem[]
+}
+
+interface PluginBatchUpdateWire {
+  total?: number
+  updated?: number
+  failed?: number
+  skipped?: number
+  message?: string
+  results?: {
+    plugin_id?: number
+    plugin_name?: string
+    entry_path?: string
+    success?: boolean
+    has_update?: boolean
+    current_version?: string
+    new_version?: string
+    error?: string
+  }[]
+}
+
+/**
+ * 批量更新所有插件（`POST /jsplugins/update-all`）。
+ *
+ * ★ 它更新的是**声明了远程更新源**（manifest 里的 `updateUrl`）的插件 —— 后端对没有更新源
+ *   的插件直接计入 `skipped`（见 auto_update.go 的 RunUpdateAll）。所以「跳过 N 个」不是
+ *   失败，而是那些插件没有任何可查的远端版本，想升级只能到商店里逐个装。
+ *
+ * `force` 会跳过「已是最新版」的判断强制重装；常规点击不要传它。
+ */
+export function updateAllPlugins(
+  client: ApiClient,
+  options: { githubProxy?: string; force?: boolean } = {}
+): Promise<PluginBatchUpdate> {
+  return client
+    .request<PluginBatchUpdateWire>('/jsplugins/update-all', {
+      method: 'POST',
+      body: { github_proxy: options.githubProxy ?? '', force: options.force ?? false }
+    })
+    .then((res) => ({
+      total: res.total ?? 0,
+      updated: res.updated ?? 0,
+      failed: res.failed ?? 0,
+      skipped: res.skipped ?? 0,
+      message: res.message ?? '',
+      results: (res.results ?? []).map((item) => ({
+        pluginId: item.plugin_id ?? 0,
+        pluginName: item.plugin_name ?? '',
+        entryPath: item.entry_path ?? '',
+        success: Boolean(item.success),
+        hasUpdate: Boolean(item.has_update),
+        currentVersion: item.current_version ?? '',
+        newVersion: item.new_version ?? '',
+        error: item.error ?? ''
+      }))
+    }))
+}
+
+export interface PluginStorageCleanup {
+  message: string
+  /** 清掉了几个插件的孤儿数据（0 = 本来就没有残留） */
+  cleaned: number
+}
+
+/**
+ * 清理已卸载插件的残留数据（`POST /jsplugins/storage/cleanup`）。
+ *
+ * 清的是 `plugin_storage` 里没有对应已安装插件的那些行（卸载时若带了 keep_data 就会留下）。
+ * **不可恢复** —— 调用方必须先让用户确认。
+ */
+export function cleanupPluginStorage(client: ApiClient): Promise<PluginStorageCleanup> {
+  return client
+    .request<{ message?: string; cleaned?: number }>('/jsplugins/storage/cleanup', {
+      method: 'POST'
+    })
+    .then((res) => ({ message: res.message ?? '', cleaned: res.cleaned ?? 0 }))
+}
+
+/* ─────────────────────────── 订阅源 ─────────────────────────── */
+
+/**
+ * 一个扩展订阅源。
+ *
+ * ★ 没有 id、也没有类型字段：**URL 就是身份** —— 后端按 URL 匹配条目来源、解析它自己的
+ *   token（`resolveSourceToken`），所以「改地址」在语义上等于「删掉旧的再加一个」。
+ *   `token` 非空即私有源：该源的条目下载时改走 `Authorization: Bearer`。
+ */
+export interface RegistrySource {
+  url: string
+  name: string
+  enabled: boolean
+  token: string
+}
+
+interface RegistrySourceWire {
+  url?: string
+  name?: string
+  enabled?: boolean
+  token?: string
+}
+
+function toRegistrySource(wire: RegistrySourceWire): RegistrySource {
+  return {
+    // enabled 缺字段时按「启用」算：默认官方源就是启用的，把它当成停用会让人以为源没了
+    url: wire.url ?? '',
+    name: wire.name ?? '',
+    enabled: wire.enabled !== false,
+    token: wire.token ?? ''
+  }
+}
+
+/** 读取订阅源列表。**未配置时后端返回内置的官方源**，不是空列表 */
+export function getPluginRegistries(client: ApiClient): Promise<RegistrySource[]> {
+  return client
+    .request<{ registries?: RegistrySourceWire[] }>('/settings/plugin-registries')
+    .then((res) => (res.registries ?? []).map(toRegistrySource))
+}
+
+/**
+ * 整表覆盖保存。
+ *
+ * 后端只有这一个写入口（没有单条增删改端点），所以：删一个源 = 保存时不带它、
+ * 停用 = 带上 `enabled: false`、排序 = 调数组顺序。返回值以服务端为准。
+ */
+export function updatePluginRegistries(
+  client: ApiClient,
+  registries: RegistrySource[]
+): Promise<RegistrySource[]> {
+  return client
+    .request<{ registries?: RegistrySourceWire[] }>('/settings/plugin-registries', {
+      method: 'PUT',
+      body: {
+        registries: registries.map((source) => ({
+          url: source.url,
+          name: source.name,
+          enabled: source.enabled,
+          token: source.token
+        }))
+      }
+    })
+    .then((res) => (res.registries ?? []).map(toRegistrySource))
+}
+
 /* ─────────────────────────── 排序（plugin-order）─────────────────────────── */
 
 /**
@@ -200,8 +365,15 @@ export function registryRowKey(entry: RegistryEntry): string {
 }
 
 export interface RegistryQuery {
-  /** 聚合所有启用的订阅源（桌面端没有「单个源」的界面，默认聚合） */
-  allSources?: boolean
+  /**
+   * 只看这一个订阅源（源 URL）。不传 = 聚合所有**已启用**的源。
+   *
+   * ★ 后端单源模式的参数名是 `registry_url`（`source_url` 是**响应**里回传来源用的，不是请求参数）。
+   *   单源模式下后端不去读已保存的配置，私有源的 token 必须由调用方一起带上。
+   */
+  sourceUrl?: string
+  /** 单源模式下的私有源 token（与 sourceUrl 配对；公开源留空） */
+  sourceToken?: string
   page?: number
   pageSize?: number
   search?: string
@@ -225,7 +397,9 @@ export function refreshRegistry(
     }>('/jsplugins/registry/refresh', {
       method: 'POST',
       body: {
-        all_sources: query.allSources !== false,
+        all_sources: !query.sourceUrl,
+        registry_url: query.sourceUrl ?? '',
+        token: query.sourceToken ?? '',
         page: query.page ?? 1,
         page_size: query.pageSize ?? 20,
         search: query.search ?? '',
@@ -261,7 +435,10 @@ export function refreshRegistry(
 
 export interface RegistryInstallParams {
   downloadUrl: string
-  /** 聚合模式下回传，供后端按源解析私有源 token */
+  /**
+   * 条目来自哪个源，供后端**按 URL 查出该源的 token**（单源筛选模式下商店条目不带
+   * source_url，那时用当前筛选的那个源）。
+   */
   sourceUrl?: string
   githubProxy?: string
   /** 覆盖掉占用同 entryPath 但作者不同的插件（必须先弹冲突确认） */

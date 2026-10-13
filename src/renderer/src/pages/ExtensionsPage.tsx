@@ -8,19 +8,30 @@
  * 两处各存一份的话，「拖完没反应」或「侧栏顺序自己变了」会随机出现。
  */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { entryPathsOf, pluginDisplayName, type JSPlugin } from '@shared/plugin'
+import { getGithubProxy } from '@/api/endpoints'
 import {
+  cleanupPluginStorage,
+  updateAllPlugins,
+  uploadPlugin,
+  type PluginBatchUpdate
+} from '@/api/plugins'
+import {
+  IconDownload,
   IconGrip,
   IconLoader,
   IconPuzzle,
   IconRefresh,
   IconSliders,
-  IconTrash
+  IconTrash,
+  IconUpload
 } from '@/components/Icons'
+import { Modal } from '@/components/Modal'
 import { PluginIcon } from '@/components/PluginIcon'
 import { EmptyState, Switch } from '@/components/primitives'
+import { requireClient } from '@/state/useAuth'
 import { useOrderedPlugins, usePlugins } from '@/state/usePlugins'
 import { toast } from '@/state/useToasts'
 
@@ -36,6 +47,14 @@ export function ExtensionsPage(): React.JSX.Element {
   /** 拖拽中的下标与悬停到的下标。都放本地：它们是纯粹的交互瞬时状态，不该进 store */
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
+
+  /* 上传插件包 */
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null)
+  /* 全部更新 / 清理数据 */
+  const [updating, setUpdating] = useState(false)
+  const [updateFailure, setUpdateFailure] = useState<PluginBatchUpdate | null>(null)
+  const [cleaning, setCleaning] = useState(false)
 
   const enabledCount = ordered.filter((plugin) => plugin.status === 'active').length
 
@@ -65,6 +84,97 @@ export function ExtensionsPage(): React.JSX.Element {
       .catch((reason: unknown) =>
         toast('操作失败', 'error', reason instanceof Error ? reason.message : undefined)
       )
+  }
+
+  /**
+   * 上传本地 `.jsplugin.zip` 安装。
+   *
+   * ★ 后端把「安装失败」也放在 200 的 body 里（`success: 0`），**要看 results 而不是看有没有抛** ——
+   *   看状态码的话，一个包坏了会被当成装好了。
+   */
+  const upload = async (file: File): Promise<void> => {
+    setUploadPercent(0)
+    try {
+      const result = await uploadPlugin(requireClient(), file, (sent, total) => {
+        setUploadPercent(total > 0 ? Math.round((sent * 100) / total) : 0)
+      })
+      const failed = result.results.filter((item) => !item.success)
+      if (result.success === 0) {
+        throw new Error(failed[0]?.error || result.message || '安装失败')
+      }
+      toast(
+        `已安装 ${result.success} 个扩展`,
+        failed.length ? 'info' : 'success',
+        failed.length ? `${failed.length} 个没能装上：${failed[0].error}` : undefined
+      )
+      // 插件列表变了 → 扩展侧栏与这一页都要跟着变
+      await load()
+    } catch (reason) {
+      toast('上传失败', 'error', reason instanceof Error ? reason.message : undefined)
+    } finally {
+      setUploadPercent(null)
+    }
+  }
+
+  /**
+   * 全部更新。
+   *
+   * ★ 它更新的是**声明了远程更新源**（manifest 里的 `updateUrl`）的插件，后端对没有更新源的
+   *   插件直接计入 skipped。所以「跳过 N 个」不是失败，而是那些插件没有任何可查的远端版本 ——
+   *   想升级只能到插件商店里逐个装。把这句话讲出来，比一个「已更新 0 个」有用得多。
+   *
+   * 失败的逐条原因放不进 toast（只够一行），所以有失败时改用弹窗列清单。
+   */
+  const updateAll = async (): Promise<void> => {
+    setUpdating(true)
+    try {
+      // 后端不会自己去读它存的那份代理配置；拿不到就直连，不因此放弃整次更新
+      const proxy = await getGithubProxy(requireClient()).catch(() => '')
+      const result = await updateAllPlugins(requireClient(), { githubProxy: proxy })
+      await load()
+
+      if (result.failed > 0) {
+        setUpdateFailure(result)
+        return
+      }
+      const summary = [`已更新 ${result.updated} 个`]
+      if (result.skipped > 0) summary.push(`跳过 ${result.skipped} 个`)
+      toast(
+        summary.join(' · '),
+        result.updated > 0 ? 'success' : 'info',
+        result.skipped > 0
+          ? '被跳过的是没有声明远程更新源的插件（或已是最新版）；要升级它们请到插件商店里单独装。'
+          : undefined
+      )
+    } catch (reason) {
+      toast('批量更新失败', 'error', reason instanceof Error ? reason.message : undefined)
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  /**
+   * 清理已卸载插件残留的数据。
+   *
+   * 破坏性且**不可恢复**，所以先问一句（与卸载同一个路子）——说的是会发生什么，不是「确定吗」。
+   */
+  const cleanup = async (): Promise<void> => {
+    const ok = window.confirm(
+      '清理已卸载插件残留的数据？这些数据属于当前没装着的插件，清理后无法恢复。'
+    )
+    if (!ok) return
+    setCleaning(true)
+    try {
+      const result = await cleanupPluginStorage(requireClient())
+      toast(
+        result.cleaned > 0 ? `已清理 ${result.cleaned} 个插件的残留数据` : '没有需要清理的残留数据',
+        result.cleaned > 0 ? 'success' : 'info'
+      )
+    } catch (reason) {
+      toast('清理失败', 'error', reason instanceof Error ? reason.message : undefined)
+    } finally {
+      setCleaning(false)
+    }
   }
 
   /**
@@ -99,15 +209,66 @@ export function ExtensionsPage(): React.JSX.Element {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="btn"
-          data-size="sm"
-          onClick={() => void load().catch(() => toast('扩展列表刷新失败', 'error'))}
-        >
-          <IconRefresh size={14} />
-          重新读取
-        </button>
+        {/* 四个动作按「改这一本机 → 动远端 → 收尾」排；重新读取只是个图标按钮，
+            它是查错用的，不该跟三个真实动作抢同一行位置 */}
+        <div className="row">
+          <button
+            type="button"
+            className="icon-btn"
+            data-tip="重新读取已安装列表"
+            aria-label="重新读取已安装列表"
+            onClick={() => void load().catch(() => toast('扩展列表刷新失败', 'error'))}
+          >
+            <IconRefresh size={15} />
+          </button>
+
+          <button
+            type="button"
+            className="btn"
+            data-size="sm"
+            disabled={uploadPercent !== null}
+            onClick={() => fileRef.current?.click()}
+          >
+            {uploadPercent === null ? <IconUpload size={14} /> : <IconLoader size={14} />}
+            {uploadPercent === null ? '上传插件' : `上传中 ${uploadPercent}%`}
+          </button>
+
+          <button
+            type="button"
+            className="btn"
+            data-size="sm"
+            disabled={updating || ordered.length === 0}
+            onClick={() => void updateAll()}
+          >
+            {updating ? <IconLoader size={14} /> : <IconDownload size={14} />}
+            全部更新
+          </button>
+
+          <button
+            type="button"
+            className="btn"
+            data-size="sm"
+            disabled={cleaning}
+            onClick={() => void cleanup()}
+          >
+            {cleaning ? <IconLoader size={14} /> : <IconTrash size={14} />}
+            清理数据
+          </button>
+        </div>
+
+        {/* 选文件必须由点击直接触发，所以这个 input 一直挂着、只是看不见 */}
+        <input
+          ref={fileRef}
+          type="file"
+          hidden
+          accept=".zip"
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            // 清空 value：同一个文件再选一次也要能触发 change（否则第二次毫无反应）
+            event.target.value = ''
+            if (file) void upload(file)
+          }}
+        />
       </div>
 
       {!loaded && !error ? (
@@ -163,6 +324,42 @@ export function ExtensionsPage(): React.JSX.Element {
             />
           ))}
         </ul>
+      ) : null}
+
+      {/* 批量更新的失败清单。逐条原因塞不进 toast（那里只有一行），而「哪个插件为什么没升上去」
+          正是用户要的东西 —— 尤其是「下载失败」这类需要他自己去看网络/源的 */}
+      {updateFailure ? (
+        <Modal
+          title="部分扩展没能更新"
+          onClose={() => setUpdateFailure(null)}
+          footer={
+            <button type="button" className="btn" onClick={() => setUpdateFailure(null)}>
+              知道了
+            </button>
+          }
+        >
+          <p className="field-hint">
+            共 {updateFailure.total} 个：更新 {updateFailure.updated} 个 · 失败{' '}
+            {updateFailure.failed} 个 · 跳过 {updateFailure.skipped} 个。以下是失败的原因。
+          </p>
+          <ul className="extension-list">
+            {updateFailure.results
+              .filter((item) => !item.success && item.error)
+              .map((item) => (
+                <li className="extension-row" key={item.entryPath || item.pluginId}>
+                  <div className="extension-info">
+                    <div className="extension-name">
+                      {item.pluginName || item.entryPath}
+                      {item.currentVersion ? (
+                        <span className="badge">本机 v{item.currentVersion}</span>
+                      ) : null}
+                    </div>
+                    <div className="extension-meta">{item.error}</div>
+                  </div>
+                </li>
+              ))}
+          </ul>
+        </Modal>
       ) : null}
     </div>
   )
