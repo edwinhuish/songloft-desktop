@@ -19,6 +19,7 @@ import {
   type TraySnapshot
 } from '@shared/ipc'
 import { installAppMenu } from './app-menu'
+import { applyLocalCacheLimit, clearLocalCache, readLocalCache } from './cache'
 import { openTextFile, saveTextFile } from './files'
 import { registerMediaKeys } from './media-keys'
 import { fetchCoverBytes, probeServer } from './probe'
@@ -65,6 +66,11 @@ if (!gotTheLock) {
 }
 
 const store = new ConfigStore()
+
+// 本机缓存上限得赶在 ready 之前交给 Chromium（它只在解析启动参数时读一次，运行中改不了），
+// 所以放在这里、而不是等界面来要。设置页会照这个事实提示「重启后生效」。
+applyLocalCacheLimit(store.getSettings().localCacheMaxSize)
+
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
 let disposeMediaKeys: (() => void) | null = null
@@ -253,6 +259,8 @@ function registerIpcHandlers(): void {
     saveTextFile(mainWindow, suggestedName, contents)
   )
   ipcMain.handle(IPC.fileOpen, () => openTextFile(mainWindow))
+  ipcMain.handle(IPC.localCacheStats, () => readLocalCache())
+  ipcMain.handle(IPC.localCacheClear, () => clearLocalCache())
   ipcMain.handle(IPC.colorExtract, (_event, url: string) => fetchCoverBytes(url))
   ipcMain.handle(IPC.appInfo, (): AppInfo => ({
     name: app.getName(),

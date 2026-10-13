@@ -15,6 +15,7 @@ import type {
   AppSettings,
   FileOpenResult,
   FileSaveResult,
+  LocalCacheStats,
   MediaCommand,
   ServerEntry,
   TraySnapshot,
@@ -63,6 +64,10 @@ const bridge: SongloftBridge = {
     save: (suggestedName, contents) =>
       ipcRenderer.invoke(IPC.fileSave, suggestedName, contents) as Promise<FileSaveResult>,
     open: () => ipcRenderer.invoke(IPC.fileOpen) as Promise<FileOpenResult | null>
+  },
+  cache: {
+    stats: () => ipcRenderer.invoke(IPC.localCacheStats) as Promise<LocalCacheStats>,
+    clear: () => ipcRenderer.invoke(IPC.localCacheClear) as Promise<LocalCacheStats>
   },
   app: {
     info: () => ipcRenderer.invoke(IPC.appInfo)

@@ -10,6 +10,7 @@ import type {
   AppSettings,
   FileOpenResult,
   FileSaveResult,
+  LocalCacheStats,
   MediaCommand,
   ServerEntry,
   ServerProbeResult,
@@ -61,6 +62,12 @@ export interface SongloftBridge {
     save(suggestedName: string, contents: string): Promise<FileSaveResult>
     /** 弹打开框读文本；取消返回 null */
     open(): Promise<FileOpenResult | null>
+  }
+  cache: {
+    /** 本机磁盘缓存（Chromium 的 HTTP 缓存）的占用与**生效中**的上限 */
+    stats(): Promise<LocalCacheStats>
+    /** 清掉本机缓存并返回清理后的占用 */
+    clear(): Promise<LocalCacheStats>
   }
   app: {
     info(): Promise<AppInfo>

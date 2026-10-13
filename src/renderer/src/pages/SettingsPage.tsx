@@ -164,7 +164,12 @@ export function SettingsPage({ section }: { section: SettingsSection }): React.J
           {section === 'appearance' ? <AppearanceSettings /> : null}
           {section === 'playback' ? <PlaybackSettings /> : null}
           {section === 'library' ? <LibrarySettings /> : null}
-          {section === 'cache' ? <CacheSettings /> : null}
+          {section === 'cache' ? (
+            <>
+              <ServerCacheSettings />
+              <LocalCacheSettings />
+            </>
+          ) : null}
           {section === 'network' ? <NetworkSettings /> : null}
           {section === 'data' ? <DataSettings /> : null}
           {section === 'server' ? <ServerSettings /> : null}
@@ -1627,8 +1632,10 @@ function FailedFingerprintsModal({
 
 const GB = 1024 ** 3
 
-/** 缓存上限档位（字节，0 = 不限）。给档位而不是任意值：上限差几百兆没有实际意义 */
-const CACHE_SIZE_STEPS: { value: number; label: string }[] = [
+type SizeStep = { value: number; label: string }
+
+/** 服务端缓存上限档位（字节，0 = 不限）。给档位而不是任意值：上限差几百兆没有实际意义 */
+const CACHE_SIZE_STEPS: SizeStep[] = [
   { value: 0, label: '不限' },
   { value: GB / 2, label: '512 MB' },
   { value: GB, label: '1 GB' },
@@ -1641,14 +1648,37 @@ const CACHE_SIZE_STEPS: { value: number; label: string }[] = [
 ]
 
 /**
+ * 本机缓存上限档位。
+ *
+ * 档位比服务端那组小：这是**用户自己的盘**，不是服务器的大盘；上游客户端也是这个尺度
+ * （100 MB ~ 10 GB，默认 1 GB）。「不限」保留 —— 那时交回 Chromium 自己按可用空间决定。
+ */
+const LOCAL_CACHE_SIZE_STEPS: SizeStep[] = [
+  { value: 0, label: '不限' },
+  { value: 100 * 1024 ** 2, label: '100 MB' },
+  { value: 500 * 1024 ** 2, label: '500 MB' },
+  { value: GB, label: '1 GB' },
+  { value: 2 * GB, label: '2 GB' },
+  { value: 5 * GB, label: '5 GB' },
+  { value: 10 * GB, label: '10 GB' }
+]
+
+/**
  * 上限的显示文案。
  *
  * 优先用档位自己的名字 —— 下拉里写的是「2 GB」，同一张卡片里的「上限」那行若用通用字节
- * 格式化写成「2.00 GB」，看上去就像两个不同的值。只有后端存着档位外的值时才退回通用写法。
+ * 格式化写成「2.00 GB」，看上去就像两个不同的值。只有存着档位外的值时才退回通用写法。
  */
-function cacheSizeLabel(size: number): string {
+function sizeLabel(steps: SizeStep[], size: number): string {
   if (size <= 0) return '不限'
-  return CACHE_SIZE_STEPS.find((step) => step.value === size)?.label ?? formatBytes(size)
+  return steps.find((step) => step.value === size)?.label ?? formatBytes(size)
+}
+
+/** 档位之外的当前值补进选项里，别让它显示成别的档 */
+function withCurrentStep(steps: SizeStep[], current: number): SizeStep[] {
+  return steps.some((step) => step.value === current)
+    ? steps
+    : [...steps, { value: current, label: formatBytes(current) }]
 }
 
 /** 落盘转码目标格式；空值 = 不转码（后端语义） */
@@ -1669,7 +1699,7 @@ const TRANSCODE_QUALITIES: SelectOption<string>[] = [
   { value: '128', label: '128 kbps' }
 ]
 
-function CacheSettings(): React.JSX.Element {
+function ServerCacheSettings(): React.JSX.Element {
   const stats = useAsync(() => getCacheStats(requireClient()), [])
   const config = useAsync(() => getCacheConfig(requireClient()), [])
   const [busy, setBusy] = useState<string | null>(null)
@@ -1678,10 +1708,8 @@ function CacheSettings(): React.JSX.Element {
   const used = stats.data?.total_size ?? 0
   const max = stats.data?.max_size ?? 0
   const ratio = max > 0 ? Math.min(1, used / max) : 0
-  // 后端可能存着一个不在档位里的上限（被别的客户端设过）：补一项，别让它显示成别的档
-  const sizeOptions = CACHE_SIZE_STEPS.some((step) => step.value === max)
-    ? CACHE_SIZE_STEPS
-    : [...CACHE_SIZE_STEPS, { value: max, label: cacheSizeLabel(max) }]
+  // 后端可能存着一个不在档位里的上限（被别的客户端设过）
+  const sizeOptions = withCurrentStep(CACHE_SIZE_STEPS, max)
 
   /** 配置写入统一走这里：后端 PUT 收的是完整配置，写完回读，界面永远显示真正落下的值 */
   const writeConfig = (patch: Partial<CacheConfigInput>): void => {
@@ -1743,7 +1771,7 @@ function CacheSettings(): React.JSX.Element {
             </div>
             <div className="stat-row">
               <span>上限</span>
-              <span className="stat-row-value">{cacheSizeLabel(max)}</span>
+              <span className="stat-row-value">{sizeLabel(CACHE_SIZE_STEPS, max)}</span>
             </div>
             <div className="stat-row">
               <span>文件数</span>
@@ -2010,6 +2038,125 @@ function CacheDirModal({
         </div>
       ) : null}
     </Modal>
+  )
+}
+
+/**
+ * 本机缓存（客户端自己那一份）。
+ *
+ * 与服务端音乐缓存分开成两张卡：那份在服务器上、所有设备共用；这份只落在**这台机器**上，
+ * 换服务器、换账号都自己一份，也不会跟着走到别的设备。
+ */
+function LocalCacheSettings(): React.JSX.Element {
+  const { settings, patch } = useSettings()
+  const cache = useAsync(() => window.songloft.cache.stats(), [])
+  const [clearing, setClearing] = useState(false)
+
+  const size = cache.data?.size ?? 0
+  /*
+   * 「上限」显示主进程回传的**生效值**，而不是设置里那个。
+   * 用户刚调完还没重启时两者不同 —— 那时把设置值摆成「上限」就是在说谎，
+   * 而真实生效值有个明确的去处：下拉的说明里会补一句「已改为 X，重启应用后生效」。
+   */
+  const applied = cache.data?.maxSize ?? 0
+  const wanted = settings.localCacheMaxSize
+  const sizeOptions = withCurrentStep(LOCAL_CACHE_SIZE_STEPS, wanted)
+
+  const limitDesc = (): string => {
+    if (wanted !== applied) {
+      return `已改为 ${sizeLabel(LOCAL_CACHE_SIZE_STEPS, wanted)}，重启应用后生效 —— 上限只能由启动参数交给 Chromium，运行中改不了`
+    }
+    if (wanted === 0) return '不限时交给 Chromium 按可用磁盘空间自行决定'
+    return '超出上限后 Chromium 按最近最少使用淘汰旧文件'
+  }
+
+  const clean = (): void => {
+    if (
+      !window.confirm(
+        `清理本机缓存（约 ${formatBytes(size)}）？封面图与接口响应之后要重新从服务器拉取。`
+      )
+    )
+      return
+    setClearing(true)
+    const before = size
+    void window.songloft.cache
+      .clear()
+      .then((next) => {
+        cache.reload()
+        const freed = before - next.size
+        toast(freed > 0 ? `已清理，释放 ${formatBytes(freed)}` : '已清理', 'success')
+      })
+      .catch((error: unknown) =>
+        toast('清理失败', 'error', error instanceof Error ? error.message : undefined)
+      )
+      .finally(() => setClearing(false))
+  }
+
+  return (
+    <Card
+      title="本地缓存"
+      action={
+        <button type="button" className="btn" data-size="sm" onClick={cache.reload}>
+          <IconRefresh size={14} />
+          刷新
+        </button>
+      }
+    >
+      <Row
+        block
+        title="占用"
+        desc={
+          cache.error
+            ? `读取失败：${cache.error}`
+            : '客户端把封面图与接口响应缓存在本机磁盘上（Chromium 的会话缓存）'
+        }
+      >
+        <div className="stat-list">
+          <div className="stat-row">
+            <span>已用</span>
+            <span className="stat-row-value">{cache.loading ? '统计中…' : formatBytes(size)}</span>
+          </div>
+          <div className="stat-row">
+            <span>上限</span>
+            <span className="stat-row-value">
+              {cache.loading ? '统计中…' : sizeLabel(LOCAL_CACHE_SIZE_STEPS, applied)}
+            </span>
+          </div>
+        </div>
+      </Row>
+
+      <Row title="最大本地缓存大小" desc={limitDesc()}>
+        <select
+          className="input"
+          style={{ width: 150 }}
+          value={String(wanted)}
+          aria-label="最大本地缓存大小"
+          onChange={(event) => void patch({ localCacheMaxSize: Number(event.target.value) })}
+        >
+          {sizeOptions.map((step) => (
+            <option key={step.value} value={String(step.value)}>
+              {step.label}
+            </option>
+          ))}
+        </select>
+      </Row>
+
+      <Row
+        title="清理本地缓存"
+        desc="封面图与接口响应会被清掉，下次用到时重新从服务器拉取；曲库数据、登录状态与设置都不受影响"
+      >
+        <button
+          type="button"
+          className="btn"
+          data-variant="danger"
+          disabled={clearing}
+          onClick={clean}
+        >
+          {clearing ? <IconLoader size={15} /> : <IconTrash size={15} />}
+          清理本地缓存
+        </button>
+      </Row>
+    </Card>
   )
 }
 

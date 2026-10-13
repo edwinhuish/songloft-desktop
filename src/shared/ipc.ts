@@ -37,6 +37,10 @@ export const IPC = {
   fileSave: 'file:save',
   /** 弹打开框读文本（导入歌单备份）；取消返回 null */
   fileOpen: 'file:open',
+  /** 本机磁盘缓存（Chromium 的 HTTP 缓存）占用。服务端缓存那套走 HTTP 接口，这个是本机自己的 */
+  localCacheStats: 'cache:stats',
+  /** 清掉本机磁盘缓存，返回清理后的占用 */
+  localCacheClear: 'cache:clear',
   /** 主进程代取封面字节（canvas 取主色需要，绕开跨域画布污染） */
   colorExtract: 'cover:extract',
   appInfo: 'app:info',
@@ -81,6 +85,19 @@ export interface FileSaveResult {
 export interface FileOpenResult {
   name: string
   contents: string
+}
+
+/**
+ * 本机磁盘缓存（客户端自己的那份）。
+ *
+ * 与 `CacheStats`（服务端音乐缓存）是两码事：那份在服务器上、所有设备共用；这份是本机
+ * Chromium 会话的 HTTP 缓存，落在 userData 里，换服务器 / 换账号都清，换台机器就没有。
+ */
+export interface LocalCacheStats {
+  /** 已占用字节 */
+  size: number
+  /** 生效中的上限字节（0 = 交给 Chromium 按可用磁盘空间自行决定） */
+  maxSize: number
 }
 
 export interface ServerProbeResult {
@@ -136,6 +153,13 @@ export interface AppSettings {
   quality: 'original' | '128' | '192' | '320'
   /** 忽略 TLS 证书校验（自签/内网证书）。只影响 Chromium 网络栈的本机会话。 */
   allowInsecureTls: boolean
+  /**
+   * 本机磁盘缓存上限（字节，0 = 不限）。
+   *
+   * Chromium 只在启动那一刻读一次上限（`--disk-cache-size`），运行中改不了 —— 所以这个值
+   * 存下来、下次启动时交给它，设置页会明说「重启后生效」。
+   */
+  localCacheMaxSize: number
   /** 侧栏是否折叠 */
   sidebarCollapsed: boolean
   /** 记住的播放队列（会话恢复） */
@@ -162,6 +186,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   volumeNormalize: false,
   quality: 'original',
   allowInsecureTls: false,
+  // 与上游客户端的默认档一致：本机缓存默认给 1 GB，再多就该自己清或调小了
+  localCacheMaxSize: 1024 ** 3,
   sidebarCollapsed: false,
   lastQueue: [],
   lastQueueIndex: -1,

@@ -104,6 +104,8 @@ src/
 │  ├─ app-icon.ts     窗口图标定位（只对 X11 / Windows / macOS 生效；Wayland 见 §8.11）
 │  ├─ media-keys.ts   媒体键（globalShortcut 兜底；优先走 Media Session 自动映射）
 │  ├─ store.ts        本地持久化：设置 / 凭据 / 服务器列表（JSON，落在 userData）
+│  ├─ cache.ts        本机磁盘缓存（Chromium 会话缓存）的占用 / 清理 / 启动上限
+│  ├─ files.ts        导出 / 导入的文本文件对话框（读入限 32MB）
 │  ├─ probe.ts        后端探测（本地 Blob 解码，避免为它关掉 webSecurity）
 │  ├─ tray.ts         托盘图标与菜单
 │  └─ app-menu.ts     应用菜单（窗口无边框、看不到菜单栏，但它提供全局加速键）
@@ -323,4 +325,5 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
 文件夹浏览、逐字歌词与点击跳转、播放队列、命令面板、扫描与重复检测、设置项。
 
 未实现（换栈后需重做）：`jsplugin` 插件系统（上游约 6,100 行）、均衡器、无缝播放 / 淡入淡出、
-DLNA 投送、桌面歌词。详见 README 的「与上游 Flutter 版的差异」一节。
+DLNA 投送、桌面歌词、「缓存到本机」（把单曲下载到设备本地离线播放 —— 设置页里那份「本地缓存」
+是**另一回事**，它清的是 Chromium 会话缓存）。详见 README 的「与上游 Flutter 版的差异」一节。
