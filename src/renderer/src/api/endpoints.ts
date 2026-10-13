@@ -638,6 +638,31 @@ export function setAutoScan(client: ApiClient, setting: AutoScanSetting): Promis
 /* ─────────────────────────── 刷新元数据 ─────────────────────────── */
 
 /**
+ * 网络歌曲标题来源：`tag` 时「刷新元数据」会用音频标签里的标题**覆盖**网络歌曲标题。
+ *
+ * ★ 与 `getScanTitleSource` 是**两个互不相干的后端设置**（配置键
+ *   `remote_title_source` vs `scan_title_source`），而且默认值相反 ——
+ *   这里默认 `filename`（不覆盖），扫描那里默认 `tag`（优先标签）：
+ *   前者管「刷新时要不要盖住已有标题」，后者管「提取出来的标题取哪个」。
+ *   两者相乘的后果见 SettingsPage 里「元数据维护」卡片的说明。
+ */
+export function getRemoteTitleSource(client: ApiClient): Promise<ScanTitleSource> {
+  return client
+    .request<{ title_source?: string }>('/settings/remote-title-source')
+    .then((res) => (res.title_source === 'tag' ? 'tag' : 'filename'))
+}
+
+export function setRemoteTitleSource(
+  client: ApiClient,
+  titleSource: ScanTitleSource
+): Promise<void> {
+  return client.request<void>('/settings/remote-title-source', {
+    method: 'PUT',
+    body: { title_source: titleSource }
+  })
+}
+
+/**
  * 重新探测「元数据缺失」的歌曲（本地文件 + 已缓存的网络歌曲）。
  * 后台异步跑，只补空缺、不改写音频文件里的标签，进度与取消走下面两个端点。
  */
