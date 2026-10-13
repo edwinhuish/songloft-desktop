@@ -141,16 +141,20 @@ function Row({ title, desc, server, children }: RowProps): React.JSX.Element {
   )
 }
 
-function Card({
-  title,
-  children
-}: {
+interface CardProps {
   title: string
+  /** 标题右侧的操作区（例如计数与刷新），与标题同一行 */
+  action?: React.ReactNode
   children: React.ReactNode
-}): React.JSX.Element {
+}
+
+function Card({ title, action, children }: CardProps): React.JSX.Element {
   return (
     <section className="setting-card">
-      <div className="setting-card-title">{title}</div>
+      <div className="setting-card-title">
+        {title}
+        {action ? <div className="setting-card-actions">{action}</div> : null}
+      </div>
       {children}
     </section>
   )
@@ -890,7 +894,11 @@ function ServerSettings(): React.JSX.Element {
   const hls = useAsync(() => getHlsProxyEnabled(requireClient()), [])
   const tokens = useAsync(() => getTokens(requireClient(), 50, 0), [])
 
-  const all: TokenInfo[] = tokens.data?.tokens ?? []
+  // 只列 refresh token：access token 短命、一台设备会刷出很多个，列出来只是噪音；
+  // refresh token 才对应「一条登录设备记录」，吊销它才会让那台设备下线。
+  const devices: TokenInfo[] = (tokens.data?.tokens ?? []).filter(
+    (token) => token.token_type === 'refresh'
+  )
 
   return (
     <>
@@ -945,34 +953,35 @@ function ServerSettings(): React.JSX.Element {
         </Row>
       </Card>
 
-      <Card title="登录设备 / 令牌">
-        <Row title="令牌总数" desc="可以在别的设备上从这里吊销不再使用的登录">
-          <div className="row" style={{ gap: 8 }}>
-            <span className="badge">{all.length}</span>
+      <Card
+        title="登录设备"
+        action={
+          <>
+            <span className="badge">{devices.length}</span>
             <button type="button" className="btn" data-size="sm" onClick={() => tokens.reload()}>
               <IconRefresh size={14} />
               刷新
             </button>
-          </div>
-        </Row>
-
+          </>
+        }
+      >
         {tokens.loading ? (
-          <Row title="正在读取令牌…">
+          <Row title="正在读取设备…">
             <IconLoader size={16} />
           </Row>
         ) : tokens.error ? (
           <Row title="读取失败" desc={tokens.error}>
             <span />
           </Row>
-        ) : all.length === 0 ? (
-          <Row title="没有可管理的令牌">
+        ) : devices.length === 0 ? (
+          <Row title="没有可管理的设备">
             <span />
           </Row>
         ) : (
-          all.map((token) => (
+          devices.map((token) => (
             <Row
               key={token.token_id}
-              title={`${token.client_info ?? '未知设备'} · ${token.token_type}`}
+              title={token.client_info ?? '未知设备'}
               desc={`签发 ${formatDate(token.created_at)} · 过期 ${formatDate(token.expires_at)}${
                 token.revoked_at ? ' · 已吊销' : ''
               }`}

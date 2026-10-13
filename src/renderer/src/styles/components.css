@@ -1042,9 +1042,21 @@ select.input option {
 }
 
 .setting-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 14px 0 10px;
   font-size: 14px;
   font-weight: 630;
+}
+
+/* 标题右侧的操作区（计数徽标、刷新按钮）：始终贴右边，且不被标题挤扁 */
+.setting-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin-left: auto;
 }
 
 .setting-row {
