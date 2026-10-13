@@ -30,6 +30,8 @@ const MINI_LYRICS_SIZE = { width: 400, height: 380 }
 
 export interface MiniModeController {
   setState: (state: MiniModeState) => void
+  /** 重新落一遍迷你态的窗口状态（见 createMainWindow 里的 reassertMiniWindow）。不在迷你态时是空操作 */
+  reassert: () => void
 }
 
 /**
@@ -175,7 +177,22 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
     window.setBounds({ x, y, ...(miniLyrics ? MINI_LYRICS_SIZE : MINI_SIZE) })
   }
 
+  /**
+   * 把迷你态的窗口状态重新落一遍 —— **尺寸与置顶一起**。
+   *
+   * 两件都要，是因为平台在几个时机（退出全屏、取消最大化、从最小化回来）会把「窗口状态」
+   * 整份摆回去，而置顶是这份状态里的一项：只补尺寸的话，表现是「小窗还在，却不再浮在
+   * 别的窗口上面了」—— 用户看到的是「置顶时灵时不灵」。
+   * 幂等：重复设没有副作用（与 applyMiniSize 同一个口径）。
+   */
+  const reassertMiniWindow = (): void => {
+    if (!miniActive || window.isDestroyed()) return
+    window.setAlwaysOnTop(true, 'floating')
+    applyMiniSize()
+  }
+
   miniController = {
+    reassert: reassertMiniWindow,
     setState: (state) => {
       if (window.isDestroyed()) return
 
@@ -201,9 +218,8 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
         // 正常态的最小尺寸（1080×660）比迷你窗还大，不放宽的话 setBounds 会被它顶回去
         window.setMinimumSize(MINI_SIZE.width, MINI_SIZE.height)
         window.setResizable(false)
-        // 迷你播放器的用法就是「停在别的东西旁边」，所以置顶
-        window.setAlwaysOnTop(true, 'floating')
-        applyMiniSize()
+        // 尺寸 + 置顶（迷你播放器的用法就是「停在别的东西旁边」）一并落一次
+        reassertMiniWindow()
         return
       }
 
@@ -220,15 +236,14 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
 
   /*
    * 退出全屏 / 取消最大化是**异步**的（Linux 上尤其明显）：平台随后会把「退出这两个状态
-   * 该还原到的尺寸」摆上去，把刚设好的迷你尺寸覆盖掉 —— 表现是大窗里画着一条小播放条。
-   * 所以这两件事落定之后再补一次。幂等，重复设没有副作用。
+   * 该还原到的窗口状态」摆上去，把刚设好的迷你尺寸（还有置顶）覆盖掉 —— 表现是大窗里画着
+   * 一条小播放条，或者小窗不再浮在上面。所以这几件事落定之后再补一次。
    */
-  window.on('leave-full-screen', () => {
-    if (miniActive) applyMiniSize()
-  })
-  window.on('unmaximize', () => {
-    if (miniActive) applyMiniSize()
-  })
+  window.on('leave-full-screen', reassertMiniWindow)
+  window.on('unmaximize', reassertMiniWindow)
+  /* 从最小化回来（迷你条右上角就有一颗最小化钮，托盘 / 任务栏也能唤回）同样是「状态被摆回」
+     的时机之一，一并补。 */
+  window.on('restore', reassertMiniWindow)
 
   // ── 位置尺寸记忆（防抖：拖动窗口期间不该狂写盘）────────────────────────
   let saveTimer: NodeJS.Timeout | null = null
