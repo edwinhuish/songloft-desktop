@@ -221,7 +221,7 @@ export const useUi = create<UiState>((set, get) => ({
       mini,
       /**
        * 进的时候把当前窗口尺寸记下来。此刻主进程还没收到通知（那边是 effect 里发的），
-       * 所以读到的就是正常尺寸 —— 迟一步的话读到的就是迷你窗那 520×72 了。
+       * 所以读到的就是正常尺寸 —— 迟一步的话读到的就是迷你窗那 560×64 了。
        */
       miniRestore: mini
         ? { width: window.innerWidth, height: window.innerHeight }

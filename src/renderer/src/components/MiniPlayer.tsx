@@ -4,9 +4,12 @@
  * ★ 它不是「另一个播放器」：读同一个 usePlayer、调同一套 seek / toggle / next / previous，
  *   进度条连组件都复用底栏那一份（PlayerProgress）。「与现有底栏保持一致」只有这样才守得住 ——
  *   各写一套的话，两处的拖动手感（松手才 seek）与键盘行为迟早分叉。
- * ★ 窗口是无边框的，所以拖拽区与「退出迷你 / 关闭」两颗钮必须自己给：正常界面里的标题栏
- *   此刻正被藏着，不给就等于把用户关在了一个挪不动也关不掉的窗里。
- * ★ 这里刻意只留播放必需的东西（上一首 / 播放 / 下一首 + 歌词 / 退出 / 关闭）：
+ * ★ 窗口是无边框的，所以拖拽区与「退出迷你」那颗钮必须自己给：正常界面里的标题栏此刻正被
+ *   藏着，不给就等于把用户关在了一个挪不动也回不去的窗里。
+ *   **关闭则不在这里**：这一条窄栏上每多一颗钮就是从歌名那里抢一块地方，而关窗本来就有
+ *   更好的去处（Ctrl+Q 是应用菜单给的全局加速键、托盘菜单里也有「退出」），
+ *   另有一个「退出迷你模式」的入口把用户送回带标题栏的正常界面。
+ * ★ 这里刻意只留播放必需的东西（上一首 / 播放 / 下一首 + 歌词 / 退出）：
  *   迷你模式的意思就是把它挂在屏幕一角，不该再摆音量条、播放模式、队列那一整套。
  * ★ 栅格的顺序是「播放条在**上**、歌词在下」（DOM 顺序同此），不是反过来：窗口加高时长的是
  *   下半截（main/windows.ts 的 applyMiniSize 不动位置），歌词摆下面才等于「原地展开」——
@@ -17,7 +20,6 @@
 import { useMemo, useState } from 'react'
 
 import {
-  IconClose,
   IconLyrics,
   IconPause,
   IconPlay,
@@ -94,7 +96,7 @@ export function MiniPlayer(): React.JSX.Element {
           disabled={!song}
           onClick={() => void player.toggle()}
         >
-          {player.playing ? <IconPause size={18} /> : <IconPlay size={18} />}
+          {player.playing ? <IconPause size={16} /> : <IconPlay size={16} />}
         </button>
         <button
           type="button"
@@ -107,7 +109,7 @@ export function MiniPlayer(): React.JSX.Element {
           <IconSkipForward size={18} />
         </button>
 
-        {/* 传输控制与「视图」两组之间那条细线：六颗图标一字排开时分不出组 */}
+        {/* 传输控制与「视图」两组之间那条细线：几颗图标一字排开时分不出组 */}
         <span className="mini-divider" aria-hidden="true" />
 
         <button
@@ -128,16 +130,6 @@ export function MiniPlayer(): React.JSX.Element {
           onClick={() => setMini(false)}
         >
           <IconRestore size={16} />
-        </button>
-        <button
-          type="button"
-          className="icon-btn"
-          data-variant="close"
-          data-tip="关闭"
-          aria-label="关闭"
-          onClick={() => void window.songloft.window.close()}
-        >
-          <IconClose size={16} />
         </button>
       </footer>
 

@@ -16,11 +16,11 @@ const MIN_HEIGHT = 660
 /**
  * 迷你模式的两种窗口尺寸：只有播放条 / 播放条 + 歌词。
  *
- * 与渲染层是对着定的：那条播放条在 CSS 里是 72px 高（`.mini-player` 的 --mini-bar-h），
+ * 与渲染层是对着定的：那条播放条在 CSS 里是 64px 高（`.mini-player` 的 --mini-bar-h），
  * 展开歌词那档 380 减掉它，剩下的正好是一屏歌词；宽度要放下封面 + 歌名/歌手 + 时长
- * 与六颗按钮（见 components/MiniPlayer.tsx）。改一边就要看一眼另一边。
+ * 与五颗按钮（见 components/MiniPlayer.tsx）。改一边就要看一眼另一边。
  */
-const MINI_SIZE = { width: 560, height: 72 }
+const MINI_SIZE = { width: 560, height: 64 }
 const MINI_LYRICS_SIZE = { width: 560, height: 380 }
 
 export interface MiniModeController {
@@ -153,7 +153,7 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
   // ── 迷你模式（窗口几何由这里接管，见上面的 setMiniMode）─────────────────
   /**
    * 是否处于迷你模式。下面 scheduleSave 与关窗那两处都要看它 ——
-   * 迷你期间窗口是 440×72，那份 bounds 一旦写进配置，**下次开机就是个小窗，
+   * 迷你期间窗口是 560×64，那份 bounds 一旦写进配置，**下次开机就是个小窗，
    * 而且再也长不回来**（配置里没有第二份「正常尺寸」可用）。
    */
   let miniActive = false
@@ -252,7 +252,7 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
     scheduleSave()
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = null
-    // 迷你态下别把 440×72 当终值写进去：配置里留着的仍该是正常窗口那一份
+    // 迷你态下别把迷你尺寸当终值写进去：配置里留着的仍该是正常窗口那一份
     if (!window.isDestroyed() && !miniActive) {
       const maximized = window.isMaximized()
       const [width, height] = window.getSize()

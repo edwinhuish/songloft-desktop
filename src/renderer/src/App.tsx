@@ -132,7 +132,7 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     /*
       顺带挂到 <html> 上：toast、上下文菜单、提示这些是**挂在 body 上的另一棵子树**
-      （不在 .shell 里面），只给 .shell 打标记够不着它们 —— 而迷你窗只有 72px 高，
+      （不在 .shell 里面），只给 .shell 打标记够不着它们 —— 而迷你窗只有 64px 高，
       提示原本那 58px 的落点会被直接顶出窗外（见 components.css 里那条 html[data-mini]）。
     */
     document.documentElement.dataset.mini = mini ? 'true' : 'false'
@@ -264,7 +264,7 @@ export function App(): React.JSX.Element {
     if (status !== 'authenticated') {
       // 退出登录 / 切服务器都要清干净：留着的话标题栏会继续挂着**上一台服务器**的扩展
       usePlugins.getState().reset()
-      // 迷你模式也得退出：登录页要摆在一个 560×72 的窗里是没法用的
+      // 迷你模式也得退出：登录页要摆在一个 560×64 的窗里是没法用的
       useUi.getState().setMini(false)
       return
     }
