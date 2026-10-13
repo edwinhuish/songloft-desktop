@@ -93,6 +93,18 @@ window.__t = {
     el.click();
     return 'OK';
   },
+  /**
+   * 按文字点第 n 个匹配。
+   * 用在"同一张卡片里有两个同名按钮"的地方（服务端更新与客户端更新的按钮都叫「检查更新」），
+   * byText 只认第一个，点不着后面那个。
+   */
+  clickNth: (sel, text, index) => {
+    const list = [...document.querySelectorAll(sel)].filter((e) => (e.textContent || '').includes(text));
+    const el = list[index];
+    if (!el) return 'NOT_FOUND:' + sel + '/' + text + '#' + index;
+    el.click();
+    return 'OK';
+  },
   /** 按 aria-label 点：标题栏那排是纯图标按钮，byText 够不着它们 */
   clickLabel: (label) => {
     const el = document.querySelector('[aria-label="' + label + '"]');
@@ -221,6 +233,8 @@ window.__t = {
      * （控制栏的播放进度是另一个类名 .playerbar-progress-fill，不会混进来。）
      */
     usageBars: document.querySelectorAll('.progress-fill').length,
+    // 开着的开关数。断言开关"真的翻了"要用它 —— 只断言开关存在，onChange 没接上也照样绿
+    switchesOn: document.querySelectorAll('[role="switch"][aria-checked="true"]').length,
     // 弹窗（.modal 才是那个面板；.overlay 是一直挂在 DOM 里的遮罩容器，数它没有意义）
     modals: document.querySelectorAll('.modal').length,
     /*
@@ -545,34 +559,66 @@ const STEPS = [
     800,
     { modals: exactly(0) }
   ],
+  /*
+   * 客户端更新弹窗。按钮文字与服务端那行同名（都叫「检查更新」），所以按序号点第二个 ——
+   * 客户端那行在后。
+   * 只断言两端确定的：当前版本来自本机、底部两个键来自弹窗自己。结果那句话不钉死 ——
+   * 巡检机可能连不上 GitHub（CI 的共享 IP 还会撞上频率限制），那时弹窗画的是失败提示。
+   */
+  [
+    '29-client-update-modal',
+    "window.__t.clickNth('.btn', '检查更新', 1)",
+    2200,
+    { modals: exactly(1), modalText: containsAll('当前版本', '关闭', '打开发布页') }
+  ],
+  [
+    '30-client-update-modal-closed',
+    "window.__t.click('.modal-foot .btn', '关闭')",
+    800,
+    { modals: exactly(0) }
+  ],
+  // 自动检查更新开关：关一下再开回来。这两步才叫"验了开关" —— 只断言它存在的话，
+  // onChange 根本没接上（点了没反应）也照样绿
+  [
+    '31-auto-update-switch-off',
+    'window.__t.click(\'button[aria-label="启动时自动检查更新"]\')',
+    1000,
+    { switchesOn: exactly(0) }
+  ],
+  [
+    '32-auto-update-switch-on',
+    'window.__t.click(\'button[aria-label="启动时自动检查更新"]\')',
+    1000,
+    { switchesOn: exactly(1) }
+  ],
 
   // ── 播放 / 面板 ────────────────────────────────────────────────────────
-  ['30-playing', "window.__t.click('.nav-item', '曲库')", 2400],
+  ['33-playing', "window.__t.click('.nav-item', '曲库')", 2400],
   // ⚠️ 双击歌曲行**只**开始播放，不会顺带打开右侧面板 —— 面板是显式的视图开关
   //    （控制栏的「歌词面板 / 播放队列」、左侧封面、Ctrl+L）。原先这里把歌词断言压在
   //    「双击」上，前提就不成立（那种写法跑出来 panel 恒为 0、歌词也恒为 0）。
   //    于是拆成两步：先确认真播上了，再显式打开面板看歌词。
-  ['31-playing-dblclick', "window.__t.dbl('.song-row')", 1800, { playerTitle: hasSong }],
+  ['34-playing-dblclick', "window.__t.dbl('.song-row')", 1800, { playerTitle: hasSong }],
   // 打开歌词面板：面板关着时 togglePanel 会打开并落在「正在播放」——歌词就在这一页。
   // ★ 选择器必须限定 .playerbar：面板自己的页签按钮也叫「播放队列 / 正在播放」，
   //   不限定就会命中面板里那个（DOM 里 .panel 排在 .playerbar 之前），
   //   于是「再点一次收起面板」这类断言会点错元素而假失败。
   [
-    '32-now-playing-panel',
+    '35-now-playing-panel',
     'window.__t.click(\'.playerbar button[aria-label="歌词面板"]\')',
     2600,
     { panel: exactly(1), lyricLines: exactly(10), lyricWords: atLeast(20) }
   ],
   // 面板开着但页签在「正在播放」→ 点队列按钮是**切页签**（不是收起）
   [
-    '33-queue-panel',
+    '36-queue-panel',
     'window.__t.click(\'.playerbar button[aria-label="播放队列"]\')',
     1400,
     { panel: exactly(1), queueItems: atLeast(1) }
   ],
   // 控制栏的页签在「已激活」时再点一次 = 收起面板（不是什么都不做）
   [
-    '34-panel-closed',
+    '37-panel-closed',
     'window.__t.click(\'.playerbar button[aria-label="播放队列"]\')',
     1400,
     { panel: exactly(0) }
@@ -582,13 +628,13 @@ const STEPS = [
   // 放在命令面板之前：面板的 Escape 绑在它自己的输入框上，从 window 派发关不掉，
   // 先折叠就不会让它盖在侧栏截图上。
   [
-    '35-sidebar-collapsed',
+    '38-sidebar-collapsed',
     "window.__t.click('.sidebar-foot .nav-item', '收起侧栏')",
     1600,
     { offCenter: atMost(1) }
   ],
   [
-    '36-command-palette',
+    '39-command-palette',
     "window.__t.key('k', { ctrlKey: true })",
     1400,
     { paletteItems: atLeast(1) }
