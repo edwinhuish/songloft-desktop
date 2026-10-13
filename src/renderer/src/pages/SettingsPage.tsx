@@ -647,10 +647,182 @@ function LibrarySettings(): React.JSX.Element {
     <>
       <Card title="扫描">
         {/*
-          排除目录紧挨在扫描进度上方：它决定「扫什么」，而进度是「扫到哪了」，
-          两者是同一件事的两端。音乐根目录的输入框则撤掉了 —— 它属于部署配置，
-          改错一个字符整库就扫不到，不该跟日常开关放在一起（原 Flutter 版也没在这放）。
+          顺序照上游 Flutter 版的 `scan_manager.dart`：建歌单 → 歌单方式 → 标题来源 →
+          自动扫描（含间隔）→ 自动指纹 → 回写标签 → 排除目录 → 扫描进度。
+          排除目录贴着扫描进度是有意的：一个决定「扫什么」，一个是「扫到哪了」。
+          音乐根目录的输入框则撤掉了 —— 它属于部署配置，改错一个字符整库就扫不到，
+          不该跟日常开关放在一起（原 Flutter 版也没在这放）。
         */}
+        <Row server title="扫描后自动创建歌单" desc="扫描结束时按目录结构生成歌单">
+          {autoPlaylists.loading ? (
+            <IconLoader size={16} />
+          ) : (
+            <Switch
+              ariaLabel="扫描后自动创建歌单"
+              checked={autoPlaylists.data ?? false}
+              onChange={(checked) =>
+                writeSetting(setScanAutoCreatePlaylists(requireClient(), checked), () =>
+                  autoPlaylists.reload()
+                )
+              }
+            />
+          )}
+        </Row>
+
+        <Row
+          server
+          nested
+          title="歌单创建方式"
+          desc={
+            autoPlaylists.loading
+              ? '正在读取…'
+              : autoPlaylists.data
+                ? modeDesc
+                : '已关闭自动创建歌单，此项不生效'
+          }
+        >
+          <select
+            className="input"
+            style={{ width: 170 }}
+            value={playlistMode.data ?? 'directory'}
+            disabled={playlistMode.loading || !autoPlaylists.data}
+            onChange={(event) =>
+              writeSetting(
+                setScanPlaylistMode(requireClient(), event.target.value as PlaylistMode),
+                () => playlistMode.reload()
+              )
+            }
+          >
+            {PLAYLIST_MODES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </Row>
+
+        <Row
+          server
+          title="标题来源"
+          desc="「歌曲元数据」优先读音频标签；「文件名」适合文件名已编号的情况。改完需用「重新导入」再扫一次才生效"
+        >
+          <select
+            className="input"
+            style={{ width: 150 }}
+            value={titleSource.data ?? 'tag'}
+            disabled={titleSource.loading}
+            onChange={(event) =>
+              writeSetting(
+                setScanTitleSource(requireClient(), event.target.value as ScanTitleSource),
+                () => titleSource.reload()
+              )
+            }
+          >
+            {TITLE_SOURCES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </Row>
+
+        <Row
+          server
+          title="自动扫描"
+          desc={
+            autoScan.loading
+              ? '正在读取…'
+              : autoScan.data?.enabled
+                ? `每 ${intervalLabel(autoScan.data.interval_seconds)} 自动扫描一次`
+                : '关闭'
+          }
+        >
+          {autoScan.loading ? (
+            <IconLoader size={16} />
+          ) : (
+            <Switch
+              ariaLabel="自动扫描"
+              checked={autoScan.data?.enabled ?? false}
+              onChange={(checked) =>
+                writeSetting(
+                  setAutoScan(requireClient(), {
+                    enabled: checked,
+                    interval_seconds: autoScan.data?.interval_seconds ?? DEFAULT_SCAN_INTERVAL
+                  }),
+                  () => autoScan.reload()
+                )
+              }
+            />
+          )}
+        </Row>
+
+        <Row
+          server
+          nested
+          title="扫描间隔"
+          desc="后端允许 1 分钟 ~ 24 小时；关闭自动扫描后此项不生效"
+        >
+          <select
+            className="input"
+            style={{ width: 150 }}
+            value={autoScan.data?.interval_seconds ?? DEFAULT_SCAN_INTERVAL}
+            disabled={autoScan.loading || !autoScan.data?.enabled}
+            onChange={(event) =>
+              writeSetting(
+                setAutoScan(requireClient(), {
+                  enabled: autoScan.data?.enabled ?? false,
+                  interval_seconds: Number(event.target.value)
+                }),
+                () => autoScan.reload()
+              )
+            }
+          >
+            {AUTO_SCAN_INTERVALS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+        </Row>
+
+        <Row
+          server
+          title="扫描后自动计算音频指纹"
+          desc="指纹只用于重复歌曲检测。大曲库开启后会长时间占用 CPU；关着也能在「曲库维护」里手动算"
+        >
+          {autoFingerprint.loading ? (
+            <IconLoader size={16} />
+          ) : (
+            <Switch
+              ariaLabel="扫描后自动计算音频指纹"
+              checked={autoFingerprint.data ?? false}
+              onChange={(checked) =>
+                writeSetting(setScanAutoFingerprint(requireClient(), checked), () =>
+                  autoFingerprint.reload()
+                )
+              }
+            />
+          )}
+        </Row>
+
+        <Row
+          server
+          title="编辑元数据时回写音频文件"
+          desc="关闭后只改数据库，本地文件的标签保持原样"
+        >
+          {tagSync.loading ? (
+            <IconLoader size={16} />
+          ) : (
+            <Switch
+              ariaLabel="回写音频文件标签"
+              checked={tagSync.data ?? false}
+              onChange={(checked) =>
+                writeSetting(setTagSyncToFile(requireClient(), checked), () => tagSync.reload())
+              }
+            />
+          )}
+        </Row>
+
         <Row
           server
           block
@@ -756,178 +928,6 @@ function LibrarySettings(): React.JSX.Element {
             </div>
           </div>
         ) : null}
-
-        <Row
-          server
-          title="自动扫描"
-          desc={
-            autoScan.loading
-              ? '正在读取…'
-              : autoScan.data?.enabled
-                ? `每 ${intervalLabel(autoScan.data.interval_seconds)} 自动扫描一次`
-                : '关闭'
-          }
-        >
-          {autoScan.loading ? (
-            <IconLoader size={16} />
-          ) : (
-            <Switch
-              ariaLabel="自动扫描"
-              checked={autoScan.data?.enabled ?? false}
-              onChange={(checked) =>
-                writeSetting(
-                  setAutoScan(requireClient(), {
-                    enabled: checked,
-                    interval_seconds: autoScan.data?.interval_seconds ?? DEFAULT_SCAN_INTERVAL
-                  }),
-                  () => autoScan.reload()
-                )
-              }
-            />
-          )}
-        </Row>
-
-        <Row
-          server
-          nested
-          title="扫描间隔"
-          desc="后端允许 1 分钟 ~ 24 小时；关闭自动扫描后此项不生效"
-        >
-          <select
-            className="input"
-            style={{ width: 150 }}
-            value={autoScan.data?.interval_seconds ?? DEFAULT_SCAN_INTERVAL}
-            disabled={autoScan.loading || !autoScan.data?.enabled}
-            onChange={(event) =>
-              writeSetting(
-                setAutoScan(requireClient(), {
-                  enabled: autoScan.data?.enabled ?? false,
-                  interval_seconds: Number(event.target.value)
-                }),
-                () => autoScan.reload()
-              )
-            }
-          >
-            {AUTO_SCAN_INTERVALS.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </Row>
-      </Card>
-
-      <Card title="扫描策略">
-        <Row server title="扫描后自动创建歌单" desc="扫描结束时按目录结构生成歌单">
-          {autoPlaylists.loading ? (
-            <IconLoader size={16} />
-          ) : (
-            <Switch
-              ariaLabel="扫描后自动创建歌单"
-              checked={autoPlaylists.data ?? false}
-              onChange={(checked) =>
-                writeSetting(setScanAutoCreatePlaylists(requireClient(), checked), () =>
-                  autoPlaylists.reload()
-                )
-              }
-            />
-          )}
-        </Row>
-
-        <Row
-          server
-          nested
-          title="歌单创建方式"
-          desc={
-            autoPlaylists.loading
-              ? '正在读取…'
-              : autoPlaylists.data
-                ? modeDesc
-                : '已关闭自动创建歌单，此项不生效'
-          }
-        >
-          <select
-            className="input"
-            style={{ width: 170 }}
-            value={playlistMode.data ?? 'directory'}
-            disabled={playlistMode.loading || !autoPlaylists.data}
-            onChange={(event) =>
-              writeSetting(
-                setScanPlaylistMode(requireClient(), event.target.value as PlaylistMode),
-                () => playlistMode.reload()
-              )
-            }
-          >
-            {PLAYLIST_MODES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </Row>
-
-        <Row
-          server
-          title="标题来源"
-          desc="「歌曲元数据」优先读音频标签；「文件名」适合文件名已编号的情况。改完需用「重新导入」再扫一次才生效"
-        >
-          <select
-            className="input"
-            style={{ width: 150 }}
-            value={titleSource.data ?? 'tag'}
-            disabled={titleSource.loading}
-            onChange={(event) =>
-              writeSetting(
-                setScanTitleSource(requireClient(), event.target.value as ScanTitleSource),
-                () => titleSource.reload()
-              )
-            }
-          >
-            {TITLE_SOURCES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </Row>
-
-        <Row
-          server
-          title="扫描后自动计算音频指纹"
-          desc="指纹只用于重复歌曲检测。大曲库开启后会长时间占用 CPU；关着也能在「曲库维护」里手动算"
-        >
-          {autoFingerprint.loading ? (
-            <IconLoader size={16} />
-          ) : (
-            <Switch
-              ariaLabel="扫描后自动计算音频指纹"
-              checked={autoFingerprint.data ?? false}
-              onChange={(checked) =>
-                writeSetting(setScanAutoFingerprint(requireClient(), checked), () =>
-                  autoFingerprint.reload()
-                )
-              }
-            />
-          )}
-        </Row>
-
-        <Row
-          server
-          title="编辑元数据时回写音频文件"
-          desc="关闭后只改数据库，本地文件的标签保持原样"
-        >
-          {tagSync.loading ? (
-            <IconLoader size={16} />
-          ) : (
-            <Switch
-              ariaLabel="回写音频文件标签"
-              checked={tagSync.data ?? false}
-              onChange={(checked) =>
-                writeSetting(setTagSyncToFile(requireClient(), checked), () => tagSync.reload())
-              }
-            />
-          )}
-        </Row>
       </Card>
 
       <Card title="曲库维护">
