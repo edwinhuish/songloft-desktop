@@ -426,17 +426,29 @@ const STEPS = [
     { switches: atLeast(2) }
   ],
   /*
-   * 缓存管理：这几个值全来自服务端（/cache-manage/stats + /config），接错线就渲染成
-   * 默认值或「读取失败」，而此时**结构是一样的**（卡片、开关、进度条都在）。
-   * 所以断言按内容：「640 MB」「137」只可能来自 mock 的 stats。
+   * 缓存管理：服务端那张卡的几个值全来自后端（/cache-manage/stats + /config），接错线就
+   * 渲染成默认值或「读取失败」，而此时**结构是一样的**（卡片、开关、进度条都在），
+   * 所以断言按内容：「640 MB」「137」只可能来自 mock 的 stats；
    * 「转码码率」那一行只在 transcode_format 非空时才渲染 —— 读成空串它就整行消失。
+   *
+   * 本机缓存那张卡走的是 IPC（不经过 mock），断言它能渲染出来就顺带验了「桥接 + 主进程
+   * 处理器」这一串接线 —— 少任何一环，那张卡都会停在「读取失败」。
    */
   [
     '20-settings-cache',
     "window.__t.click('.settings-nav button', '缓存管理')",
     2400,
     {
-      settingText: containsAll('137', '640 MB', '2 GB', '转码码率', '/var/lib/songloft/music_cache')
+      settingText: containsAll(
+        '137',
+        '640 MB',
+        '2 GB',
+        '转码码率',
+        '/var/lib/songloft/music_cache',
+        '本地缓存',
+        '最大本地缓存大小',
+        '清理本地缓存'
+      )
     }
   ],
   // 网络设置：三条代理各挂一个端点，mock 里取的都**不是**默认值（空串 / 空数组才是默认），
