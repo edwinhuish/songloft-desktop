@@ -1415,10 +1415,15 @@ select.input option {
 
 /* ── 提示条 ───────────────────────────────────────────────────────────── */
 
+/*
+ * 右上角，压在标题栏下方（标题栏右端是窗口按钮，不能被盖住）。
+ * 原来放在底端、播放条上方，但那条线是**曲库/设置类操作**的提示落点，
+ * 而用户此刻的视线在上半屏（按钮刚点完），跑到底端反而要去找。
+ */
 .toasts {
   position: fixed;
   right: 22px;
-  bottom: calc(var(--player-h) + 18px);
+  top: calc(var(--titlebar-h) + 14px);
   z-index: 300;
   display: flex;
   flex-direction: column;
@@ -1446,12 +1451,25 @@ select.input option {
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(12px) scale(0.97);
+    transform: translateY(-12px) scale(0.97);
   }
+}
+
+/*
+ * info 是「消息」（清掉了几条、后台开始算了），不是「结果」。
+ * 原来它没有任何颜色 —— 中性就等于「没样式」，和 success/error 摆在一起时
+ * 看着像被漏掉的那个。给它强调色描边 + 强调色图标，态度明确但不喧哗。
+ */
+.toast[data-tone='info'] {
+  border-color: color-mix(in srgb, var(--accent) 36%, transparent);
 }
 
 .toast[data-tone='error'] {
   border-color: color-mix(in srgb, var(--danger) 42%, transparent);
+}
+
+.toast[data-tone='info'] .toast-icon {
+  color: var(--accent);
 }
 
 .toast[data-tone='success'] .toast-icon {
