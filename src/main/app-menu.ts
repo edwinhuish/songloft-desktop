@@ -13,7 +13,6 @@ import { Menu, app, shell } from 'electron'
 import type { BrowserWindow } from 'electron'
 import { IPC } from '@shared/ipc'
 import { REPO_URL, UPSTREAM_URL } from '@shared/links'
-import { toggleHostedDevTools } from './devtools'
 
 export function installAppMenu(getWindow: () => BrowserWindow | null): void {
   const template: Electron.MenuItemConstructorOptions[] = [
@@ -45,19 +44,7 @@ export function installAppMenu(getWindow: () => BrowserWindow | null): void {
       label: '视图',
       submenu: [
         { label: '重新加载', accelerator: 'CmdOrCtrl+R', role: 'reload' },
-        {
-          label: '开发者工具',
-          accelerator: 'CmdOrCtrl+Shift+I',
-          // 不用 role: 'toggleDevTools' —— 那会用 Electron 自带的 DevTools 窗口，
-          // 它的阴影会不断累积（见 devtools.ts）。打包态例外：那边按到快捷键的用户
-          // 更需要一个能正常拖、正常关的窗口。
-          click: () => {
-            const window = getWindow()
-            if (!window) return
-            if (app.isPackaged) window.webContents.toggleDevTools()
-            else toggleHostedDevTools(window)
-          }
-        },
+        { label: '开发者工具', accelerator: 'CmdOrCtrl+Shift+I', role: 'toggleDevTools' },
         { type: 'separator' },
         { label: '实际大小', role: 'resetZoom' },
         { label: '放大', role: 'zoomIn' },

@@ -8,7 +8,6 @@ import { join } from 'node:path'
 
 import { IPC, type WindowState } from '@shared/ipc'
 import { loadAppIcon } from './app-icon'
-import { openHostedDevTools } from './devtools'
 import type { ConfigStore } from './store'
 
 const MIN_WIDTH = 1080
@@ -132,10 +131,9 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
     void window.loadFile(join(__dirname, '../renderer/index.html'))
   }
 
-  // 开发态下把 DevTools 的快捷键留给用户，但不要自动打开；设了 SONGLOFT_DEVTOOLS=1 才开。
-  // ★ 一律走自己的窗口（原因见 devtools.ts：默认那个带装饰，阴影会一直往上叠）
+  // 开发态下把 DevTools 的快捷键留给用户，但不要自动打开
   if (!app.isPackaged && process.env.SONGLOFT_DEVTOOLS === '1') {
-    openHostedDevTools(window)
+    window.webContents.openDevTools({ mode: 'detach' })
   }
 
   return window
