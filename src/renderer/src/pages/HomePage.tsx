@@ -5,11 +5,14 @@
  *   * 统计条从「底部小面板」提到顶部 —— 桌面第一眼能看到库规模，比空荡荡的标题栏有用
  *   * 歌单/歌手用卡片网格横向铺开，而不是移动端的两列纵向滚动
  *   * 卡片自带播放按钮（hover 才显形）：不用先进详情页就能开播
+ *   * 「最近加入」用大图封面墙而不是紧凑表格 —— 首页的职责是「一眼看到有什么新东西」，
+ *     封面比一行行的元数据有用；要按列比较（时长/加入时间/专辑）时去曲库页
  */
 
 import { useCallback, useMemo } from 'react'
 
-import type { SongFacet } from '@shared/types'
+import type { Song, SongFacet } from '@shared/types'
+import { openMenuFromEvent } from '@/components/ContextMenu'
 import {
   IconClock,
   IconDisc,
@@ -21,11 +24,17 @@ import {
   IconSparkle,
   IconUser
 } from '@/components/Icons'
-import { CardGridSkeleton, Cover, EmptyState, SongRowsSkeleton } from '@/components/primitives'
-import { SongTable, COMPACT_COLUMNS } from '@/components/SongTable'
+import { CardGridSkeleton, Cover, EmptyState } from '@/components/primitives'
+import { buildSongMenuItems } from '@/components/songMenu'
 import { getFacets, getLibraryStats, getSongs } from '@/api/endpoints'
 import { useAsync } from '@/hooks/useAsync'
-import { formatBytes, formatCount, formatDurationLong } from '@/lib/format'
+import {
+  displayArtist,
+  formatBytes,
+  formatCount,
+  formatDurationLong,
+  formatRelative
+} from '@/lib/format'
 import { requireClient } from '@/state/useAuth'
 import { usePlayer } from '@/state/usePlayer'
 import { usePlaylists } from '@/state/usePlaylists'
@@ -195,7 +204,7 @@ export function HomePage(): React.JSX.Element {
       </div>
 
       {recent.loading ? (
-        <SongRowsSkeleton rows={6} columns={COMPACT_COLUMNS.length} />
+        <CardGridSkeleton cards={8} size="lg" />
       ) : recentSongs.length === 0 ? (
         <EmptyState
           icon={<IconLibrary size={26} />}
@@ -213,11 +222,16 @@ export function HomePage(): React.JSX.Element {
           }
         />
       ) : (
-        <SongTable
-          songs={recentSongs}
-          columns={COMPACT_COLUMNS}
-          onPlayAt={(index) => void playSongs(recentSongs, index, { type: 'home', key: 'recent' })}
-        />
+        <div className="card-grid" data-size="lg">
+          {recentSongs.map((song, index) => (
+            <RecentSongCard
+              key={song.id}
+              song={song}
+              onPlay={() => void playSongs(recentSongs, index, { type: 'home', key: 'recent' })}
+              onDeleted={() => recent.reload()}
+            />
+          ))}
+        </div>
       )}
 
       {/* ── 我的歌单 ── */}
@@ -294,6 +308,55 @@ function Stat({ value, label }: { value: string; label: string }): React.JSX.Ele
     <div>
       <div className="stat-value">{value}</div>
       <div className="stat-label">{label}</div>
+    </div>
+  )
+}
+
+/**
+ * 「最近加入」的大图卡。
+ *
+ * 单击即播：歌没有详情页可去，「打开」这个动作无处落脚 —— 与歌单卡（进详情）、
+ * 歌手卡（进搜索）不同，这里唯一有意义的落点就是从这一首开始播。
+ * 右键直接复用曲库那套歌曲菜单（见 songMenu.tsx），免得大图卡变成功能孤岛。
+ */
+function RecentSongCard({
+  song,
+  onPlay,
+  onDeleted
+}: {
+  song: Song
+  onPlay: () => void
+  onDeleted: () => void
+}): React.JSX.Element {
+  return (
+    <div
+      className="card"
+      role="button"
+      tabIndex={0}
+      data-tip={song.title}
+      onClick={onPlay}
+      onContextMenu={(event) => openMenuFromEvent(event, buildSongMenuItems([song], { onDeleted }))}
+    >
+      <div className="card-art">
+        <Cover coverUrl={song.cover_url} width={520} size="100%" radius={0} />
+        <button
+          type="button"
+          className="card-play"
+          aria-label={`播放 ${song.title}`}
+          data-tip="播放这首歌"
+          onClick={(event) => {
+            event.stopPropagation()
+            onPlay()
+          }}
+        >
+          <IconPlay size={17} />
+        </button>
+      </div>
+      <div className="card-title truncate">{song.title}</div>
+      <div className="card-meta truncate">
+        {formatRelative(song.added_at)}
+        {song.artist ? ` · ${displayArtist(song.artist)}` : ''}
+      </div>
     </div>
   )
 }

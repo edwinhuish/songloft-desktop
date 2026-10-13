@@ -418,6 +418,13 @@
   grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
 }
 
+/* 大图一档（首页「最近加入」用）：封面比默认网格大约一倍。
+   只有这一档改了列宽与间距 —— 卡片本体、悬停抬升、播放按钮都沿用同一套。 */
+.card-grid[data-size='lg'] {
+  gap: 22px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
 .card {
   display: flex;
   flex-direction: column;

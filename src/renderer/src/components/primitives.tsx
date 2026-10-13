@@ -220,9 +220,16 @@ export function SongRowsSkeleton({
   )
 }
 
-export function CardGridSkeleton({ cards = 10 }: { cards?: number }): React.JSX.Element {
+export function CardGridSkeleton({
+  cards = 10,
+  size
+}: {
+  cards?: number
+  /** 与落地后的网格同档：否则加载中是 158px 的小方块，加载完跳成 240px 的大图 */
+  size?: 'lg'
+}): React.JSX.Element {
   return (
-    <div className="card-grid" aria-hidden="true">
+    <div className="card-grid" data-size={size} aria-hidden="true">
       {Array.from({ length: cards }, (_, i) => (
         <div key={i} className="card" style={{ pointerEvents: 'none' }}>
           <div className="skeleton" style={{ aspectRatio: '1', borderRadius: 'var(--r-md)' }} />
