@@ -190,6 +190,11 @@ export function RegistrySourcesDialog({
         ) : null}
 
         {sources.map((source, index) => (
+          /**
+           * key 用**下标**而不是 url：这里每一行都是「位置上的那一行」（顺序即聚合优先级、
+           * url 是随打随变的草稿）。用 url 当 key 的话，地址输入框里每敲一个字符都会换一次
+           * key，React 于是卸载重建整个输入框 —— 焦点和光标位置全丢，一个字都打不进去。
+           */
           <div className="source-row" key={index}>
             <Switch
               checked={source.enabled}
