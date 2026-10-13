@@ -19,13 +19,13 @@ const MIN_HEIGHT = 660
  * 与渲染层是对着定的：那条播放条在 CSS 里是 64px 高（`.mini-player` 的 --mini-bar-h），
  * 展开歌词那档 380 减掉它，剩下的正好是一屏歌词。改一边就要看一眼另一边。
  *
- * ★ 宽度取 350（约一屏正常窗口的三分之一）是**刻意的窄**：它就是个挂在屏幕角上的小挂件，
- *   一排只放得下封面 + 三颗传输键 + 歌词键，歌名/歌手那栏剩一百四十来 px（长标题仍会截），
+ * ★ 宽度取 450（不到一屏正常窗口的一半）仍是**刻意的窄**：它就是个挂在屏幕角上的小挂件，
+ *   一排只放得下封面 + 三颗传输键 + 歌词键，歌名/歌手那栏剩二百四十来 px（长标题仍会截），
  *   时长则居中落在控件行下方那条缝里（见 components.css 的 .mini-time）。
  *   想让标题再多显示几个字就得从别处让：封面、那三个控件、或这条宽度本身 —— 都不能白来。
  */
-const MINI_SIZE = { width: 350, height: 64 }
-const MINI_LYRICS_SIZE = { width: 350, height: 380 }
+const MINI_SIZE = { width: 450, height: 64 }
+const MINI_LYRICS_SIZE = { width: 450, height: 380 }
 
 export interface MiniModeController {
   setState: (state: MiniModeState) => void
@@ -157,7 +157,7 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
   // ── 迷你模式（窗口几何由这里接管，见上面的 setMiniMode）─────────────────
   /**
    * 是否处于迷你模式。下面 scheduleSave 与关窗那两处都要看它 ——
-   * 迷你期间窗口是 350×64，那份 bounds 一旦写进配置，**下次开机就是个小窗，
+   * 迷你期间窗口是 450×64，那份 bounds 一旦写进配置，**下次开机就是个小窗，
    * 而且再也长不回来**（配置里没有第二份「正常尺寸」可用）。
    */
   let miniActive = false

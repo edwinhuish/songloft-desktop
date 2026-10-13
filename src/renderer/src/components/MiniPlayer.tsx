@@ -69,7 +69,7 @@ export function MiniPlayer(): React.JSX.Element {
           onSeekBy={(delta) => player.seekBy(delta)}
         />
 
-        {/* 封面 36px：窗口只有 350 宽，它每多 1px 就是从歌名那里拿 1px（width 是请求的缩略
+        {/* 封面 36px：窗口只有 450 宽，它每多 1px 就是从歌名那里拿 1px（width 是请求的缩略
             宽度，仍是显示尺寸的两倍出头，高 DPI 下不糊） */}
         <Cover coverUrl={song?.cover_url} width={76} size={36} radius={9} kind="song" />
 

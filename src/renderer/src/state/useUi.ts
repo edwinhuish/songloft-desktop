@@ -96,7 +96,7 @@ interface UiState {
   /**
    * 进迷你之前记下的正常窗口尺寸。
    *
-   * 藏起来的正常界面按这个尺寸钉住，而不是按迷你窗那 350px 重排一次 ——
+   * 藏起来的正常界面按这个尺寸钉住，而不是按迷你窗那 450px 重排一次 ——
    * 否则滚动位置会被重新夹一遍、扩展的 webview 也会被缩成一个针眼再弹回来。
    */
   miniRestore: { width: number; height: number } | null
@@ -221,7 +221,7 @@ export const useUi = create<UiState>((set, get) => ({
       mini,
       /**
        * 进的时候把当前窗口尺寸记下来。此刻主进程还没收到通知（那边是 effect 里发的），
-       * 所以读到的就是正常尺寸 —— 迟一步的话读到的就是迷你窗那 350×64 了。
+       * 所以读到的就是正常尺寸 —— 迟一步的话读到的就是迷你窗那 450×64 了。
        */
       miniRestore: mini
         ? { width: window.innerWidth, height: window.innerHeight }
