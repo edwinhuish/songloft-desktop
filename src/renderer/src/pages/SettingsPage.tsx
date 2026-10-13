@@ -55,6 +55,7 @@ import {
   getHlsProxyEnabled,
   getMetadataRefreshProgress,
   getMusicPath,
+  getRemoteTitleSource,
   getScanProgress,
   getScanAutoCreatePlaylists,
   getScanAutoFingerprint,
@@ -66,6 +67,7 @@ import {
   revokeToken,
   setAutoScan,
   setHlsProxyEnabled,
+  setRemoteTitleSource,
   setScanAutoCreatePlaylists,
   setScanAutoFingerprint,
   setScanPlaylistMode,
@@ -599,6 +601,8 @@ function LibrarySettings(): React.JSX.Element {
   const autoScan = useAsync(() => getAutoScan(requireClient()), [])
   const autoFingerprint = useAsync(() => getScanAutoFingerprint(requireClient()), [])
   const tagSync = useAsync(() => getTagSyncToFile(requireClient()), [])
+  // 与「标题来源」是两个设置：这一项只管「刷新元数据」时要不要用标签标题覆盖网络歌曲
+  const remoteTitleSource = useAsync(() => getRemoteTitleSource(requireClient()), [])
   const fingerprints = useAsync(() => getFingerprintStatus(requireClient()), [])
 
   const [progress, setProgress] = useState<ScanProgress | null>(null)
@@ -1011,10 +1015,41 @@ function LibrarySettings(): React.JSX.Element {
         </Row>
       </Card>
 
-      <Card title="曲库维护">
+      <Card title="元数据维护">
         <Row
           server
-          title="刷新元数据"
+          title="使用标签覆盖标题"
+          // 副标题逐字照上游 Flutter 版（metadata_refresh_manager.dart）：这两个开关
+          // 方向相反（我们的「标题来源」是「开 = 用文件名」），差别全靠这两句话交代
+          desc={
+            remoteTitleSource.loading
+              ? '正在读取…'
+              : remoteTitleSource.data === 'tag'
+                ? '网络歌曲元数据刷新时用音频标签覆盖标题'
+                : '网络歌曲标题保持文件名，不使用标签覆盖'
+          }
+          control={
+            remoteTitleSource.loading ? (
+              <IconLoader size={16} />
+            ) : (
+              <Switch
+                ariaLabel="使用标签覆盖标题"
+                checked={remoteTitleSource.data === 'tag'}
+                onChange={(checked) =>
+                  writeSetting(
+                    setRemoteTitleSource(requireClient(), checked ? 'tag' : 'filename'),
+                    () => remoteTitleSource.reload()
+                  )
+                }
+              />
+            )
+          }
+        />
+
+        <Row
+          server
+          block
+          title="刷新进度"
           desc={
             refreshRunning
               ? `刷新中 · 已完成 ${refresh?.processed ?? 0}/${refresh?.total ?? 0}${
@@ -1028,26 +1063,39 @@ function LibrarySettings(): React.JSX.Element {
                 : '重新探测元数据缺失的歌曲（本地文件与已缓存的网络歌曲），只补空缺，不改动音频文件里的标签'
           }
         >
+          {/* 与上面「扫描进度」同一套：空闲一个大按钮，跑起来就换成
+              进度条 + 百分比 + 满宽的取消，不给「再点一次」留位置 */}
           {refreshRunning ? (
-            <button
-              type="button"
-              className="btn"
-              data-variant="danger"
-              disabled={refresh?.status === 'cancelling'}
-              onClick={() =>
-                void run(
-                  'refresh-cancel',
-                  () => cancelMetadataRefresh(requireClient()),
-                  '已请求取消刷新'
-                )
-              }
-            >
-              取消刷新
-            </button>
+            <>
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${refreshPercent}%` }} />
+              </div>
+              <div className="setting-row-desc" style={{ marginTop: 8 }}>
+                {refreshPercent}%
+              </div>
+              <button
+                type="button"
+                className="btn"
+                data-variant="danger"
+                style={{ width: '100%', marginTop: 10 }}
+                disabled={refresh?.status === 'cancelling'}
+                onClick={() =>
+                  void run(
+                    'refresh-cancel',
+                    () => cancelMetadataRefresh(requireClient()),
+                    '已请求取消刷新'
+                  )
+                }
+              >
+                取消刷新
+              </button>
+            </>
           ) : (
             <button
               type="button"
               className="btn"
+              data-variant="success"
+              style={{ width: '100%' }}
               disabled={busy === 'refresh'}
               onClick={() =>
                 void run(
@@ -1061,20 +1109,14 @@ function LibrarySettings(): React.JSX.Element {
               }
             >
               <IconRefresh size={15} />
-              开始刷新
+              刷新元数据
             </button>
           )}
         </Row>
+      </Card>
 
-        {refreshRunning ? (
-          <div className="setting-row" data-block="true">
-            <div className="progress-track">
-              <div className="progress-fill" style={{ width: `${refreshPercent}%` }} />
-            </div>
-          </div>
-        ) : null}
-
-        <Row title="清理失效歌曲" desc="把数据库里文件已经不存在的记录清掉（不动任何文件）">
+      <Card title="曲库维护">
+        <Row server title="清理失效歌曲" desc="把数据库里文件已经不存在的记录清掉（不动任何文件）">
           <button
             type="button"
             className="btn"
@@ -1098,6 +1140,7 @@ function LibrarySettings(): React.JSX.Element {
         </Row>
 
         <Row
+          server
           title="重复歌曲检测"
           desc={
             fingerprints.data

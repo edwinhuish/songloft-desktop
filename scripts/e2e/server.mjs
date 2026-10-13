@@ -446,7 +446,10 @@ const DIR_NAMES = ['Albums', 'Live', 'Downloads', 'Singles', 'Compilations', 'Co
 const mutableSettings = {
   'scan-auto-create-playlists': { enabled: true },
   'scan-playlist-mode': { mode: 'top_level' },
+  // 两个「标题来源」是不同设置、默认值还相反（这条默认 filename，上面那条默认 tag），
+  // mock 里刻意都取非默认值，免得「读错端点」看起来跟读对了一样
   'scan-title-source': { title_source: 'filename' },
+  'remote-title-source': { title_source: 'tag' },
   'scan-auto-fingerprint': { enabled: false },
   'tag-sync-to-file': { enabled: false },
   'auto-scan': { enabled: true, interval_seconds: 1800 }
