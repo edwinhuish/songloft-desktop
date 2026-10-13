@@ -477,6 +477,15 @@ export const IconCommand = (p: IconProps) => (
 export const IconHistory = IconClock
 export const IconList = IconListMusic
 
+/** 商店：橱窗 + 遮阳篷，用来区分「本机已装的」与「远端能装的」 */
+export const IconStore = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 9.2V19a1.6 1.6 0 0 0 1.6 1.6h12.8A1.6 1.6 0 0 0 20 19V9.2" />
+    <path d="M3.2 9.2 5 4.4h14l1.8 4.8a2.6 2.6 0 0 1-4.6 1.9 2.6 2.6 0 0 1-4.2.2 2.6 2.6 0 0 1-4.2-.2 2.6 2.6 0 0 1-4.6-1.9Z" />
+    <path d="M10 20.6v-4.4h4v4.4" />
+  </Svg>
+)
+
 /** 扩展/插件。左侧两个凸起是拼图榫头 —— 这是「扩展」这个概念的通用图形 */
 export const IconPuzzle = (p: IconProps) => (
   <Svg {...p}>

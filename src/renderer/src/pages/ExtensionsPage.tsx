@@ -16,6 +16,7 @@ import { PluginIcon } from '@/components/PluginIcon'
 import { EmptyState, Switch } from '@/components/primitives'
 import { useOrderedPlugins, usePlugins } from '@/state/usePlugins'
 import { toast } from '@/state/useToasts'
+import { PluginStore } from './PluginStore'
 
 export function ExtensionsPage(): React.JSX.Element {
   const ordered = useOrderedPlugins()
@@ -91,71 +92,81 @@ export function ExtensionsPage(): React.JSX.Element {
               : '正在读取…'}
           </p>
         </div>
-        <button
-          type="button"
-          className="btn"
-          data-size="sm"
-          onClick={() => void load().catch(() => toast('扩展列表刷新失败', 'error'))}
-        >
-          <IconRefresh size={14} />
-          刷新
-        </button>
       </div>
 
-      {!loaded && !error ? (
-        <div className="empty">
-          <IconLoader size={22} />
-        </div>
-      ) : null}
-
-      {error ? (
-        <EmptyState
-          icon={<IconPuzzle size={26} />}
-          title="扩展列表打不开"
-          description={error}
-          action={
+      <div className="extensions-layout">
+        <section>
+          <h2 className="section-title">
+            已安装
             <button
               type="button"
-              className="btn"
-              data-size="sm"
-              onClick={() => void load().catch(() => undefined)}
+              className="icon-btn"
+              data-tip="重新读取"
+              aria-label="重新读取已安装列表"
+              onClick={() => void load().catch(() => toast('扩展列表刷新失败', 'error'))}
             >
-              重试
+              <IconRefresh size={15} />
             </button>
-          }
-        />
-      ) : null}
+          </h2>
 
-      {loaded && !error && ordered.length === 0 ? (
-        <EmptyState
-          icon={<IconPuzzle size={26} />}
-          title="还没有安装扩展"
-          description="右侧的插件商店里可以直接安装；也可以是本地打包好的 .jsplugin.zip。"
-        />
-      ) : null}
+          {!loaded && !error ? (
+            <div className="empty">
+              <IconLoader size={22} />
+            </div>
+          ) : null}
 
-      {loaded && !error && ordered.length > 0 ? (
-        <ul className="extension-list">
-          {ordered.map((plugin, index) => (
-            <ExtensionRow
-              key={plugin.id}
-              plugin={plugin}
-              dragging={dragIndex === index}
-              // 拖到自己头上不算落点，否则会画出一条毫无意义的指示线
-              over={overIndex === index && dragIndex !== null && dragIndex !== index}
-              onDragStart={() => setDragIndex(index)}
-              onDragOver={() => setOverIndex(index)}
-              onDrop={() => dropAt(index)}
-              onDragEnd={() => {
-                setDragIndex(null)
-                setOverIndex(null)
-              }}
-              onToggle={(next) => toggle(plugin, next)}
-              onUninstall={() => uninstall(plugin)}
+          {error ? (
+            <EmptyState
+              icon={<IconPuzzle size={26} />}
+              title="扩展列表打不开"
+              description={error}
+              action={
+                <button
+                  type="button"
+                  className="btn"
+                  data-size="sm"
+                  onClick={() => void load().catch(() => undefined)}
+                >
+                  重试
+                </button>
+              }
             />
-          ))}
-        </ul>
-      ) : null}
+          ) : null}
+
+          {loaded && !error && ordered.length === 0 ? (
+            <EmptyState
+              icon={<IconPuzzle size={26} />}
+              title="还没有安装扩展"
+              description="右边的插件商店里能直接装；也可以装本地打包好的 .jsplugin.zip。"
+            />
+          ) : null}
+
+          {loaded && !error && ordered.length > 0 ? (
+            <ul className="extension-list">
+              {ordered.map((plugin, index) => (
+                <ExtensionRow
+                  key={plugin.id}
+                  plugin={plugin}
+                  dragging={dragIndex === index}
+                  // 拖到自己头上不算落点，否则会画出一条毫无意义的指示线
+                  over={overIndex === index && dragIndex !== null && dragIndex !== index}
+                  onDragStart={() => setDragIndex(index)}
+                  onDragOver={() => setOverIndex(index)}
+                  onDrop={() => dropAt(index)}
+                  onDragEnd={() => {
+                    setDragIndex(null)
+                    setOverIndex(null)
+                  }}
+                  onToggle={(next) => toggle(plugin, next)}
+                  onUninstall={() => uninstall(plugin)}
+                />
+              ))}
+            </ul>
+          ) : null}
+        </section>
+
+        <PluginStore />
+      </div>
     </div>
   )
 }

@@ -2288,6 +2288,24 @@ select.input option {
 
 /* ── 扩展管理 ─────────────────────────────────────────────────────────── */
 
+/* 左「已安装」/ 右「插件商店」。两列等宽：装插件时两边要来回对照（这个装了没、
+   那个能不能更新），一宽一窄会让对照变成负担。 */
+.extensions-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+/* 窄窗口下退回单列。断点取侧栏折叠那一档（见 lib/responsive.ts 的
+   SIDEBAR_COLLAPSE_BELOW）—— 那档之下两列各自只剩 ~460px，商店行里的图标、
+   描述、按钮已经开始互相挤。不必对齐那 100px 迟滞区：这里只是要不要并成一列。 */
+@media (max-width: 1240px) {
+  .extensions-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .extension-list {
   display: flex;
   flex-direction: column;
