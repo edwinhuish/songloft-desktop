@@ -47,6 +47,7 @@ import {
 } from './state/usePlayer'
 import { requireClient, useAuth } from './state/useAuth'
 import { usePlaylists } from './state/usePlaylists'
+import { usePlugins } from './state/usePlugins'
 import { useSettings, watchSystemTheme } from './state/useSettings'
 import { toast } from './state/useToasts'
 import { routeFromPath, useUi, type Route } from './state/useUi'
@@ -229,10 +230,19 @@ export function App(): React.JSX.Element {
 
   /* ── 认证后预载数据 ─────────────────────────────────────────────── */
   useEffect(() => {
-    if (status !== 'authenticated') return
+    if (status !== 'authenticated') {
+      // 退出登录 / 切服务器都要清干净：留着的话标题栏会继续挂着**上一台服务器**的扩展
+      usePlugins.getState().reset()
+      return
+    }
     void usePlaylists.getState().load()
     void usePlaylists.getState().loadFavorites()
     void usePlayer.getState().restoreLastQueue()
+    // 拿不到扩展不该弹错：标题栏少几个按钮，总好过开机弹一条红字
+    void usePlugins
+      .getState()
+      .load()
+      .catch(() => undefined)
   }, [status])
 
   /* 未登录 / 启动中：同样是 frameless 窗口，必须带上标题栏才有拖拽区与窗口控制。
