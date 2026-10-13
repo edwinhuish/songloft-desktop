@@ -917,9 +917,16 @@
   color: var(--text-2);
 }
 
+/*
+ * 说明 / 副标题类的文字一概用 --text-2。
+ *
+ * 原来这几个类是 --text-4（暗色下 rgba(255,255,255,0.28)）：12px 上下的小字压到
+ * 约 2:1 的对比度，实际就是「看不清」，而不是「低调」。它们不是装饰，是**要读的**
+ * 说明（这一项干什么、改了会怎样），按 secondary text 对待才合理（约 8:1）。
+ */
 .field-hint {
   font-size: 11.5px;
-  color: var(--text-4);
+  color: var(--text-2);
   line-height: 1.6;
 }
 
@@ -1109,25 +1116,47 @@ select.input option {
   gap: 20px;
 }
 
+/*
+ * 整行可点（展开/收起这类）。内边距与负外边距成对出现：把可点区域铺到卡片边缘，
+ * 但视觉上的左右对齐位置一点不动。
+ */
+.setting-row-head[data-clickable='true'] {
+  padding: 4px 8px;
+  margin: -4px -8px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+
+.setting-row-head[data-clickable='true']:hover {
+  background: var(--surface-hover);
+}
+
+.setting-row-head[data-clickable='true']:focus-visible {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 2px;
+}
+
 .setting-row-body {
   margin-top: 12px;
 }
 
-/* 标题行下面的一排小控件（例如「扫描间隔 [1 小时 ▾] 说明」） */
-.setting-inline {
-  display: flex;
+/* 折叠提示兼指示：整行都能点，所以它不需要长得像按钮 */
+.collapse-hint {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex: none;
+  font-size: 12.5px;
+  font-weight: 540;
+  color: var(--text-2);
 }
 
-.setting-inline-label {
-  flex: none;
-  font-size: 13.5px;
+.setting-row-head[data-clickable='true']:hover .collapse-hint {
   color: var(--text-1);
 }
 
-/* 折叠区的箭头：展开时翻上去，与文案一起说清「这一下是展开还是收起」 */
+/* 箭头：展开时翻上去，与文案一起说清「这一下是展开还是收起」 */
 .collapse-caret {
   transition: transform var(--dur-2) var(--ease);
 }
@@ -1148,7 +1177,7 @@ select.input option {
 .setting-row-desc {
   margin-top: 3px;
   font-size: 11.5px;
-  color: var(--text-4);
+  color: var(--text-2);
   line-height: 1.6;
 }
 
@@ -1157,7 +1186,7 @@ select.input option {
   margin-left: 8px;
   font-size: 11.5px;
   font-weight: 500;
-  color: var(--text-4);
+  color: var(--text-2);
 }
 
 .setting-row-meta[data-tone='danger'] {
@@ -1357,7 +1386,7 @@ select.input option {
 .context-menu .menu-desc {
   font-size: 11.5px;
   line-height: 1.5;
-  color: var(--text-4);
+  color: var(--text-2);
 }
 
 /* 挂在 App 根部的单例小提示（折叠侧栏里的图标名）。

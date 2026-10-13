@@ -53,20 +53,33 @@ const SUBMENU_GAP = 4
 /** 指针离开一层之后，子菜单慢半拍再收：留出从父项挪进子菜单的时间 */
 const SUBMENU_LINGER = 160
 
-interface MenuState {
-  open: boolean
-  x: number
-  y: number
-  items: MenuItem[]
+/**
+ * 下拉面板与触发器的对齐方式（见 SettingSelect）。
+ * 不给则按鼠标坐标摆（右键菜单），子菜单另走「贴触发项右侧、放不下就翻左」。
+ */
+export type MenuAlign = 'left' | 'right'
+
+export interface MenuShowOptions {
   /**
-   * 打开这个菜单的元素（可选）。给「点同一个按钮 = 收起」这种下拉留的。
+   * 打开这个菜单的元素。给「点同一个按钮 = 收起」这种下拉用。
    *
    * 「点哪里都关」的监听挂在 **window 捕获阶段**，比被点元素自己的 onClick 还早，
    * 于是按钮根本读不到「菜单此刻开着」，收起逻辑永远做不出来（点一次：先被关、再被
    * onClick 打开，看起来像点不掉）。认下这个元素，这一次判断交还给按钮。
    */
-  anchor: HTMLElement | null
-  show: (x: number, y: number, items: MenuItem[], anchor?: HTMLElement | null) => void
+  anchor?: HTMLElement | null
+  /** 只对下拉式菜单有意义：面板左缘贴触发器左缘，还是右缘贴触发器右缘 */
+  align?: MenuAlign | null
+  /** 触发器的位置（下拉式菜单靠它对齐；右键菜单不需要） */
+  anchorRect?: DOMRect | null
+}
+
+interface MenuState extends Required<MenuShowOptions> {
+  open: boolean
+  x: number
+  y: number
+  items: MenuItem[]
+  show: (x: number, y: number, items: MenuItem[], options?: MenuShowOptions) => void
   hide: () => void
 }
 
@@ -76,8 +89,19 @@ export const useContextMenu = create<MenuState>((set) => ({
   y: 0,
   items: [],
   anchor: null,
-  show: (x, y, items, anchor = null) => set({ open: true, x, y, items, anchor }),
-  hide: () => set({ open: false, items: [], anchor: null })
+  align: null,
+  anchorRect: null,
+  show: (x, y, items, options = {}) =>
+    set({
+      open: true,
+      x,
+      y,
+      items,
+      anchor: options.anchor ?? null,
+      align: options.align ?? null,
+      anchorRect: options.anchorRect ?? null
+    }),
+  hide: () => set({ open: false, items: [], anchor: null, align: null, anchorRect: null })
 }))
 
 /** 从鼠标事件直接打开菜单（自动取坐标并阻止默认菜单） */
@@ -91,17 +115,29 @@ export function openMenuFromEvent(event: React.MouseEvent | MouseEvent, items: M
  * 把面板夹回窗口内。
  *
  * 尺寸只有布局之后才知道，所以位置一定是在 layout effect 里定的（见 MenuPanel）。
- * 传了 anchorRect 说明这是一层子菜单：优先贴触发项的右侧，右边实在放不下才翻到左侧。
+ *
+ * 三种摆法，按优先级：
+ *   1. 下拉（给了 align）→ 左缘对齐触发器左缘，或右缘对齐触发器右缘。
+ *      「长在设置行右端」的触发器必须右对齐：左对齐会让面板越出卡片右缘，
+ *      宽一点就直接贴到窗口边上，看着像掉出来了。
+ *   2. 子菜单（给了 anchorRect 没给 align）→ 贴触发项右侧，右边放不下才翻到左侧。
+ *   3. 其余（右键菜单）→ 就用鼠标坐标。
  */
 function placePanel(
   size: { width: number; height: number },
   want: { x: number; y: number },
-  anchorRect?: DOMRect | null
+  anchorRect?: DOMRect | null,
+  align?: MenuAlign | null
 ): { left: number; top: number } {
-  const rightward = anchorRect ? anchorRect.right + SUBMENU_GAP : want.x
-  const leftward = anchorRect ? anchorRect.left - size.width - SUBMENU_GAP : want.x
-  const left =
-    anchorRect && rightward + size.width > window.innerWidth - EDGE ? leftward : rightward
+  let left = want.x
+  if (anchorRect && align === 'right') left = anchorRect.right - size.width
+  else if (anchorRect && align === 'left') left = anchorRect.left
+  else if (anchorRect) {
+    left =
+      anchorRect.right + SUBMENU_GAP + size.width > window.innerWidth - EDGE
+        ? anchorRect.left - size.width - SUBMENU_GAP
+        : anchorRect.right + SUBMENU_GAP
+  }
   return {
     left: Math.max(6, Math.min(left, window.innerWidth - size.width - EDGE)),
     top: Math.max(6, Math.min(want.y, window.innerHeight - size.height - EDGE))
@@ -113,8 +149,10 @@ interface MenuPanelProps {
   /** 期望位置（视口坐标）：根菜单给鼠标坐标，子菜单给触发项的右缘 / 顶边 */
   x: number
   y: number
-  /** 有值即表示这是子菜单（用它判断往右还是往左翻） */
+  /** 有值即表示这是子菜单（用它判断往右还是往左翻）；下拉式菜单则配合 align 对齐触发器 */
   anchorRect?: DOMRect | null
+  /** 下拉式菜单的对齐方式；子菜单与右键菜单都不给 */
+  align?: MenuAlign | null
   onClose: () => void
   /** 指针回到本层：父层据此取消「慢半拍收子菜单」 */
   onEnter?: () => void
@@ -133,6 +171,7 @@ function MenuPanel({
   x,
   y,
   anchorRect,
+  align,
   onClose,
   onEnter,
   onLeave
@@ -148,8 +187,8 @@ function MenuPanel({
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
-    setPosition(placePanel(el.getBoundingClientRect(), { x, y }, anchorRect))
-  }, [x, y, anchorRect, items.length])
+    setPosition(placePanel(el.getBoundingClientRect(), { x, y }, anchorRect, align))
+  }, [x, y, anchorRect, align, items.length])
 
   useEffect(
     () => () => {
@@ -272,7 +311,7 @@ function MenuPanel({
 }
 
 export function ContextMenuHost(): React.JSX.Element | null {
-  const { open, x, y, items, anchor, hide } = useContextMenu()
+  const { open, x, y, items, anchor, align, anchorRect, hide } = useContextMenu()
 
   useEffect(() => {
     if (!open) return
@@ -313,5 +352,7 @@ export function ContextMenuHost(): React.JSX.Element | null {
 
   if (!open) return null
 
-  return <MenuPanel items={items} x={x} y={y} onClose={hide} />
+  return (
+    <MenuPanel items={items} x={x} y={y} anchorRect={anchorRect} align={align} onClose={hide} />
+  )
 }

@@ -64,7 +64,12 @@ export function SettingSelect<T extends string | number>({
       onClick: () => onChange(option.value)
     }))
     const rect = event.currentTarget.getBoundingClientRect()
-    menu.show(rect.left, rect.bottom + 6, items, event.currentTarget)
+    // 右对齐：触发器长在设置行的右端，左对齐会让面板往卡片外探出一截
+    menu.show(rect.left, rect.bottom + 6, items, {
+      anchor: event.currentTarget,
+      align: 'right',
+      anchorRect: rect
+    })
   }
 
   return (

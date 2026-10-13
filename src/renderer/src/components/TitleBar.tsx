@@ -145,7 +145,7 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
       return
     }
     const rect = event.currentTarget.getBoundingClientRect()
-    menu.show(rect.left, rect.bottom + 6, navMenuItems(), event.currentTarget)
+    menu.show(rect.left, rect.bottom + 6, navMenuItems(), { anchor: event.currentTarget })
   }
 
   return (

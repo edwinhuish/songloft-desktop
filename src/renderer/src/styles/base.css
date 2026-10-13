@@ -175,10 +175,11 @@ a {
   letter-spacing: -0.02em;
 }
 
+/* 与设置行的说明同类：是要读的副标题，不是装饰，见 components.css 里 .field-hint 的说明 */
 .page-subtitle {
   margin: 5px 0 0;
   font-size: 12.5px;
-  color: var(--text-3);
+  color: var(--text-2);
 }
 
 .section-title {
