@@ -435,6 +435,23 @@
   max-width: var(--card-w);
 }
 
+/* 单行横向滚动一档（首页「最近加入」用）：封面排成一行，装不下的往右滚，不换行。
+   宽度仍然取 --card-w，所以与网格档共用同一个封顶值。 */
+.card-grid[data-scroll='x'] {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  /* 悬停时卡片会抬升 3px，而 overflow-x: auto 会按规范把纵轴一并算成 auto ——
+     上下不留出这点量的话，卡片顶边会被那条"隐形"的纵轴裁掉。 */
+  padding: 4px 0;
+}
+
+/* 单行滚动里卡片不参与伸缩：宽度就是封顶值，多出来的交给横向滚动 */
+.card-grid[data-scroll='x'] > .card {
+  flex: none;
+  width: var(--card-w);
+}
+
 .card {
   display: flex;
   flex-direction: column;

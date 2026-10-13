@@ -5,8 +5,10 @@
  *   * 统计条从「底部小面板」提到顶部 —— 桌面第一眼能看到库规模，比空荡荡的标题栏有用
  *   * 歌单/歌手用卡片网格横向铺开，而不是移动端的两列纵向滚动
  *   * 卡片自带播放按钮（hover 才显形）：不用先进详情页就能开播
- *   * 「最近加入」用大图封面墙而不是紧凑表格 —— 首页的职责是「一眼看到有什么新东西」，
- *     封面比一行行的元数据有用；要按列比较（时长/加入时间/专辑）时去曲库页
+ *   * 「最近加入」是**单行**大图封面排（超出部分横向滚动），而不是紧凑表格：
+ *     首页的职责是「一眼看到有什么新东西」，封面比一行行的元数据有用，
+ *     而占两行会把「我的歌单」「常听歌手」挤到首屏之外。要按列比较（时长/加入时间/专辑）
+ *     或看完整列表时去曲库页
  */
 
 import { useCallback, useMemo } from 'react'
@@ -204,7 +206,7 @@ export function HomePage(): React.JSX.Element {
       </div>
 
       {recent.loading ? (
-        <CardGridSkeleton cards={8} size="lg" />
+        <CardGridSkeleton cards={8} size="lg" scroll />
       ) : recentSongs.length === 0 ? (
         <EmptyState
           icon={<IconLibrary size={26} />}
@@ -222,7 +224,7 @@ export function HomePage(): React.JSX.Element {
           }
         />
       ) : (
-        <div className="card-grid" data-size="lg">
+        <div className="card-grid" data-size="lg" data-scroll="x">
           {recentSongs.map((song, index) => (
             <RecentSongCard
               key={song.id}
