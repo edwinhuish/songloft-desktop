@@ -23,6 +23,7 @@ import type {
   ScanTitleSource,
   TokenInfo
 } from '@shared/types'
+import { useContextMenu, type MenuItem } from '@/components/ContextMenu'
 import { ExcludeDirsEditor } from '@/components/ExcludeDirsEditor'
 import {
   IconAlert,
@@ -30,12 +31,12 @@ import {
   IconChevronDown,
   IconEyeOff,
   IconExternal,
+  IconFingerprint,
   IconLoader,
   IconLogout,
   IconMonitor,
   IconMoon,
   IconRefresh,
-  IconSearch,
   IconServer,
   IconSliders,
   IconSparkle,
@@ -598,14 +599,6 @@ const REFRESH_STATUS_LABEL: Record<MetadataRefreshStatus, string> = {
   failed: '执行失败'
 }
 
-/** 指纹任务没有 cancelling / failed 态：中断后就是 cancelled，失败只落在单首歌上 */
-const FP_STATUS_LABEL: Record<FingerprintProgress['status'], string> = {
-  idle: '空闲',
-  running: '进行中',
-  done: '已完成',
-  cancelled: '已中断'
-}
-
 function LibrarySettings(): React.JSX.Element {
   const musicPath = useAsync(() => getMusicPath(requireClient()), [])
   const autoPlaylists = useAsync(() => getScanAutoCreatePlaylists(requireClient()), [])
@@ -639,6 +632,10 @@ function LibrarySettings(): React.JSX.Element {
   const pollRef = useRef<number | null>(null)
   const refreshPollRef = useRef<number | null>(null)
   const fpPollRef = useRef<number | null>(null)
+  // 「检测重复」右侧那个下拉触发器的元素：既给它对位，也让 aria-expanded 说准
+  const fpMenuRef = useRef<HTMLButtonElement | null>(null)
+  // 只为读菜单宿主的真实状态，不另存一份「我开着」
+  const fpMenuOpen = useContextMenu((s) => s.open && s.anchor === fpMenuRef.current)
 
   // 配置到达后填充草稿（用户已经在编辑就别覆盖）
   useEffect(() => {
@@ -789,23 +786,100 @@ function LibrarySettings(): React.JSX.Element {
   const fpPercent =
     fpProgress && fpTotal > 0 ? Math.floor((fpProgress.computed * 100) / fpTotal) : 0
 
-  /** 触发一次指纹计算并立刻把进度读回来，好让轮询这一帧就接上（否则要等下一个 tick 才动） */
-  const startFingerprint = (options: {
-    recomputeAll?: boolean
-    retryFailed?: boolean
-  }): Promise<void> =>
+  /**
+   * 触发一次指纹计算（界面只有「重试识别」与「全量重算」两条路）并立刻把进度读回来，
+   * 好让轮询这一帧就接上（否则要等下一个 tick 才动）。
+   */
+  const startFingerprint = (mode: 'retryFailed' | 'recomputeAll'): Promise<void> =>
     run(
       'fingerprint',
       async () => {
-        await computeFingerprints(requireClient(), options)
+        await computeFingerprints(requireClient(), {
+          recomputeAll: mode === 'recomputeAll',
+          retryFailed: mode === 'retryFailed'
+        })
         setFpProgress(await getFingerprintProgress(requireClient()))
       },
-      options.recomputeAll
-        ? '已开始全量重算指纹（后台进行）'
-        : options.retryFailed
-          ? '已开始重试失败的指纹（后台进行）'
-          : '已开始计算缺失的指纹（后台进行）'
+      mode === 'recomputeAll' ? '已开始全量重算指纹（后台进行）' : '已开始重试失败的指纹'
     )
+
+  /** 检测重复：后端要逐首比对指纹，慢，所以按钮上给转圈 */
+  const checkDuplicates = (): void => {
+    setCheckingDuplicates(true)
+    void findDuplicates(requireClient())
+      .then(setDuplicates)
+      .catch((error: unknown) =>
+        toast('检测失败', 'error', error instanceof Error ? error.message : undefined)
+      )
+      .finally(() => setCheckingDuplicates(false))
+  }
+
+  /** 失败清单只在点开时拉；先把弹窗开起来，加载态由弹窗自己交代 */
+  const openFailedList = (): void => {
+    setFpFailedOpen(true)
+    setFpFailedLoading(true)
+    void getFailedFingerprints(requireClient())
+      .then(setFpFailed)
+      .catch((error: unknown) => {
+        setFpFailedOpen(false)
+        toast('读取失败清单失败', 'error', error instanceof Error ? error.message : undefined)
+      })
+      .finally(() => setFpFailedLoading(false))
+  }
+
+  /** 全量重算会清空已有指纹，先说清后果再动手 */
+  const recomputeAllFingerprints = (): void => {
+    const total = fingerprints.data?.total ?? 0
+    if (!window.confirm(`清空并重算全部 ${total} 首的指纹？期间检测结果不可用，耗时可能很长。`))
+      return
+    void startFingerprint('recomputeAll')
+  }
+
+  /**
+   * 「检测重复」右侧的下拉：一次性与重算类动作都收进来，行里只留一个主按钮。
+   * 面板复用 ContextMenuHost（同 SettingSelect），贴边翻转/点别处关闭/Esc 都不用再写一遍。
+   */
+  const openFingerprintMenu = (event: React.MouseEvent<HTMLButtonElement>): void => {
+    const menu = useContextMenu.getState()
+    // 宿主对「点触发器」刻意不关（anchor 放行），所以这里读到开着 = 该收起
+    if (menu.open) {
+      menu.hide()
+      return
+    }
+    const failed = fingerprints.data?.failed ?? 0
+    const ready = Boolean(fingerprints.data?.chromaprint_available)
+    const items: MenuItem[] = [
+      {
+        key: 'retry',
+        label: '重试识别',
+        icon: <IconRefresh size={15} />,
+        disabled: !ready || failed === 0,
+        onClick: () => void startFingerprint('retryFailed')
+      },
+      {
+        key: 'failed',
+        label: '失败详情',
+        icon: <IconAlert size={15} />,
+        disabled: failed === 0,
+        onClick: openFailedList
+      },
+      { key: 'divider', label: '', separator: true },
+      {
+        key: 'recompute',
+        label: '全量重算',
+        icon: <IconSparkle size={15} />,
+        disabled: !ready,
+        onClick: recomputeAllFingerprints
+      }
+    ]
+    const rect = event.currentTarget.getBoundingClientRect()
+    // 右对齐：触发器长在行的右端，左对齐会让面板往卡片外探出一截
+    menu.show(rect.left, rect.bottom + 6, items, {
+      anchor: event.currentTarget,
+      align: 'right',
+      anchorRect: rect
+    })
+  }
 
   // 开关也并进这个下拉：关掉就是选了「关闭」这一档
   const playlistChoice: PlaylistChoice = autoPlaylists.data
@@ -1264,20 +1338,20 @@ function LibrarySettings(): React.JSX.Element {
                   <>
                     <div className="stat-row">
                       <span>本地歌曲</span>
-                      <span className="stat-value">{fingerprints.data.total}</span>
+                      <span className="stat-row-value">{fingerprints.data.total}</span>
                     </div>
                     <div className="stat-row">
                       <span>已算指纹</span>
-                      <span className="stat-value">{fingerprints.data.computed}</span>
+                      <span className="stat-row-value">{fingerprints.data.computed}</span>
                     </div>
                     <div className="stat-row">
-                      <span>缺失（可补算）</span>
-                      <span className="stat-value">{fingerprints.data.missing}</span>
+                      <span>待计算</span>
+                      <span className="stat-row-value">{fingerprints.data.missing}</span>
                     </div>
                     <div className="stat-row">
                       <span>失败</span>
                       <span
-                        className="stat-value"
+                        className="stat-row-value"
                         style={
                           fingerprints.data.failed > 0 ? { color: 'var(--danger)' } : undefined
                         }
@@ -1285,16 +1359,6 @@ function LibrarySettings(): React.JSX.Element {
                         {fingerprints.data.failed}
                       </span>
                     </div>
-                    {/* 上一次任务停在哪，决定下面几个按钮该按哪个 */}
-                    {fpProgress && fpProgress.status !== 'idle' ? (
-                      <div className="stat-row" style={{ marginTop: 4 }}>
-                        <span>上次任务</span>
-                        <span className="stat-value">
-                          {FP_STATUS_LABEL[fpProgress.status]} · {fpProgress.computed}/
-                          {fpProgress.total}
-                        </span>
-                      </div>
-                    ) : null}
                   </>
                 ) : fingerprints.error ? (
                   <div className="field-hint">读取指纹状态失败：{fingerprints.error}</div>
@@ -1303,104 +1367,34 @@ function LibrarySettings(): React.JSX.Element {
                 )}
               </div>
 
+              {/* 一个动作 + 它的更多用法：重试/详情/重算都收进主按钮右侧的下拉，
+                  行里只留「检测重复」这一个入口 */}
               <div className="scan-actions" style={{ marginTop: 12 }}>
-                <button
-                  type="button"
-                  className="btn"
-                  data-variant="success"
-                  style={{ flex: 1 }}
-                  disabled={busy === 'fingerprint' || !fingerprints.data?.chromaprint_available}
-                  data-tip="只算还没有指纹的歌曲，已算好的不动"
-                  onClick={() => void startFingerprint({})}
-                >
-                  {busy === 'fingerprint' ? <IconLoader size={15} /> : <IconRefresh size={15} />}
-                  计算缺失
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  style={{ flex: 'none' }}
-                  disabled={
-                    busy === 'fingerprint' ||
-                    !fingerprints.data?.chromaprint_available ||
-                    (fingerprints.data?.failed ?? 0) === 0
-                  }
-                  data-tip="只重试失败过的歌曲（已算好的保留）"
-                  onClick={() => void startFingerprint({ retryFailed: true })}
-                >
-                  <IconAlert size={15} />
-                  重试失败
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  style={{ flex: 'none' }}
-                  disabled={busy === 'fingerprint' || !fingerprints.data?.chromaprint_available}
-                  data-tip="清空所有已有指纹、从头全算一遍（慢，只在换了算法/后端升级后需要）"
-                  onClick={() => {
-                    if (
-                      !window.confirm(
-                        `清空并重算全部 ${fingerprints.data?.total ?? 0} 首的指纹？期间检测结果不可用，耗时可能很长。`
-                      )
-                    )
-                      return
-                    void startFingerprint({ recomputeAll: true })
-                  }}
-                >
-                  <IconSparkle size={15} />
-                  全量重算
-                </button>
-              </div>
-
-              <div className="scan-actions" style={{ marginTop: 10 }}>
-                <button
-                  type="button"
-                  className="btn"
-                  data-variant="primary"
-                  style={{ flex: 1 }}
-                  disabled={checkingDuplicates}
-                  onClick={() => {
-                    setCheckingDuplicates(true)
-                    void findDuplicates(requireClient())
-                      .then(setDuplicates)
-                      .catch((error: unknown) =>
-                        toast(
-                          '检测失败',
-                          'error',
-                          error instanceof Error ? error.message : undefined
-                        )
-                      )
-                      .finally(() => setCheckingDuplicates(false))
-                  }}
-                >
-                  {checkingDuplicates ? <IconLoader size={15} /> : <IconSearch size={15} />}
-                  检测重复
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  style={{ flex: 'none' }}
-                  disabled={(fingerprints.data?.failed ?? 0) === 0}
-                  data-tip="看是哪些歌曲算不出指纹、为什么"
-                  onClick={() => {
-                    setFpFailedOpen(true)
-                    setFpFailedLoading(true)
-                    void getFailedFingerprints(requireClient())
-                      .then(setFpFailed)
-                      .catch((error: unknown) => {
-                        setFpFailedOpen(false)
-                        toast(
-                          '读取失败清单失败',
-                          'error',
-                          error instanceof Error ? error.message : undefined
-                        )
-                      })
-                      .finally(() => setFpFailedLoading(false))
-                  }}
-                >
-                  <IconAlert size={15} />
-                  失败详情
-                </button>
+                <div className="split-btn">
+                  <button
+                    type="button"
+                    className="btn"
+                    data-variant="primary"
+                    disabled={checkingDuplicates}
+                    data-tip="按音频指纹找出内容相同的副本"
+                    onClick={checkDuplicates}
+                  >
+                    {checkingDuplicates ? <IconLoader size={15} /> : <IconFingerprint size={15} />}
+                    检测重复
+                  </button>
+                  <button
+                    ref={fpMenuRef}
+                    type="button"
+                    className="btn"
+                    data-variant="primary"
+                    aria-label="指纹与检测的更多操作"
+                    aria-haspopup="menu"
+                    aria-expanded={fpMenuOpen}
+                    onClick={openFingerprintMenu}
+                  >
+                    <IconChevronDown size={15} />
+                  </button>
+                </div>
               </div>
             </>
           )}
@@ -1417,7 +1411,7 @@ function LibrarySettings(): React.JSX.Element {
           loading={fpFailedLoading}
           onRetry={() => {
             setFpFailedOpen(false)
-            void startFingerprint({ retryFailed: true })
+            void startFingerprint('retryFailed')
           }}
           onClose={() => setFpFailedOpen(false)}
         />

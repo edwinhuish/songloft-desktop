@@ -1891,10 +1891,13 @@ select.input option {
   color: var(--text-2);
 }
 
-.stat-row > .stat-value {
-  font-weight: 600;
+/* 刻意不叫 .stat-value：那个名字是首页 KPI 条的（22px/650），撞名就会让这里的
+   「读数」比它读的那一行还大 —— 之前正是这么错了，而且只看代码看不出来 */
+.stat-row-value {
+  /* 与左边的说明同字号：都随 .stat-row 的 13px 走，改一处两处一起变 */
+  font-size: inherit;
   color: var(--text-1);
-  /* 数字要能竖着对齐，否则四行读数参差不齐 */
+  /* 数字要能竖着对齐，否则几行读数参差不齐 */
   font-variant-numeric: tabular-nums;
 }
 
@@ -1981,6 +1984,34 @@ select.input option {
 .scan-actions {
   display: flex;
   gap: 10px;
+}
+
+/* ── 主按钮 + 右侧下拉触发器 ─────────────────────────────────────────── */
+
+/*
+ * 两半拼成一个整体（半个圆角、中间一条分隔线）：读起来是「一个动作 + 它的更多用法」，
+ * 而不是并排两个互不相干的动作。分隔线用 currentColor 描，实心与描边两套变体都成立。
+ */
+.split-btn {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.split-btn > .btn:first-child {
+  /* 文字这一半吸收剩余宽度，下拉那半按内容宽度 */
+  flex: 1;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.split-btn > .btn:last-child {
+  /* 负边距让两半的边框并成一条（实心变体本来无边框，靠下面的分隔线交代边界） */
+  margin-left: -1px;
+  padding: 0 9px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  box-shadow: inset 1px 0 0 color-mix(in srgb, currentColor 28%, transparent);
 }
 
 /* ── 排除目录编辑器 ───────────────────────────────────────────────────── */
