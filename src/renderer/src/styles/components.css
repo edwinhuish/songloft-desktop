@@ -846,24 +846,35 @@
 }
 
 /* ── 迷你模式（见 components/MiniPlayer.tsx）──────────────────────────────
-   窗口就只有这一块：上面可展开的歌词、下面一条播放条。栅格与原生面
-   （.surface-native：上内容 / 下播放条）刻意同构，两处看着才是一回事。 */
+   窗口就只有这一块：上面一条播放条（进度线压着它的下边缘）、下面可展开的歌词。 */
 
 .mini-player {
-  /* 展开歌词时播放条的高度。主进程算迷你窗总高（main/windows.ts 的 MINI_LYRICS_SIZE）
+  /* 播放条的高度。主进程算迷你窗总高（main/windows.ts 的 MINI_SIZE / MINI_LYRICS_SIZE）
      时就是按它留位的 —— 改这里要连那边一起看 */
   --mini-bar-h: 72px;
   display: grid;
-  /* 不展开歌词时第一行是 0：整块让给播放条（窗口总共才 72px 高） */
-  grid-template-rows: 0 minmax(0, 1fr);
+  /*
+   * ★ 行数必须显式给。用「0 minmax(0,1fr) + 歌词行占位」那种写法时，收起歌词后只剩播放条
+   *   一个孩子，自动放置会把它放进**第一行**（0 高）——整条被压成 0 高、内容溢出窗外，
+   *   而 .mini-player 还 overflow: hidden，表现就是「控件只剩半截，也没在垂直方向居中」。
+   *   单行 1fr：收起时播放条独占整窗，条内那几个 `align-items: center` 才真的居中。
+   */
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
   background: var(--glass-tint);
   backdrop-filter: blur(var(--glass-blur));
 }
 
+/*
+ * 展开歌词：播放条钉在顶上那 72px，多出来的高度整块给歌词。
+ * ★ 刻意**不是**「歌词在上、播放条在下」（原生面 .surface-native 是那个形状，这里不跟着走）：
+ *   窗口加高时位置不动、长的是下半截（main/windows.ts 的 applyMiniSize），歌词若摆上面，
+ *   一展开整排控件就得往下跳 300 多 px —— 用户刚要去点的按钮会跑掉。钉住播放条、新空间
+ *   落在下方，手感才是「原地展开」，也才谈得上「不影响其他控件的布局与操作」。
+ */
 .mini-player[data-lyrics='true'] {
-  grid-template-rows: minmax(0, 1fr) var(--mini-bar-h);
+  grid-template-rows: var(--mini-bar-h) minmax(0, 1fr);
 }
 
 /* 歌词区。展开时淡入上浮一下：窗口高度是主进程一步到位的（原生窗口尺寸做不了动画），
@@ -900,19 +911,30 @@
   align-items: center;
   gap: 10px;
   padding: 0 12px;
-  border-top: 1px solid var(--line-1);
+  /* 分界线在条的**下边缘**：收起时它就是窗口下边缘，展开时它是「播放条 / 歌词」的界线。
+     进度线正压在这条线上（见下），所以这里不能再用 border-top —— 那样会多出一条横线在中间 */
+  border-bottom: 1px solid var(--line-1);
   -webkit-app-region: drag;
 }
 
+/* 进度条也是要拖的，而它整条都在拖拽区里：不单独放行的话指针事件到不了它手上，
+   表现是「点得动、拖不动」（与 .titlebar 里的按钮同一个道理） */
 .mini-bar button,
-.mini-bar .cover {
+.mini-bar .cover,
+.mini-bar .playerbar-progress {
   -webkit-app-region: no-drag;
 }
 
-/* 不展开歌词时播放条就是整窗，那条进度线再往上顶 1px 会被 .mini-player 的 overflow 裁掉，
-   看着会比正常细 */
-.mini-player:not([data-lyrics='true']) .mini-bar .playerbar-progress {
-  top: 0;
+/*
+ * ★ 进度线贴**下边缘**（底栏那一份 .playerbar-progress 相反，贴上边缘）。原因就是上面那条
+ *   分界线：底栏的分界线在上（内容面 / 播放条），迷你条的分界线在下（播放条 / 歌词）。
+ *   用 bottom 锚定而不是 top：hover / 拖动时那 3px→5px 是往上长，不会把底下的歌词顶下去。
+ *   -1px 让它正好盖住播放条那条 1px 下边框（未播满的一段是透明的，边框从底下透出来，
+ *   整条线因此是连续的），收起歌词时它的底边就落在窗口下边缘上。
+ */
+.mini-bar .playerbar-progress {
+  top: auto;
+  bottom: -1px;
 }
 
 /* 条上这几颗比常规 .icon-btn（32px）小一档：整条只有 72px 高，六颗大按钮会把歌名挤没 */

@@ -8,6 +8,10 @@
  *   此刻正被藏着，不给就等于把用户关在了一个挪不动也关不掉的窗里。
  * ★ 这里刻意只留播放必需的东西（上一首 / 播放 / 下一首 + 歌词 / 退出 / 关闭）：
  *   迷你模式的意思就是把它挂在屏幕一角，不该再摆音量条、播放模式、队列那一整套。
+ * ★ 栅格的顺序是「播放条在**上**、歌词在下」（DOM 顺序同此），不是反过来：窗口加高时长的是
+ *   下半截（main/windows.ts 的 applyMiniSize 不动位置），歌词摆下面才等于「原地展开」——
+ *   摆上面的话一展开这一整排控件就要往下跳 300 多 px。进度线贴在播放条的下边缘，
+ *   于是收起时它正好落在窗口下边缘，展开时它又正好是「播放条 / 歌词」的分界线。
  */
 
 import { useMemo, useState } from 'react'
@@ -49,16 +53,6 @@ export function MiniPlayer(): React.JSX.Element {
 
   return (
     <div className="mini-player" data-lyrics={lyricsOpen ? 'true' : undefined}>
-      {/*
-        展开时才挂歌词。窗口高度是主进程一步到位的（原生窗口的尺寸做不了动画），
-        内容这边补一点淡入，看着才不像「啪」地一下多出一块。
-      */}
-      {lyricsOpen ? (
-        <div className="mini-lyrics">
-          <LyricsView compact />
-        </div>
-      ) : null}
-
       <footer className="mini-bar">
         <PlayerProgress
           duration={duration}
@@ -146,6 +140,16 @@ export function MiniPlayer(): React.JSX.Element {
           <IconClose size={16} />
         </button>
       </footer>
+
+      {/*
+        展开时才挂歌词，且挂在播放条**之后**（它在进度线下方）。窗口高度是主进程一步到位的
+        （原生窗口的尺寸做不了动画），内容这边补一点淡入，看着才不像「啪」地一下多出一块。
+      */}
+      {lyricsOpen ? (
+        <div className="mini-lyrics">
+          <LyricsView compact />
+        </div>
+      ) : null}
     </div>
   )
 }
