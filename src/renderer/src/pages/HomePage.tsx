@@ -338,7 +338,7 @@ function RecentSongCard({
       onContextMenu={(event) => openMenuFromEvent(event, buildSongMenuItems([song], { onDeleted }))}
     >
       <div className="card-art">
-        <Cover coverUrl={song.cover_url} width={520} size="100%" radius={0} />
+        <Cover coverUrl={song.cover_url} width={400} size="100%" radius={0} />
         <button
           type="button"
           className="card-play"

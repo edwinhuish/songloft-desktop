@@ -415,14 +415,24 @@
 .card-grid {
   display: grid;
   gap: 18px;
-  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  /* 卡片基准宽。大图档的封面封顶值由它算出来（见下），所以只在这一处写死 */
+  --card-w: 158px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-w), 1fr));
 }
 
-/* 大图一档（首页「最近加入」用）：封面比默认网格大约一倍。
-   只有这一档改了列宽与间距 —— 卡片本体、悬停抬升、播放按钮都沿用同一套。 */
+/* 大图一档（首页「最近加入」用）：封面封顶在基准宽的 1.2 倍。
+   ★ 为什么是「封顶」而不是把列宽放大到 240px：auto-fill 的列数是阶梯函数 ——
+   列宽一放大，某些窗口宽度下会整整少掉一列，封面反而涨到基准的 1.4~1.8 倍
+   （取决于窗口多宽，最难看的恰好是窄窗口）。封顶与窗口宽度无关，任何宽度下都 ≤ 1.2 倍，
+   封面尺寸也就此恒定，拖窗口时不会忽大忽小。
+   轨道仍然是 1fr：富余的宽度留在轨道里，整行照样铺到页面右缘（右侧不会豁一个口子），
+   代价只是窗口越窄、图与图的间距越松一点。 */
 .card-grid[data-size='lg'] {
-  gap: 22px;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  --card-w: calc(158px * 1.2);
+}
+
+.card-grid[data-size='lg'] > .card {
+  max-width: var(--card-w);
 }
 
 .card {
