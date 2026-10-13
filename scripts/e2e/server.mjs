@@ -452,7 +452,41 @@ const mutableSettings = {
   'remote-title-source': { title_source: 'tag' },
   'scan-auto-fingerprint': { enabled: false },
   'tag-sync-to-file': { enabled: false },
-  'auto-scan': { enabled: true, interval_seconds: 1800 }
+  'auto-scan': { enabled: true, interval_seconds: 1800 },
+  // 三个代理端点：真实后端是「一对 GET/PUT + 单字段」的形状（`{proxy}` / `{allowlist}`）。
+  // 一律取非空值 —— 空串/空数组正是它们的默认值，读错字段时看起来跟读对了一样。
+  'http-proxy': { proxy: 'http://192.168.1.9:7890' },
+  'github-proxy': { proxy: 'https://gh-proxy.example' },
+  'proxy-private-allowlist': { allowlist: ['192.168.1.0/24'] },
+  'hls-proxy': { enabled: true }
+}
+
+/* ───────────────────────── 缓存配置（可回读） ───────────────────────── */
+
+/**
+ * 缓存配置。形状照真实后端 `CacheConfigResponse`（含只读的 `default_cache_dir`）。
+ *
+ * 与上面那批设置同样的规矩：PUT 之后 GET 必须返回刚写进去的值，否则界面静默退回旧值。
+ * 取值刻意非默认（转码开着、上限 2GB）：全默认值时「读错字段」与「读对了」渲染结果一样。
+ *
+ * 注：PUT 收的是 `CacheConfigInput`，不含 `default_cache_dir` —— 所以是 Object.assign
+ * 而不是整份替换，否则那个只读字段会被抹掉。
+ */
+const cacheConfig = {
+  max_size: 2 * 1024 ** 3,
+  cache_dir: '',
+  default_cache_dir: '/var/lib/songloft/music_cache',
+  transcode_format: 'mp3',
+  transcode_quality: '320'
+}
+
+function handleCacheConfig(req, res) {
+  if (req.method !== 'PUT') return json(res, 200, { ...cacheConfig })
+  return void readJsonBody(req).then((body) => {
+    if (body === null) return json(res, 400, { error: '请求参数无效' })
+    Object.assign(cacheConfig, body)
+    return json(res, 200, { ...cacheConfig })
+  })
 }
 
 function handleMutableSetting(req, res, key) {
@@ -676,6 +710,42 @@ const server = createServer((req, res) => {
   if (path === '/api/v1/playlists' && req.method === 'POST') {
     return json(res, 201, { ...PLAYLISTS[3], id: 99, name: '新歌单' })
   }
+  // 歌单备份（设置页「数据管理」分区的导出）。
+  // 形状照真实后端 `models.BackupData`：歌单只带 name/type/description/labels/songs，
+  // **不**带 id / 时间戳 —— 导入侧就是按 name 合并的，多带 id 会让人误以为能靠它还原。
+  if (path === '/api/v1/playlists/export') {
+    return json(res, 200, {
+      version: 1,
+      exported_at: '2026-10-13T10:00:00Z',
+      playlists: PLAYLISTS.filter((p) => p.type === 'normal').map((p) => ({
+        name: p.name,
+        type: p.type,
+        description: p.description ?? '',
+        labels: p.labels,
+        songs: (p.id === 1 ? FAVORITE_IDS : (PLAYLIST_SONGS[p.id] ?? [])).map((sid) => {
+          const song = SONGS.find((s) => s.id === sid)
+          return {
+            type: song?.type ?? 'local',
+            title: song?.title ?? '',
+            artist: song?.artist ?? '',
+            album: song?.album ?? '',
+            duration: song?.duration ?? 0,
+            file_path: song?.file_path ?? '',
+            url: song?.url ?? '',
+            cover_url: song?.cover_url ?? '',
+            file_size: song?.file_size ?? 0,
+            format: song?.format ?? '',
+            bit_rate: song?.bit_rate ?? 0,
+            sample_rate: song?.sample_rate ?? 0,
+            is_live: false,
+            plugin_entry_path: '',
+            source_data: '',
+            dedup_key: ''
+          }
+        })
+      }))
+    })
+  }
 
   if (path === '/api/v1/scan') return noContent(res)
   if (path === '/api/v1/scan/progress') {
@@ -729,13 +799,47 @@ const server = createServer((req, res) => {
     if (req.method === 'PUT') return putVolumeNormalize(req, res)
     return json(res, 200, { ...volumeNormalize })
   }
-  if (path === '/api/v1/settings/hls-proxy') return json(res, 200, { enabled: true })
   const settingKey = path.startsWith('/api/v1/settings/')
     ? path.slice('/api/v1/settings/'.length)
     : ''
   if (settingKey in mutableSettings) return handleMutableSetting(req, res, settingKey)
   if (path.startsWith('/api/v1/configs/'))
     return json(res, 200, { key: path.split('/').pop(), value: '' })
+  // 缓存管理：设置页「缓存管理」分区进页就读 stats + config，缺了会打「未命中」并把界面画成读取失败
+  if (path === '/api/v1/cache-manage/config') return handleCacheConfig(req, res)
+  if (path === '/api/v1/cache-manage/stats') {
+    // max_size 由配置决定（真实后端也是这样算的），所以改了上限这里跟着变
+    return json(res, 200, {
+      total_size: 640 * 1024 ** 2,
+      file_count: 137,
+      max_size: cacheConfig.max_size
+    })
+  }
+  if (path === '/api/v1/cache-manage/validate-dir') {
+    // 真实后端：非绝对路径也返回 200，但只带 error（`valid` 为 false）
+    return void readJsonBody(req).then((body) =>
+      json(
+        res,
+        200,
+        typeof body?.path === 'string' && body.path.startsWith('/')
+          ? { valid: true, created: false, total_size: 512 * 1024 ** 3, free_size: 128 * 1024 ** 3 }
+          : { valid: false, created: false, total_size: 0, free_size: 0, error: '必须为绝对路径' }
+      )
+    )
+  }
+  // 升级检查：真实后端**只有 Docker 部署**才有这个端点，这里一律当作 Docker 并汇报「有新版本」——
+  // 无更新时「读错字段」与「读对了」渲染出来是同一句话，看不出区别。
+  if (path === '/api/v1/upgrade/check') {
+    return json(res, 200, {
+      is_docker: true,
+      has_update: true,
+      current_version: '1.4.2',
+      current_channel: 'stable',
+      current_build_type: 'docker',
+      latest_version: '1.5.0',
+      release_notes: '- 缓存目录切换后立即生效\n- 新增缓存转码码率选择'
+    })
+  }
 
   // 兜底：把未实现的写操作都当成功，避免界面卡在 loading
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method ?? ''))
