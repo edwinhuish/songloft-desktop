@@ -39,6 +39,8 @@ export interface SongloftBridge {
     upsert(entry: ServerEntry): Promise<ServerEntry[]>
     remove(url: string): Promise<ServerEntry[]>
     probe(url: string): Promise<ServerProbeResult>
+    /** 服务器 URL → 该服务器上登录过的账号名（没登录过的没有这一项） */
+    accounts(): Promise<Record<string, string>>
   }
   window: {
     minimize(): Promise<void>

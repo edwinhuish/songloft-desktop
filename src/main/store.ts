@@ -150,6 +150,20 @@ export class ConfigStore {
     this.persist()
   }
 
+  /**
+   * 各服务器上登录过的账号名（walletKey → username）。
+   *
+   * 登录页要在服务器列表里显示「这台机器上用的是哪个账号」，但渲染层不该为了一个
+   * 标签就把 token 也一起取走 —— 所以单独开一条只回账号名的读路径。
+   */
+  listAccounts(): Record<string, string> {
+    const accounts: Record<string, string> = {}
+    for (const [key, creds] of Object.entries(this.data.credentials)) {
+      if (creds.username) accounts[key] = creds.username
+    }
+    return accounts
+  }
+
   // ── window ─────────────────────────────────────────────────────────────
   getWindowBounds(): WindowBounds {
     return { ...this.data.window }

@@ -35,7 +35,8 @@ const bridge: SongloftBridge = {
     list: () => ipcRenderer.invoke(IPC.serversList) as Promise<ServerEntry[]>,
     upsert: (entry) => ipcRenderer.invoke(IPC.serversUpsert, entry) as Promise<ServerEntry[]>,
     remove: (url) => ipcRenderer.invoke(IPC.serversRemove, url) as Promise<ServerEntry[]>,
-    probe: (url) => ipcRenderer.invoke(IPC.serversProbe, url)
+    probe: (url) => ipcRenderer.invoke(IPC.serversProbe, url),
+    accounts: () => ipcRenderer.invoke(IPC.serversAccounts) as Promise<Record<string, string>>
   },
   window: {
     minimize: () => ipcRenderer.invoke(IPC.windowMinimize) as Promise<void>,

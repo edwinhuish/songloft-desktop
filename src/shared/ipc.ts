@@ -23,6 +23,8 @@ export const IPC = {
   serversUpsert: 'servers:upsert',
   serversRemove: 'servers:remove',
   serversProbe: 'servers:probe',
+  /** 各已保存服务器上登录过的账号名（只回非敏感的那一半，不含 token） */
+  serversAccounts: 'servers:accounts',
 
   // ── 窗口 / 托盘 / 系统集成 ─────────────────────────────────────────────
   windowMinimize: 'window:minimize',

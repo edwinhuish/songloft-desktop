@@ -222,6 +222,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.serversUpsert, (_event, entry: ServerEntry) => store.upsertServer(entry))
   ipcMain.handle(IPC.serversRemove, (_event, url: string) => store.removeServer(url))
   ipcMain.handle(IPC.serversProbe, (_event, url: string) => probeServer(url))
+  ipcMain.handle(IPC.serversAccounts, () => store.listAccounts())
 
   // 窗口
   ipcMain.handle(IPC.windowMinimize, () => mainWindow?.minimize())
