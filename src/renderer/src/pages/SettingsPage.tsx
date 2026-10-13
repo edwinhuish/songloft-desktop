@@ -11,6 +11,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppInfo, ServerProbeResult } from '@shared/ipc'
 import { REPO_URL, UPSTREAM_URL } from '@shared/links'
 import type {
+  AutoScanSetting,
   DuplicatesResult,
   MetadataRefreshProgress,
   MetadataRefreshStatus,
@@ -149,6 +150,14 @@ interface RowProps {
   block?: boolean
   /** 右侧控件。与 block 搭配时它仍留在标题行右侧（开关/展开按钮属于标题，不属于正文） */
   control?: React.ReactNode
+  /**
+   * 给了它就整行标题区可点（展开/收起这类）。这时**不要**再在 control 里放按钮：
+   * 按钮套在可点区里，一次点击会触发两遍（先冒泡到行上、再执行按钮自己的 onClick）。
+   * 右侧改用 `.collapse-hint` 那种纯展示的提示。
+   */
+  onToggle?: () => void
+  /** 配合 onToggle：把展开态说给读屏；状态本身由外面持有 */
+  expanded?: boolean
   children?: React.ReactNode
 }
 
@@ -159,10 +168,13 @@ function Row({
   nested,
   block,
   control,
+  onToggle,
+  expanded,
   children
 }: RowProps): React.JSX.Element {
   // 非 block 行的 children 就是右侧控件（设置页的历史写法），block 行才是正文
   const trailing = control ?? (block ? null : children)
+  const clickable = onToggle !== undefined
 
   return (
     <div
@@ -170,7 +182,24 @@ function Row({
       data-nested={nested ? 'true' : undefined}
       data-block={block ? 'true' : undefined}
     >
-      <div className="setting-row-head">
+      <div
+        className="setting-row-head"
+        data-clickable={clickable ? 'true' : undefined}
+        role={clickable ? 'button' : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        aria-expanded={clickable ? expanded : undefined}
+        onClick={onToggle}
+        onKeyDown={
+          clickable
+            ? (event) => {
+                // div 扮按钮就得自己补键盘：空格还得挡掉默认的翻页滚动
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.preventDefault()
+                onToggle?.()
+              }
+            : undefined
+        }
+      >
         <div className="setting-row-text">
           <div className="setting-row-title">
             {title}
@@ -521,22 +550,36 @@ const PLAYLIST_CHOICES: SelectOption<PlaylistChoice>[] = [
   { value: 'bubble_up', label: '包含子目录', desc: '歌曲同时出现在所有上级文件夹歌单' }
 ]
 
-/** 后端只收秒且限 60 ~ 86400，所以用固定档位，不做自由输入（省掉一轮越界校验） */
-const AUTO_SCAN_INTERVALS: SelectOption<number>[] = [
-  { value: 600, label: '10 分钟' },
-  { value: 1800, label: '30 分钟' },
-  { value: 3600, label: '1 小时' },
-  { value: 10800, label: '3 小时' },
-  { value: 21600, label: '6 小时' },
-  { value: 43200, label: '12 小时' },
-  { value: 86400, label: '24 小时' }
+/**
+ * 「自动扫描间隔」的下拉：开关与间隔是同一个决定（多久扫一次），所以合成一档，
+ * 关掉就是选了「关闭」。后端只收秒且限 60 ~ 86400，用固定档位也就省掉一轮越界校验。
+ */
+type AutoScanChoice = 'off' | number
+
+const AUTO_SCAN_CHOICES: SelectOption<AutoScanChoice>[] = [
+  { value: 'off', label: '关闭' },
+  { value: 600, label: '每 10 分钟' },
+  { value: 1800, label: '每 30 分钟' },
+  { value: 3600, label: '每 1 小时' },
+  { value: 10800, label: '每 3 小时' },
+  { value: 21600, label: '每 6 小时' },
+  { value: 43200, label: '每 12 小时' },
+  { value: 86400, label: '每 24 小时' }
 ]
 
 /** 后端默认值：关闭 / 1 小时 */
 const DEFAULT_SCAN_INTERVAL = 3600
 
-function intervalLabel(seconds: number): string {
-  return AUTO_SCAN_INTERVALS.find((item) => item.value === seconds)?.label ?? `${seconds} 秒`
+/**
+ * 把后端的「开关 + 秒数」折成下拉里的一档。
+ * 档位外的秒数是防「别的客户端写进来的值」—— 直接给下拉会落到空标签上，
+ * 看着像设置坏了；折到默认档位至少显示的是一个真值（后端仍按原值跑）。
+ */
+function toAutoScanChoice(setting: AutoScanSetting | null | undefined): AutoScanChoice {
+  if (!setting?.enabled) return 'off'
+  return AUTO_SCAN_CHOICES.some((item) => item.value === setting.interval_seconds)
+    ? setting.interval_seconds
+    : DEFAULT_SCAN_INTERVAL
 }
 
 const REFRESH_STATUS_LABEL: Record<MetadataRefreshStatus, string> = {
@@ -694,6 +737,21 @@ function LibrarySettings(): React.JSX.Element {
     ? `名称 ${pathDraft.exclude_dirs.length} · 路径 ${pathDraft.exclude_paths.length} · 歌单 ${pathDraft.auto_create_exclude_dirs.length}`
     : ''
 
+  /** 同理：开关也并进「自动扫描间隔」这一档下拉 */
+  const autoScanChoice = toAutoScanChoice(autoScan.data)
+
+  /** 选「关闭」时把原间隔留着不丢，下次开启还是原来那一档 */
+  const changeAutoScan = (choice: AutoScanChoice): void => {
+    writeSetting(
+      setAutoScan(requireClient(), {
+        enabled: choice !== 'off',
+        interval_seconds:
+          choice === 'off' ? (autoScan.data?.interval_seconds ?? DEFAULT_SCAN_INTERVAL) : choice
+      }),
+      () => autoScan.reload()
+    )
+  }
+
   /**
    * 一档切换 = 两个后端字段（模式 + 开关）。写的顺序有讲究：必须**先落模式再开开关**，
    * 反过来的话，开关已生效而模式还没落库的那一小段，后端会按旧模式（默认 directory）建歌单。
@@ -761,57 +819,22 @@ function LibrarySettings(): React.JSX.Element {
 
         <Row
           server
-          block
-          title="自动扫描"
-          desc={
-            autoScan.loading
-              ? '正在读取…'
-              : autoScan.data?.enabled
-                ? `每 ${intervalLabel(autoScan.data.interval_seconds)} 自动扫描一次`
-                : '关闭'
-          }
+          title="自动扫描间隔"
+          desc="每隔这么久自动扫一次新文件；选「关闭」就只在手动点「重新扫描」时扫"
           control={
             autoScan.loading ? (
               <IconLoader size={16} />
             ) : (
-              <Switch
-                ariaLabel="自动扫描"
-                checked={autoScan.data?.enabled ?? false}
-                onChange={(checked) =>
-                  writeSetting(
-                    setAutoScan(requireClient(), {
-                      enabled: checked,
-                      interval_seconds: autoScan.data?.interval_seconds ?? DEFAULT_SCAN_INTERVAL
-                    }),
-                    () => autoScan.reload()
-                  )
-                }
+              <SettingSelect
+                ariaLabel="自动扫描间隔"
+                value={autoScanChoice}
+                options={AUTO_SCAN_CHOICES}
+                onChange={changeAutoScan}
+                width={128}
               />
             )
           }
-        >
-          <div className="setting-inline">
-            <span className="setting-inline-label">扫描间隔</span>
-            <SettingSelect
-              ariaLabel="扫描间隔"
-              value={autoScan.data?.interval_seconds ?? DEFAULT_SCAN_INTERVAL}
-              options={AUTO_SCAN_INTERVALS}
-              // 关着也让它可见（灰掉），用户可以先挑好间隔再开开关，不必来回切两次
-              disabled={autoScan.loading || !autoScan.data?.enabled}
-              onChange={(seconds) =>
-                writeSetting(
-                  setAutoScan(requireClient(), {
-                    enabled: autoScan.data?.enabled ?? false,
-                    interval_seconds: seconds
-                  }),
-                  () => autoScan.reload()
-                )
-              }
-              width={140}
-            />
-            <span className="field-hint">后端允许 1 分钟 ~ 24 小时；关闭自动扫描后不生效</span>
-          </div>
-        </Row>
+        />
 
         <Row
           server
@@ -860,22 +883,17 @@ function LibrarySettings(): React.JSX.Element {
               ? '扫描时跳过这些目录；三种排除的作用范围不同，切页签看说明'
               : `扫描时跳过这些目录${excludeSummary ? ` · 当前 ${excludeSummary}` : ''}`
           }
+          onToggle={() => setExcludeOpen((open) => !open)}
+          expanded={excludeOpen}
           control={
-            <button
-              type="button"
-              className="btn"
-              data-size="sm"
-              aria-expanded={excludeOpen}
-              aria-controls="exclude-dirs-editor"
-              onClick={() => setExcludeOpen((open) => !open)}
-            >
+            <span className="collapse-hint">
+              {excludeOpen ? '收起' : '展开'}
               <IconChevronDown
                 size={15}
                 className="collapse-caret"
                 data-open={excludeOpen ? 'true' : undefined}
               />
-              {excludeOpen ? '收起' : '展开'}
-            </button>
+            </span>
           }
         >
           {excludeOpen ? (
