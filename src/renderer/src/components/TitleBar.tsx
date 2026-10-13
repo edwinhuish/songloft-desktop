@@ -10,7 +10,11 @@
  * ★ 未登录（solo）时也要渲染这个组件：窗口是 frameless 的，全部拖拽能力都来自
  *   `.titlebar` 的 -webkit-app-region —— 登录页若不带标题栏，那个窗口就既拖不动、
  *   也关不掉（只能靠 Alt+F4）。所以 App 在任何状态下都把标题栏放在最外层，
- *   这里只是把「搜命令面板 / 当前曲目」这类需要已登录的元素藏起来。
+ *   这里只是把「导航菜单 / 搜索」这类需要已登录的元素藏起来。
+ *
+ * 布局：`[logo] ⟨弹性空档⟩ [导航菜单][搜索][窗口控制]`。
+ * 中间刻意**不再显示当前曲目** —— 那块地方要留给扩展入口条（见 ExtensionStrip），
+ * 而曲目信息本来在播放条与右侧抽屉里各有一份。
  */
 
 import { useEffect, useState } from 'react'
@@ -32,9 +36,7 @@ import {
 import { useContextMenu, type MenuItem } from './ContextMenu'
 import { Cover } from './primitives'
 import { useUi } from '@/state/useUi'
-import { usePlayer } from '@/state/usePlayer'
 import { regularPlaylists, usePlaylists } from '@/state/usePlaylists'
-import { displayArtist } from '@/lib/format'
 
 export interface TitleBarProps {
   /** 未登录/启动中：只保留窗口控制，去掉需要登录态的元素 */
@@ -50,9 +52,6 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   const playlists = usePlaylists((s) => s.playlists)
   // 与侧栏「我的歌单」用同一个过滤器，两处名单不会各自漂移
   const myPlaylists = regularPlaylists(playlists)
-  const song = usePlayer((s) =>
-    s.cursor >= 0 && s.cursor < s.order.length ? s.queue[s.order[s.cursor]] : null
-  )
 
   useEffect(() => {
     void window.songloft.window.getState().then(setState)
@@ -75,7 +74,7 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   }
 
   /**
-   * 折叠菜单（LOGO 右侧那个按钮）的菜单项：按「浏览 → 收藏与历史 → 设置」排。
+   * 折叠菜单的菜单项：按「浏览 → 收藏与历史 → 设置」排。
    * 只放「去哪儿」不放管理动作；「文件夹」不单列 —— 它是曲库页里的一个标签。
    *
    * 复用 ContextMenuHost 而不是自己造一个下拉：宿主已经处理了贴边翻转、Esc、失焦关闭，
@@ -159,39 +158,37 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   return (
     <header className="titlebar" onDoubleClick={handleDoubleClick}>
       <div className="titlebar-brand">
-        <img src="./icon.png" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />
-        <span>Songloft</span>
-        {/* 折叠菜单入口。未登录时藏起来：菜单项全是登录之后才存在的去处。
-            它落在拖拽区（.titlebar-brand）里面，全靠 base.css 的
+        {/* 点它 = 回播放页（首页）。它落在拖拽区里，靠 base.css 的
             `.titlebar button { -webkit-app-region: no-drag }` 才点得动。 */}
+        <button
+          type="button"
+          className="titlebar-home"
+          data-tip="回到播放页"
+          aria-label="回到播放页"
+          onClick={() => navigate({ name: 'home' })}
+        >
+          <img src="./icon.png" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />
+          <span>Songloft</span>
+        </button>
+      </div>
+
+      {/* 纯弹性空档：撑住拖拽区，也让右侧那组始终贴右缘 */}
+      <div className="titlebar-center" />
+
+      <div className="titlebar-actions">
         {!solo ? (
           <button
             type="button"
-            className="icon-btn"
+            className="win-btn"
             data-tip="导航菜单"
             aria-label="导航菜单"
             aria-haspopup="menu"
             aria-expanded={navMenuOpen}
             onClick={toggleNavMenu}
           >
-            <IconMenu size={17} />
+            <IconMenu size={16} />
           </button>
         ) : null}
-      </div>
-
-      <div className="titlebar-center">
-        {!solo && song ? (
-          <div
-            className="truncate"
-            style={{ maxWidth: 460, fontSize: 12.5, color: 'var(--text-3)' }}
-          >
-            <span style={{ color: 'var(--text-2)' }}>{song.title}</span>
-            <span> — {displayArtist(song.artist)}</span>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="titlebar-actions">
         {!solo ? (
           <button
             type="button"

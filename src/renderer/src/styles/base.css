@@ -267,10 +267,35 @@ a {
   border-radius: 6px;
 }
 
+/* LOGO = 「回播放页」。做成按钮而不是给 img 挂 onClick：按钮才拿得到
+   base.css 里 `.titlebar button { no-drag }` 那条兜底，否则点击会被拖窗口吃掉。
+   `font/color: inherit` 是为了继续沿用 .titlebar-brand 的字重与颜色。 */
+.titlebar-home {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 32px;
+  padding: 0 8px;
+  margin-left: -8px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+
+.titlebar-home:hover {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+/* 中间只剩弹性空档（当前曲目已挪走，这块留给扩展入口条）。 */
 .titlebar-center {
   flex: 1;
-  display: flex;
-  justify-content: center;
   min-width: 0;
 }
 
