@@ -2297,14 +2297,10 @@ select.input option {
   align-items: start;
 }
 
-/* 窄窗口下退回单列。断点取侧栏折叠那一档（见 lib/responsive.ts 的
-   SIDEBAR_COLLAPSE_BELOW）—— 那档之下两列各自只剩 ~460px，商店行里的图标、
-   描述、按钮已经开始互相挤。不必对齐那 100px 迟滞区：这里只是要不要并成一列。 */
-@media (max-width: 1240px) {
-  .extensions-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
+/* 不设窄屏回退：这一页占满标题栏以下整块（见 .full-surface），而窗口最小宽 1080
+   （main/windows.ts 的 MIN_WIDTH）—— 减掉左右内边距后每列仍有约 500px，够放
+   「图标 + 名称/说明 + 按钮」一整行。按窗口宽度做断点反而会在 1080~1240 这段
+   白白并成一列，把好不容易腾出来的宽度又浪费掉。 */
 
 .extension-list {
   display: flex;

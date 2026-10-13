@@ -284,19 +284,31 @@ function Shell(): React.JSX.Element {
   const sidebarCollapsed = useUi((s) => s.sidebarCollapsed)
 
   const isPlugin = route.name === 'plugin'
-  const content = useMemo(() => (isPlugin ? null : renderRoute(route)), [route, isPlugin])
+  // 扩展管理也要占满标题栏以下整块 —— 它是个两栏的「逛 + 管」界面，被侧栏和播放条
+  // 挤掉左右各一大截之后，两栏各自都剩不下多少
+  const isFullPage = route.name === 'extensions'
+  const surface = isPlugin ? 'plugin' : isFullPage ? 'extensions' : 'native'
+  const content = useMemo(() => (surfacedInShell(route) ? renderRoute(route) : null), [route])
 
   return (
-    <div className="shell" data-surface={isPlugin ? 'plugin' : 'native'}>
+    <div className="shell" data-surface={surface}>
       <TitleBar />
 
       {/*
-        扩展页把标题栏以下整块换成 webview —— 播放器主体与扩展是**两个面**，不是同一屏
-        的两半。原生侧整体不挂载（而不是藏起来）：扩展页要拿到完整的窗口高度，留着
-        侧栏/播放条的 DOM 没有意义。播放不会因此中断，音频是模块级对象、不挂在 DOM 上。
+        标题栏以下是**一个可替换的内容面**，三种形态：
+          * plugin     —— 扩展页的 webview；
+          * extensions —— 占满整块的原生页（扩展管理）；
+          * native     —— 侧栏 + 工具条 + 主区 + 抽屉 + 播放条。
+        前两种都整体不挂载原生那一套（而不是藏起来）：它们要拿到完整的窗口高度，
+        留着侧栏/播放条的 DOM 只是白占布局。播放不会因此中断 —— 音频是模块级对象、
+        不挂在 DOM 上（见 state/usePlayer 的 audio）。
       */}
       {isPlugin ? (
         <PluginSurface entryPath={route.entryPath} />
+      ) : isFullPage ? (
+        <div className="full-surface">
+          <ExtensionsPage />
+        </div>
       ) : (
         <>
           <div
@@ -330,6 +342,11 @@ function Shell(): React.JSX.Element {
       <Toasts />
     </div>
   )
+}
+
+/** 这个路由是不是走常规外壳（侧栏/工具条/播放条那一套）的那一档 */
+function surfacedInShell(route: Route): boolean {
+  return route.name !== 'plugin' && route.name !== 'extensions'
 }
 
 function Toolbar(): React.JSX.Element {
@@ -407,10 +424,8 @@ function renderRoute(route: Route): React.JSX.Element {
       return <PlaylistDetailPage playlistId={route.id} />
     case 'settings':
       return <SettingsPage section={route.section} />
-    case 'extensions':
-      return <ExtensionsPage />
-    // 'plugin' 刻意没有分支：它不走主内容区，而是把标题栏以下整块换成 webview
-    // （见上面 Shell 里的 data-surface 分支）
+    // 'plugin' 与 'extensions' 刻意没有分支：它们不走主内容区，而是把标题栏以下整块
+    // 换成自己的内容面（见上面 Shell 里的 data-surface 分支与 surfacedInShell）
     default:
       return <HomePage />
   }

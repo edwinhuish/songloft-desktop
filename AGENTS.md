@@ -134,9 +134,22 @@ src/
    └─ styles/        tokens.css / base.css / components.css / index.css
 ```
 
-★ **标题栏以下是「一个可替换的内容面」**：原生页（侧栏 + 主区 + 播放条）或者某个扩展的
-`webview`，由 `.shell[data-surface]` 切换（见 `App.tsx` 的 Shell 与 §8.12）。扩展**不是**
-主内容区里的一个页签 —— 它的路由落在 `useUi` 的 `Route` 里，但不在 `renderRoute` 的 switch 里。
+★ **标题栏以下是「一个可替换的内容面」**，三种形态由 `.shell[data-surface]` 切换
+（见 `App.tsx` 的 Shell）：
+
+| surface | 内容 | 用在哪 |
+|---|---|---|
+| `native` | 侧栏 + 工具条 + 主区 + 抽屉 + 播放条 | 常规页面（Home / 曲库 / 设置…） |
+| `plugin` | 扩展页的 `webview` | `{name:'plugin'}`，见 §8.12 |
+| `extensions` | 占满整块的原生页（`.full-surface`） | `{name:'extensions'}`，扩展管理 |
+
+后两种都**整体不挂载**原生那一套（而不是藏起来），并且只剩两行栅格（标题栏 + `1fr`）。
+播放不会因此中断 —— 音频是模块级对象、不挂在 DOM 上（`state/usePlayer` 的 `audio`），
+但**播放条也不在了**，此时控制播放只能靠媒体键 / 托盘 / MPRIS。
+
+这两种路由落在 `useUi` 的 `Route` 里，但**不在 `renderRoute` 的 switch 里**（那种「既是路由
+又不是页签」的写法就是靠 `surfacedInShell()` 判的）—— 别顺手把它们加回 switch，加回去会
+被渲染到侧栏里那一小块去。
 
 ---
 

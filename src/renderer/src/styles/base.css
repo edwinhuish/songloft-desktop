@@ -136,10 +136,28 @@ a {
 
 /* ───────────────────────── 扩展承载面 ───────────────────────── */
 
-/* 插件态只剩两行：标题栏 + 内容面。播放条此时被整块内容面取代 —— 播放不会因此
-   中断，音频是模块级对象、不挂在 DOM 上（见 state/usePlayer 的 audio）。 */
-.shell[data-surface='plugin'] {
+/* 扩展态（webview）与「占满整块的原生页」都只剩两行：标题栏 + 内容面。
+   播放条此时被整块内容面取代 —— 播放不会因此中断，音频是模块级对象、不挂在 DOM 上
+   （见 state/usePlayer 的 audio）。 */
+.shell[data-surface='plugin'],
+.shell[data-surface='extensions'] {
   grid-template-rows: var(--titlebar-h) minmax(0, 1fr);
+}
+
+/* 占满标题栏以下整块的原生页（目前只有扩展管理）。
+   它不经过侧栏/工具条那套栅格，所以**自己负责滚动**；scrollbar-gutter 与 .main-scroll
+   同一个理由：两栏宽度会被滚动条的出现与否挤动，留出常驻槽位才不会来回抖。 */
+.full-surface {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+/* 这一档页面要的是「用满整块」，所以放开 .page 的 1520px 上限。
+   那个上限是给阅读型内容（列表、详情）防止行长过长的，而这里是左右两栏并列，
+   宽一点只会让两栏更从容。 */
+.full-surface .page {
+  max-width: none;
 }
 
 .plugin-surface {
