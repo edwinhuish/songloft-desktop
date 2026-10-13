@@ -13,6 +13,7 @@ import type {
   FileSaveResult,
   LocalCacheStats,
   MediaCommand,
+  MiniModeState,
   ServerEntry,
   ServerProbeResult,
   TraySnapshot,
@@ -51,6 +52,11 @@ export interface SongloftBridge {
     toggleMaximize(): Promise<boolean>
     close(): Promise<void>
     getState(): Promise<WindowState>
+    /**
+     * 进出迷你模式。窗口的尺寸、最小尺寸、置顶与可缩放由主进程一并接管 ——
+     * 主进程还会顺便把「正常窗口的位置尺寸」记下来，退出时原样还回去。
+     */
+    setMini(state: MiniModeState): Promise<void>
   }
   tray: {
     update(snapshot: TraySnapshot): Promise<void>

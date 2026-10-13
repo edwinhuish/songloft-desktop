@@ -18,6 +18,7 @@ import type {
   FileSaveResult,
   LocalCacheStats,
   MediaCommand,
+  MiniModeState,
   ServerEntry,
   TraySnapshot,
   WindowState
@@ -52,7 +53,8 @@ const bridge: SongloftBridge = {
     minimize: () => ipcRenderer.invoke(IPC.windowMinimize) as Promise<void>,
     toggleMaximize: () => ipcRenderer.invoke(IPC.windowToggleMaximize) as Promise<boolean>,
     close: () => ipcRenderer.invoke(IPC.windowClose) as Promise<void>,
-    getState: () => ipcRenderer.invoke(IPC.windowGetState) as Promise<WindowState>
+    getState: () => ipcRenderer.invoke(IPC.windowGetState) as Promise<WindowState>,
+    setMini: (state: MiniModeState) => ipcRenderer.invoke(IPC.windowSetMini, state) as Promise<void>
   },
   tray: {
     update: (snapshot: TraySnapshot) =>

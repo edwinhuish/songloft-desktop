@@ -15,6 +15,7 @@ import {
   type AppInfo,
   type AppSettings,
   type MediaCommand,
+  type MiniModeState,
   type ServerEntry,
   type TraySnapshot
 } from '@shared/ipc'
@@ -27,7 +28,7 @@ import { fetchCoverBytes, probeServer } from './probe'
 import { PLUGIN_PARTITION } from '@shared/plugin'
 import { ConfigStore } from './store'
 import { createTray, destroyTray, render as renderTray } from './tray'
-import { createMainWindow } from './windows'
+import { createMainWindow, setMiniMode } from './windows'
 
 /**
  * ★ Linux 桌面集成身份（Wayland 的 app_id / X11 的 WM_CLASS）。
@@ -286,6 +287,8 @@ function registerIpcHandlers(): void {
     fullscreen: mainWindow?.isFullScreen() ?? false,
     focused: mainWindow?.isFocused() ?? false
   }))
+  // 迷你模式的窗口几何在 windows.ts 里（它拿着那个窗口，也知道什么时候不该写 bounds）
+  ipcMain.handle(IPC.windowSetMini, (_event, state: MiniModeState) => setMiniMode(state))
 
   // 托盘 / 系统
   ipcMain.handle(IPC.trayUpdate, (_event, snapshot: TraySnapshot) => {

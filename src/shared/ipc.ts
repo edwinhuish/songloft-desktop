@@ -31,6 +31,13 @@ export const IPC = {
   windowToggleMaximize: 'window:toggle-maximize',
   windowClose: 'window:close',
   windowGetState: 'window:get-state',
+  /**
+   * 进出迷你模式（连歌词展开一起）。
+   *
+   * 归在「窗口」这一组而不是界面状态里：迷你模式要动的是**真窗口** —— 尺寸、最小尺寸、
+   * 置顶、可缩放，全是窗口的事，渲染层碰不到（也没有必要碰）。几何怎么算见 main/windows.ts。
+   */
+  windowSetMini: 'window:set-mini',
   trayUpdate: 'tray:update',
   openExternal: 'shell:open-external',
   /** 弹保存框把文本写盘（导出歌单备份；渲染层没有文件系统权限） */
@@ -57,6 +64,17 @@ export interface WindowState {
   maximized: boolean
   fullscreen: boolean
   focused: boolean
+}
+
+/**
+ * 迷你模式的两个开关：是否迷你 + 迷你里歌词是否展开。
+ *
+ * 两个一起传，是因为它们共同决定窗口高度。分两次传的话，主进程会在两次调用之间先摆出
+ * 一个中间尺寸 —— 那一下是看得见的。
+ */
+export interface MiniModeState {
+  mini: boolean
+  lyrics: boolean
 }
 
 export type MediaCommand =

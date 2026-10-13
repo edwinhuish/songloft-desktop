@@ -283,6 +283,14 @@ export const IconRestore = (p: IconProps) => (
   </Svg>
 )
 
+/** 迷你模式：大框里嵌一只小框（画中画那个意思）。与旁边的窗口控制图标刻意不同形 */
+export const IconMini = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="3.5" y="5" width="17" height="14" rx="2.4" />
+    <rect x="11" y="11.2" width="7.5" height="5.6" rx="1.5" fill="currentColor" stroke="none" />
+  </Svg>
+)
+
 export const IconAlert = (p: IconProps) => (
   <Svg {...p}>
     <circle cx="12" cy="12" r="8.6" />

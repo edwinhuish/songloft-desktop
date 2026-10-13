@@ -4,14 +4,16 @@
  * 一条细节值得说明：进度条做成贴在栏**顶部**的一条 3px 细线（hover 时变粗到 5px），
  * 而不是占一整行的独立控件 —— 桌面宽屏下这样能省掉一整行垂直空间，
  * 同时滚动的进度始终可见。这是相对 Flutter 端移动优先布局最明显的桌面化调整。
+ * 它的实现在 components/PlayerProgress.tsx（迷你模式那条栏与它共用同一份）。
  */
 
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import type { PlayMode } from '@shared/types'
 import {
   IconHeart,
   IconLyrics,
+  IconMini,
   IconPause,
   IconPlay,
   IconQueue,
@@ -23,6 +25,7 @@ import {
   IconVolume,
   IconVolumeX
 } from './Icons'
+import { PlayerProgress } from './PlayerProgress'
 import { Cover, Slider } from './primitives'
 import { displayArtist, formatDuration } from '@/lib/format'
 import { usePlayer } from '@/state/usePlayer'
@@ -45,12 +48,11 @@ const MODE_LABEL: Record<PlayMode, string> = {
 
 export function PlayerBar(): React.JSX.Element {
   const player = usePlayer()
-  const { panelOpen, panelTab, togglePanel } = useUi()
+  const { panelOpen, panelTab, togglePanel, mini, setMini } = useUi()
   const favoriteIds = usePlaylists((s) => s.favoriteIds)
   const toggleFavorite = usePlaylists((s) => s.toggleFavorite)
+  /** 拖动进度条时手上的位置；null = 没在拖（见 PlayerProgress 的说明） */
   const [scrub, setScrub] = useState<number | null>(null)
-  // ★ 用 ref 而不是用 scrub 判「是否在拖」：pointermove 的闭包拿到的可能还是上一帧的 state
-  const scrubbing = useRef(false)
 
   const song = useMemo(
     () =>
@@ -61,83 +63,22 @@ export function PlayerBar(): React.JSX.Element {
   )
 
   const duration = player.duration || song?.duration || 0
+  // 拖动中显示手上的位置（下面那行时长文字也跟着走），松手后才回到播放器的真实进度
   const position = scrub ?? player.currentTime
   const favorited = song ? favoriteIds.has(song.id) : false
   const hasTrackSwitch = player.tracks.length > 1
 
-  /** 指针横坐标 → 秒 */
-  const secondsAt = (clientX: number, el: HTMLElement): number => {
-    const rect = el.getBoundingClientRect()
-    if (rect.width <= 0) return 0
-    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-    return ratio * duration
-  }
-
-  const beginScrub = (event: React.PointerEvent<HTMLDivElement>): void => {
-    if (duration <= 0) return
-    event.preventDefault()
-    scrubbing.current = true
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setScrub(secondsAt(event.clientX, event.currentTarget))
-  }
-
-  const moveScrub = (event: React.PointerEvent<HTMLDivElement>): void => {
-    if (!scrubbing.current) return
-    setScrub(secondsAt(event.clientX, event.currentTarget))
-  }
-
-  const endScrub = (event: React.PointerEvent<HTMLDivElement>): void => {
-    if (!scrubbing.current) return
-    scrubbing.current = false
-    const target = secondsAt(event.clientX, event.currentTarget)
-    setScrub(null)
-    player.seek(target)
-  }
-
-  const cancelScrub = (): void => {
-    if (!scrubbing.current) return
-    scrubbing.current = false
-    setScrub(null)
-  }
-
   return (
     <footer className="playerbar">
-      {/*
-        进度条。拖动期间**只**更新本地 scrub，松手才真去 seek ——
-        每移动一像素就写一次 audio.currentTime，会让解码器反复丢弃缓冲。
-        左右方向键也接上，键盘用户不该只能靠 Ctrl+←/→ 跳曲。
-      */}
-      <div
-        className="playerbar-progress"
-        role="slider"
-        tabIndex={0}
-        aria-label="播放进度"
-        aria-valuemin={0}
-        aria-valuemax={Math.round(duration)}
-        aria-valuenow={Math.round(position)}
-        aria-valuetext={`${formatDuration(position)} / ${formatDuration(duration)}`}
-        data-dragging={scrub !== null}
-        onPointerDown={beginScrub}
-        onPointerMove={moveScrub}
-        onPointerUp={endScrub}
-        onPointerCancel={cancelScrub}
-        onKeyDown={(event) => {
-          if (duration <= 0) return
-          if (event.key === 'ArrowRight') {
-            event.preventDefault()
-            player.seekBy(5)
-          } else if (event.key === 'ArrowLeft') {
-            event.preventDefault()
-            player.seekBy(-5)
-          }
-        }}
-      >
-        <div className="playerbar-progress-track" />
-        <div
-          className="playerbar-progress-fill"
-          style={{ width: `${duration > 0 ? (position / duration) * 100 : 0}%` }}
-        />
-      </div>
+      {/* 拖动 / 键盘那一整套在 PlayerProgress 里，与迷你模式那条栏共用同一份 */}
+      <PlayerProgress
+        duration={duration}
+        position={player.currentTime}
+        scrub={scrub}
+        onScrub={setScrub}
+        onSeek={(seconds) => player.seek(seconds)}
+        onSeekBy={(delta) => player.seekBy(delta)}
+      />
 
       {/* 左侧：当前曲目 */}
       <div className="playerbar-now">
@@ -258,6 +199,22 @@ export function PlayerBar(): React.JSX.Element {
           onClick={() => togglePanel('queue')}
         >
           <IconQueue size={17} />
+        </button>
+
+        {/*
+          迷你模式。它与上面两颗「面板」按钮是同一类（换一个看播放器的姿势），所以并排放在这里；
+          点一下整个界面收成一条小播放条（窗口也跟着变小，见 main/windows.ts），
+          再点一下回来 —— data-active 就是当前状态。
+        */}
+        <button
+          type="button"
+          className="icon-btn"
+          data-active={mini}
+          data-tip={mini ? '退出迷你模式' : '迷你模式'}
+          aria-label={mini ? '退出迷你模式' : '迷你模式'}
+          onClick={() => setMini(!mini)}
+        >
+          <IconMini size={17} />
         </button>
 
         <div className="volume-group">

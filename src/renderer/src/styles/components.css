@@ -152,6 +152,13 @@
   color: var(--danger);
 }
 
+/* 关闭：与标题栏那颗 .win-btn[data-variant='close'] 同一个观感 ——
+   平时和别的图标钮一样，悬浮才红底白字（常驻红太吵） */
+.icon-btn[data-variant='close']:hover:not(:disabled) {
+  background: var(--danger);
+  color: #fff;
+}
+
 /* 主播放键：比普通圆钮更大、带主题光晕 */
 .play-btn {
   display: grid;
@@ -836,6 +843,102 @@
   align-items: center;
   gap: 7px;
   width: 118px;
+}
+
+/* ── 迷你模式（见 components/MiniPlayer.tsx）──────────────────────────────
+   窗口就只有这一块：上面可展开的歌词、下面一条播放条。栅格与原生面
+   （.surface-native：上内容 / 下播放条）刻意同构，两处看着才是一回事。 */
+
+.mini-player {
+  /* 展开歌词时播放条的高度。主进程算迷你窗总高（main/windows.ts 的 MINI_LYRICS_SIZE）
+     时就是按它留位的 —— 改这里要连那边一起看 */
+  --mini-bar-h: 72px;
+  display: grid;
+  /* 不展开歌词时第一行是 0：整块让给播放条（窗口总共才 72px 高） */
+  grid-template-rows: 0 minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  background: var(--glass-tint);
+  backdrop-filter: blur(var(--glass-blur));
+}
+
+.mini-player[data-lyrics='true'] {
+  grid-template-rows: minmax(0, 1fr) var(--mini-bar-h);
+}
+
+/* 歌词区。展开时淡入上浮一下：窗口高度是主进程一步到位的（原生窗口尺寸做不了动画），
+   内容这边补一点过渡，看着才不像「啪」地一下凭空多出一块。
+   ★ 必须是 flex 列：里面的 .lyrics 靠 `flex: 1` + `overflow-y: auto` 撑成一屏可滚的歌词，
+      不给它这个前提的话，那份 flex 规则无处生效，歌词会按内容高度长出去被 overflow 剪掉
+      —— 表现是「歌词显示不全，也滚不动」。 */
+.mini-lyrics {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  animation: mini-lyrics-in var(--dur-3) var(--ease);
+}
+
+@keyframes mini-lyrics-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * 播放条。整条就是拖拽区（窗口无边框，用户得能把它挪个地方），里面的按钮再逐个放行 ——
+ * 与标题栏（.titlebar 的 -webkit-app-region）同一套做法。
+ */
+.mini-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border-top: 1px solid var(--line-1);
+  -webkit-app-region: drag;
+}
+
+.mini-bar button,
+.mini-bar .cover {
+  -webkit-app-region: no-drag;
+}
+
+/* 不展开歌词时播放条就是整窗，那条进度线再往上顶 1px 会被 .mini-player 的 overflow 裁掉，
+   看着会比正常细 */
+.mini-player:not([data-lyrics='true']) .mini-bar .playerbar-progress {
+  top: 0;
+}
+
+/* 条上这几颗比常规 .icon-btn（32px）小一档：整条只有 72px 高，六颗大按钮会把歌名挤没 */
+.mini-bar .icon-btn {
+  width: 30px;
+  height: 30px;
+}
+
+.mini-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.mini-time {
+  flex: none;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-4);
+}
+
+/* 传输控制与「视图」两组之间一道细线：六颗图标一字排开时分不出组 */
+.mini-divider {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  background: var(--line-2);
 }
 
 /* 音量/进度共用的细滑条 */
@@ -1688,6 +1791,17 @@ select.input option {
   gap: 9px;
   align-items: flex-end;
   pointer-events: none;
+}
+
+/*
+ * 迷你模式：窗口只有 72px 高，上面那个「标题栏下方 58px」的落点会把提示整条顶出窗外。
+ * 挪到窗口中段，出错了至少看得见。
+ * 选择器带 html[data-mini]（它由 App 在切迷你时挂上）：toast 是挂在 body 上的另一棵子树，
+ * .shell[data-mini] 那套够不着它。
+ */
+html[data-mini='true'] .toasts {
+  top: 50%;
+  transform: translateY(-50%);
 }
 
 .toast {
