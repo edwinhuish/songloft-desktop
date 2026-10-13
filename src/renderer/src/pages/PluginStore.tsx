@@ -13,9 +13,8 @@
  *   让人盯着一颗按钮点，不如让列表跟着滚动自己长出来。
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { pluginFallbackHue } from '@shared/plugin'
 import { ApiError } from '@/api/client'
 import { getGithubProxy } from '@/api/endpoints'
 import {
@@ -27,9 +26,11 @@ import {
   type RegistrySource
 } from '@/api/plugins'
 import { IconDownload, IconLoader, IconRefresh, IconSliders, IconStore } from '@/components/Icons'
+import { PluginIconFallback } from '@/components/PluginIcon'
 import { EmptyState, InfiniteSentinel } from '@/components/primitives'
 import { RegistrySourcesDialog } from '@/components/RegistrySourcesDialog'
-import { useAuth } from '@/state/useAuth'
+import { buildResourceUrl } from '@/lib/url'
+import { resourceContext, useAuth } from '@/state/useAuth'
 import { usePlugins } from '@/state/usePlugins'
 import { toast } from '@/state/useToasts'
 
@@ -466,19 +467,34 @@ function StoreRow({ entry, pending, disabled, onInstall }: StoreRowProps): React
 /**
  * 商店条目的图标。
  *
- * 只认**绝对 http(s) URL**：商店条目的 icon 来自各个订阅源的 manifest，写法五花八门，
- * 相对路径的基准是「那个源」，不是我们的后端 —— 照着拼只会拼出一个必然 404 的地址。
- * 拿不准就退到按名字取色的首字母。
+ * ★ 后端的 `icon` 字段是 **`/api/v1/proxy?url=<encoded>`** —— 服务端替我们把图标从源站
+ *   取回来（顺手套上配置里的 GitHub 代理），所以它是一条**本机后端上的相对路径**，
+ *   必须按资源地址拼 `baseUrl` + `access_token`（与封面同一条路：lib/url.ts 的
+ *   buildResourceUrl）。它**不是** http(s) 开头的，别按「像不像外链」判断 ——
+ *   那样整店都会退成首字母兜底图。
+ *   （上游 Flutter 端踩过同一处：他们的判据是 `endsWith('.svg')`，而 /api/v1/proxy
+ *   结尾没有 .svg，于是全部 SVG 图标被当成位图、解码失败回退首字母。）
+ *
+ * 取不到就退到首字母兜底（与已装插件共用 PluginIconFallback）：图标是插件作者自己打包的，
+ * 404 / 坏文件是常态，留一个破图比没有图更难看出「这个插件没图标」。
  */
 function StoreIcon({ entry, name }: { entry: RegistryEntry; name: string }): React.JSX.Element {
   const [broken, setBroken] = useState(false)
-  const remote = /^https?:\/\//i.test(entry.icon) ? entry.icon : ''
+  // token 变化（重新登录）后 URL 要跟着变，否则会 401。
+  // 解构出两个字符串当依赖：resourceContext() 每次返回新对象，直接依赖它会每帧重算
+  const { baseUrl, accessToken } = resourceContext()
+  const src = useMemo(
+    () => buildResourceUrl(entry.icon, { baseUrl, accessToken }),
+    [entry.icon, baseUrl, accessToken]
+  )
 
-  if (remote && !broken) {
+  useEffect(() => setBroken(false), [src])
+
+  if (src && !broken) {
     return (
       <img
         className="plugin-icon"
-        src={remote}
+        src={src}
         alt=""
         width={34}
         height={34}
@@ -487,18 +503,5 @@ function StoreIcon({ entry, name }: { entry: RegistryEntry; name: string }): Rea
     )
   }
 
-  return (
-    <span
-      className="plugin-icon plugin-icon-fallback"
-      aria-hidden="true"
-      style={{
-        width: 34,
-        height: 34,
-        fontSize: 20,
-        background: `hsl(${pluginFallbackHue(name)} 58% 46%)`
-      }}
-    >
-      {name.charAt(0).toUpperCase()}
-    </span>
-  )
+  return <PluginIconFallback name={name} size={34} />
 }

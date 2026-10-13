@@ -404,6 +404,17 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
 `.titlebar-actions` 是 `flex: none` + `margin-left: auto`（右端永远贴右缘），外加
 `.titlebar { overflow: hidden }` 兜底：标题栏里任何一项都不许把布局撑出去。
 
+**两种插件图标的 URL 规则完全不同，别互相套用**：
+
+| 用在哪 | `icon` 字段的形态 | 拼法 |
+|---|---|---|
+| 已装插件（侧栏 / 下拉 / 管理页） | `static/` 下的**裸文件名** | `/api/v1/jsplugin/{entryPath}/static/{icon}`（该路由**无需认证**，别拼 token） |
+| 商店条目（`PluginStore` 的 `StoreIcon`） | **`/api/v1/proxy?url=<encoded>`**（服务端替我们从源站取回来，顺手套了 GitHub 代理） | 走 `lib/url.ts` 的 `buildResourceUrl`：拼 `baseUrl` + `access_token` |
+
+商店那条**不是** http(s) 开头的，`/api/v1/proxy` 也需要 token（见 middleware/auth.go 的
+query 回退分支）—— 按「像不像外链」判断会让整店退成首字母兜底图。上游 Flutter 端在同一处
+栽过（他们用 `endsWith('.svg')` 判断，而 `/api/v1/proxy` 结尾没有 `.svg`）。
+
 **订阅源**（`api/plugins.ts` 的 `getPluginRegistries` / `updatePluginRegistries`）：后端只有
 「整表读 / 整表写」两个口子（`GET|PUT /settings/plugin-registries`），没有单条增删改，也不是
 `/jsplugins/*` 那一家 —— 界面上那个对话框因此是一张**草稿表**，点保存才整份 PUT 回去。
