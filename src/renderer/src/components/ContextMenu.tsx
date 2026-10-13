@@ -8,7 +8,7 @@
 import { create } from 'zustand'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
-import { IconChevronRight } from './Icons'
+import { IconCheck, IconChevronRight } from './Icons'
 
 export interface MenuItem {
   key: string
@@ -29,6 +29,14 @@ export interface MenuItem {
    * 不带 onClick 的则纯粹是展开用的父项，点它只展开。
    */
   children?: MenuItem[]
+  /**
+   * 单选下拉（SettingSelect）用：给了 checked 就渲染成 `menuitemradio`，
+   * 左边让出一列打勾。**必须每一项都给**（选中的给 true、其余给 false），
+   * 否则同一份菜单里有的项留了勾位列、有的没留，文字会左右错开。
+   */
+  checked?: boolean
+  /** 选项的第二行说明；一旦有任何一项给了它，整层菜单改成两行高 */
+  desc?: string
 }
 
 /**
@@ -134,6 +142,9 @@ function MenuPanel({
   const [sub, setSub] = useState<{ item: MenuItem; rect: DOMRect } | null>(null)
   const lingerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  /** 单选下拉的样子：留出勾位列、条目可以是两行。整个面板统一，不逐项判断 */
+  const rich = items.some((item) => item.checked !== undefined || item.desc !== undefined)
+
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
@@ -167,6 +178,7 @@ function MenuPanel({
       <div
         ref={ref}
         className={PANEL_CLASS}
+        data-rich={rich ? 'true' : undefined}
         role="menu"
         style={{ left: position.left, top: position.top }}
         onPointerEnter={() => {
@@ -204,7 +216,8 @@ function MenuPanel({
             <button
               key={item.key}
               type="button"
-              role="menuitem"
+              role={item.checked !== undefined ? 'menuitemradio' : 'menuitem'}
+              aria-checked={item.checked !== undefined ? Boolean(item.checked) : undefined}
               aria-haspopup={subItems.length > 0 ? 'menu' : undefined}
               aria-expanded={subItems.length > 0 ? expanded : undefined}
               data-variant={item.variant ?? 'default'}
@@ -223,7 +236,19 @@ function MenuPanel({
               }}
             >
               {item.icon}
-              <span className="truncate">{item.label}</span>
+              {rich ? (
+                <span className="menu-check" aria-hidden="true">
+                  {item.checked ? <IconCheck size={14} /> : null}
+                </span>
+              ) : null}
+              {item.desc ? (
+                <span className="menu-text">
+                  <span className="truncate">{item.label}</span>
+                  <span className="menu-desc truncate">{item.desc}</span>
+                </span>
+              ) : (
+                <span className="truncate">{item.label}</span>
+              )}
               {subItems.length > 0 ? <IconChevronRight size={14} className="menu-arrow" /> : null}
             </button>
           )

@@ -72,6 +72,20 @@
   background: color-mix(in srgb, var(--danger) 24%, transparent);
 }
 
+/* 实心绿：用于「这是正常该点的那个」的动作（扫描页的「重新扫描」）。
+   ★ 字色是深墨绿而不是白：--success(#35c88c) 是亮薄荷绿，白字对比度只有 2:1
+   （远低于 4.5:1 的可读线），深色字反而有 9:1。 */
+.btn[data-variant='success'] {
+  background: var(--success);
+  border-color: transparent;
+  color: #08281d;
+  font-weight: 600;
+}
+
+.btn[data-variant='success']:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--success) 86%, white);
+}
+
 .btn[data-size='sm'] {
   height: 29px;
   padding: 0 10px;
@@ -1078,6 +1092,50 @@ select.input option {
   box-shadow: inset 2px 0 0 var(--line-2);
 }
 
+/*
+ * 正文落到标题下方、占满整行（排除目录编辑器、扫描按钮区这类宽内容）。
+ * 右侧控件仍然留在标题行 —— 开关/展开按钮属于「标题」，不属于那块正文。
+ */
+.setting-row[data-block='true'] {
+  display: block;
+}
+
+.setting-row-head {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.setting-row-body {
+  margin-top: 12px;
+}
+
+/* 标题行下面的一排小控件（例如「扫描间隔 [1 小时 ▾] 说明」） */
+.setting-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.setting-inline-label {
+  flex: none;
+  font-size: 13.5px;
+  color: var(--text-1);
+}
+
+/* 折叠区的箭头：展开时翻上去，与文案一起说清「这一下是展开还是收起」 */
+.collapse-caret {
+  transition: transform var(--dur-2) var(--ease);
+}
+
+.collapse-caret[data-open='true'] {
+  transform: rotate(180deg);
+}
+
 .setting-row-text {
   min-width: 0;
 }
@@ -1251,6 +1309,54 @@ select.input option {
   font-size: 11px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  color: var(--text-4);
+}
+
+/* ── 单选下拉的面板（SettingSelect） ─────────────────────────────────── */
+
+/*
+ * 固定 32px 高的条目塞不下第二行说明，所以这一层放开高度。
+ * 勾位列是**整层统一**留的（见 ContextMenu 里的 rich）：只给选中项留的话，
+ * 其余条目的文字会随着选中项左右跳动。
+ */
+.context-menu[data-rich='true'] {
+  min-width: 240px;
+  padding: 6px;
+}
+
+.context-menu[data-rich='true'] button {
+  align-items: flex-start;
+  height: auto;
+  min-height: 34px;
+  padding: 6px 10px;
+  gap: 8px;
+  font-weight: 520;
+}
+
+.context-menu .menu-check {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 18px;
+  color: var(--accent);
+}
+
+.context-menu .menu-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* 与勾位列同高，两行说明才会跟单行条目一样从顶线开始排 */
+.context-menu .menu-text > .truncate {
+  line-height: 18px;
+}
+
+.context-menu .menu-desc {
+  font-size: 11.5px;
+  line-height: 1.5;
   color: var(--text-4);
 }
 
@@ -1709,6 +1815,66 @@ select.input option {
   background: var(--accent);
   border-radius: var(--r-pill);
   transition: width var(--dur-3) var(--ease);
+}
+
+/* ── 设置项里的下拉选框（SettingSelect） ───────────────────────────────── */
+
+/*
+ * 触发器做成「长得像 .input 的按钮」：设置行里它旁边就是输入框，高度和边框
+ * 不一致的话一眼就歪。展开时描边转成强调色，回答「我点的是这个，开的也是这个」——
+ * 面板挂在窗口根部、离触发器有一段距离，不给触发器留状态就看不出是谁开的面板。
+ */
+.select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  height: 38px;
+  min-width: 128px;
+  padding: 0 10px 0 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-1);
+  background: var(--surface-1);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 520;
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+
+.select-trigger:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--line-2);
+}
+
+.select-trigger[aria-expanded='true'] {
+  background: var(--surface-2);
+  border-color: var(--accent-line);
+}
+
+.select-trigger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.select-trigger > svg {
+  flex: none;
+  color: var(--text-3);
+  transition: color var(--dur-1) var(--ease);
+}
+
+.select-trigger[aria-expanded='true'] > svg {
+  color: var(--text-1);
+}
+
+/* ── 扫描动作区 ───────────────────────────────────────────────────────── */
+
+/* 「重新扫描」吃掉剩余空间（flex:1），「强制扫描」按内容宽度靠右 */
+.scan-actions {
+  display: flex;
+  gap: 10px;
 }
 
 /* ── 排除目录编辑器 ───────────────────────────────────────────────────── */
