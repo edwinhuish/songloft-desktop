@@ -9,6 +9,7 @@
 
 import { BrowserWindow, app, ipcMain, session, shell } from 'electron'
 
+import type { StoredCredentials } from '@shared/bridge-types'
 import {
   IPC,
   type AppInfo,
@@ -208,11 +209,7 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.credentialsGet, (_event, url: string) => store.getCredentials(url))
   ipcMain.handle(
     IPC.credentialsSet,
-    (
-      _event,
-      url: string,
-      creds: { accessToken: string; refreshToken: string; expiresIn: number }
-    ) => {
+    (_event, url: string, creds: Omit<StoredCredentials, 'savedAt'>) => {
       store.setCredentials(url, creds)
     }
   )

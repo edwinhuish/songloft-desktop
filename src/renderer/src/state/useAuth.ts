@@ -23,6 +23,13 @@ interface AuthState {
   client: ApiClient | null
   baseUrl: string | null
   serverName: string | null
+  /**
+   * 当前服务器上登录用的用户名。
+   *
+   * 后端没有「我是谁」接口（`/auth/login` 只回 token），所以只能登录时自己记，
+   * 并跟着凭据按服务器隔离（见 StoredCredentials.username）。
+   */
+  username: string | null
   servers: ServerEntry[]
   backendVersion: string | null
   error: string | null
@@ -33,6 +40,8 @@ interface AuthState {
   probe: (url: string) => Promise<ServerProbeResult>
   login: (url: string, username: string, password: string, serverName?: string) => Promise<void>
   logout: () => Promise<void>
+  /** 只把界面交还给登录页，不动凭据（「切换账号」用） */
+  openLogin: () => void
   switchServer: (url: string) => Promise<void>
   forgetServer: (url: string) => Promise<void>
 }
@@ -79,6 +88,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   client: null,
   baseUrl: null,
   serverName: null,
+  username: null,
   servers: [],
   backendVersion: null,
   error: null,
@@ -100,7 +110,8 @@ export const useAuth = create<AuthState>((set, get) => ({
     set({
       client,
       baseUrl: activeUrl,
-      serverName: servers.find((s) => s.url === activeUrl)?.name ?? null
+      serverName: servers.find((s) => s.url === activeUrl)?.name ?? null,
+      username: stored?.username ?? null
     })
 
     if (!stored) {
@@ -153,7 +164,9 @@ export const useAuth = create<AuthState>((set, get) => ({
       }
       client.setTokens(tokens)
 
-      await window.songloft.credentials.set(normalized, tokens)
+      const account = username.trim()
+      // 用户名跟着凭据一起落盘：后端不回「我是谁」，下次启动只能靠它把账号名显示出来
+      await window.songloft.credentials.set(normalized, { ...tokens, username: account })
       const servers = await window.songloft.servers.upsert({
         url: normalized,
         name: serverName?.trim() || new URL(normalized).host,
@@ -165,6 +178,7 @@ export const useAuth = create<AuthState>((set, get) => ({
         client,
         baseUrl: normalized,
         serverName: servers.find((s) => s.url === normalized)?.name ?? null,
+        username: account,
         servers,
         status: 'authenticated',
         busy: false,
@@ -198,6 +212,13 @@ export const useAuth = create<AuthState>((set, get) => ({
     }
     if (baseUrl) await window.songloft.credentials.clear(baseUrl)
     client?.setTokens(null)
+    set({ status: 'unauthenticated', error: null, username: null })
+  },
+
+  openLogin: () => {
+    // 刻意不清凭据、不吊销令牌：用户可能只是想换台服务器 / 换个账号，
+    // 也可能只是点错了 —— 后者回登录页再点一次「直接进入」就能拿回原会话。
+    // 真正要抹掉本机凭据的是 logout。
     set({ status: 'unauthenticated', error: null })
   },
 
@@ -209,7 +230,7 @@ export const useAuth = create<AuthState>((set, get) => ({
 
     const stored = await window.songloft.credentials.get(url)
     if (!stored) {
-      set({ status: 'unauthenticated' })
+      set({ status: 'unauthenticated', username: null })
       return
     }
     client.setTokens({
@@ -232,7 +253,7 @@ export const useAuth = create<AuthState>((set, get) => ({
       name: servers.find((s) => s.url === url)?.name ?? new URL(url).host,
       lastUsedAt: Date.now()
     })
-    set({ status: 'authenticated', servers: fresh })
+    set({ status: 'authenticated', servers: fresh, username: stored.username ?? null })
   },
 
   forgetServer: async (url) => {
@@ -243,7 +264,14 @@ export const useAuth = create<AuthState>((set, get) => ({
       await useSettings.getState().patch({ activeServerUrl: next })
       set({ ...remaining, status: 'booting' })
       if (next) await get().switchServer(next)
-      else set({ status: 'unauthenticated', client: null, baseUrl: null, serverName: null })
+      else
+        set({
+          status: 'unauthenticated',
+          client: null,
+          baseUrl: null,
+          serverName: null,
+          username: null
+        })
       return
     }
     set(remaining)

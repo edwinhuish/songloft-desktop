@@ -138,7 +138,10 @@ export class ConfigStore {
   }
 
   setCredentials(url: string, creds: Omit<StoredCredentials, 'savedAt'>): void {
-    this.data.credentials[walletKeyFor(url)] = { ...creds, savedAt: Date.now() }
+    const key = walletKeyFor(url)
+    // 合并而不是整条覆盖：token 静默刷新时只带 token 三件套，
+    // 覆盖写会把登录时记下的 username 抹掉（界面上的账号名就没了）。
+    this.data.credentials[key] = { ...this.data.credentials[key], ...creds, savedAt: Date.now() }
     this.persist()
   }
 
