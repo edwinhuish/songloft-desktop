@@ -116,19 +116,27 @@ src/
 │  ├─ bridge.ts       window.songloft 的接口定义（白名单的唯一事实源）
 │  ├─ bridge-types.ts 桥接层的小类型
 │  ├─ lyric.ts        歌词四路合并 + 解析 + 当前行/逐字定位
+│  ├─ plugin.ts       JS 插件模型 / 排序纯函数 / 扩展页 URL 拼接 / PLUGIN_PARTITION
 │  └─ links.ts        对外 URL 常量（本仓库 / 上游）
 └─ renderer/       React 19 + zustand
-   ├─ api/           client.ts（fetch 封装）/ endpoints.ts（端点清单，来自上游 Flutter 实现）
-   ├─ state/         useAuth / usePlayer / usePlaylists / useSettings / useUi / useToasts
-   ├─ pages/         9 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
-   │                 Recent / Search / Settings / Login
+   ├─ api/           client.ts（fetch 封装）/ endpoints.ts（端点清单，来自上游 Flutter 实现）/
+   │                 plugins.ts（JS 插件：列表 / 启停 / 卸载 / 顺序 / 商店）
+   ├─ state/         useAuth / usePlayer / usePlaylists / useSettings / useUi / useToasts /
+   │                 usePlugins（已装扩展 + 顺序 + 运行时音频状态，唯一事实源）
+   ├─ pages/         10 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
+   │                 Recent / Search / Settings / Login / Extensions（+ 同目录的 PluginStore）
    │                 （「文件夹」不是独立页面，是 LibraryPage 里的一个标签，见 FoldersView）
    ├─ components/    Sidebar / TitleBar / SongTable / PlayerBar / LyricsView / CommandPalette /
-   │                 Panel / ContextMenu / Modal / Toasts / SelectionBar / …
-   ├─ hooks/         useSongList / usePlaylistSongs / useAsync
+   │                 Panel / ContextMenu / Modal / Toasts / SelectionBar /
+   │                 ExtensionStrip（标题栏入口条）/ PluginSurface（扩展 webview 栈）/ PluginIcon
+   ├─ hooks/         useSongList / usePlaylistSongs / useAsync / useExtensionStrip（入口条视窗）
    ├─ lib/           url（资源 URL 拼接）/ color / accent / format / concurrency
    └─ styles/        tokens.css / base.css / components.css / index.css
 ```
+
+★ **标题栏以下是「一个可替换的内容面」**：原生页（侧栏 + 主区 + 播放条）或者某个扩展的
+`webview`，由 `.shell[data-surface]` 切换（见 `App.tsx` 的 Shell 与 §8.12）。扩展**不是**
+主内容区里的一个页签 —— 它的路由落在 `useUi` 的 `Route` 里，但不在 `renderRoute` 的 switch 里。
 
 ---
 
@@ -295,6 +303,40 @@ GNOME 上必然只剩齿轮 —— 这是 GNOME 的已知限制（KDE 宽容是�
 ⚠️ 别把 `BrowserWindow` 的 `icon` 当成任务栏图标的解决方案（见 §9）：它解决的是另外三个平台；
 Wayland 下缺的永远是宿主上那份 `.desktop`。
 
+### 8.12 扩展（JS 插件）：装在后端，宿主只是遥控器
+
+插件本体（manifest + `static/` + QuickJS 沙箱里的 JS）全在**服务端**，客户端不存任何插件
+二进制。本地只存两样轻量配置：**谁出现在标题栏**（启用与否）与**谁在前**（`plugin-order`，
+键是 `entryPath` 而不是 id）。排序纯函数在 `shared/plugin.ts` 的 `applyPluginOrder` ——
+四条语义（孤儿条目跳过、重复取首个、未列入的按原顺序落尾、不改入参）来自上游
+`plugin_order.dart`，回归用例在 `shared/plugin.test.ts`。
+
+**承载用 `<webview>` 而不是 `<iframe>`**：`<iframe>` 是跨源的，宿主没有任何 API 能单独
+静音它、也不知道它在不在出声（`webContents.setAudioMuted` 是整窗口级的，会连播放器一起
+静音）。而「右键 → 静音」与「扩展图标上的播放中蒙版」正是要这两件事。给得太少会静默
+失效，所以要记住四条配套约束：
+
+1. **独立 session**（`shared/plugin.ts` 的 `PLUGIN_PARTITION`）。`applyCsp()` 是
+   `defaultSession.webRequest.onHeadersReceived`，改写的是**整个会话**的响应头 ——
+   插件页也在同一个来源上，不隔离就会被套上宿主的 CSP，症状是插件莫名其妙地坏掉、
+   **且没有任何报错**。代价是权限拒绝与证书校验要给那份 session 单独配一遍（见
+   `main/index.ts` 的 `hardenPluginSession`）。
+2. **webviewTag 必须配套加固**：`will-attach-webview` 里把 guest 的 `preload` 删掉、
+   `nodeIntegration` 关掉、沙箱与上下文隔离打开。开着 `webviewTag` 而不管它，等于把
+   「要不要 Node」交给页面自己声明。
+3. **「活着的 = 当前显示的那个 ∪ 正在播放的那些」**（见 `PluginSurface`）。视觉上永远只有
+   一个槽位，实现上是一层栈：切走就销毁。不这样，「某个扩展在后台出声」根本无从存在，
+   播放蒙版也就没意义了。
+4. **webview 必须显式给 display 与尺寸**，否则默认 `inline` 把高度塌成 0，表现为「加载了
+   却看不见」。
+
+**标题栏入口条是一次「视窗」计算**，不是简单地把按钮排开：入口条用 `flex: 1 1 auto` 吃掉
+中段全部余量，于是**它的宽度恰好就是可用宽度**（若由内容撑开，量到的是内容宽度而不是可用
+宽度，结果永远少数一个）；装不下的进折叠菜单的「扩展」二级菜单。`extensionOffset` 只存在
+`useUi` 里 —— 它是一次视图滚动的位置，写进设置会把用户拖出来的顺序污染掉。入口条与菜单
+必须走同一个 `useExtensionStrip`：两边各算一套顺序必然出现「菜单里列着一个其实就在条上
+的扩展」。
+
 ---
 
 ## 9. 不要做
@@ -316,6 +358,9 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
 * 不要为了让 `format:check` 通过而给文件加 `prettier-ignore` —— 直接跑 `pnpm run format`。
 * 不要提交 `out/` / `release/` / `.e2e/` 与根目录的 `electron.vite.config.*.mjs`
   （后者是 electron-vite 的转译副本，正常会被自动删除，异常残留时已在 `.gitignore` 里）。
+* 不要把扩展页装进 `<iframe>`：跨源 iframe 既静音不了、也探不到在不在出声（§8.12）。
+* 不要把扩展页的 webview 放进 `defaultSession`：宿主注入的 CSP 会把插件页一起改写（§8.12）。
+* 不要让入口条与折叠菜单各算一套「哪些扩展被挤出去了」：两处必须走 `useExtensionStrip`（§8.12）。
 
 ---
 
@@ -324,6 +369,13 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
 已对齐：曲库浏览（类型 / 分面 / 排序 / 无限滚动）、歌单增删改与拖拽重排、收藏、最近播放、
 文件夹浏览、逐字歌词与点击跳转、播放队列、命令面板、扫描与重复检测、设置项。
 
-未实现（换栈后需重做）：`jsplugin` 插件系统（上游约 6,100 行）、均衡器、无缝播放 / 淡入淡出、
-DLNA 投送、桌面歌词、「缓存到本机」（把单曲下载到设备本地离线播放 —— 设置页里那份「本地缓存」
-是**另一回事**，它清的是 Chromium 会话缓存）。详见 README 的「与上游 Flutter 版的差异」一节。
+**JS 插件（扩展）**：已实现「列表 / 启用停用 / 卸载 / 上传 zip / 从商店安装 / 调整顺序」
+与「标题栏入口条 + 折叠菜单溢出列表 + 扩展管理页」。与上游的形态差异是**入口位置**：
+上游把插件挂在底部导航栏的 Tab 上，本仓库没有底部导航栏，改成标题栏右侧的图标条
+（布局与坑见 §8.12）。未做的部分：插件的商店「全部更新」、清理孤儿数据、以及各个源
+的单独管理界面。插件的**页面本身**仍由服务端提供（渲染在 webview 里），所以上游那些
+插件自带的 UI 一行都不用重写。
+
+未实现（换栈后需重做）：均衡器、无缝播放 / 淡入淡出、DLNA 投送、桌面歌词、
+「缓存到本机」（把单曲下载到设备本地离线播放 —— 设置页里那份「本地缓存」是**另一回事**，
+它清的是 Chromium 会话缓存）。详见 README 的「与上游 Flutter 版的差异」一节。
