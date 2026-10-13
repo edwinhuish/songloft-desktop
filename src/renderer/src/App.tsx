@@ -264,7 +264,7 @@ export function App(): React.JSX.Element {
     if (status !== 'authenticated') {
       // 退出登录 / 切服务器都要清干净：留着的话标题栏会继续挂着**上一台服务器**的扩展
       usePlugins.getState().reset()
-      // 迷你模式也得退出：登录页要摆在一个 560×64 的窗里是没法用的
+      // 迷你模式也得退出：登录页要摆在一个 280×64 的窗里是没法用的
       useUi.getState().setMini(false)
       return
     }
@@ -346,7 +346,7 @@ function Shell(): React.JSX.Element {
       data-mini={mini ? 'true' : undefined}
       /*
         藏起来的正常界面按进迷你之前的尺寸钉住（见 base.css 里 .shell[data-mini] 那段）：
-        取的是 useUi 记下的那一份，而不是当前的 window.innerWidth —— 后者已经是 560px 了。
+        取的是 useUi 记下的那一份，而不是当前的 window.innerWidth —— 后者已经是 280px 了。
       */
       style={
         mini && miniRestore
