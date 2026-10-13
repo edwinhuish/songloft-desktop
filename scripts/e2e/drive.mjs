@@ -220,7 +220,17 @@ window.__t = {
      * 只数个数就够 —— 这里要挡的是"某一侧压根忘了画"，宽度值随实际字节数变，没法钉死。
      * （控制栏的播放进度是另一个类名 .playerbar-progress-fill，不会混进来。）
      */
-    usageBars: document.querySelectorAll('.progress-fill').length
+    usageBars: document.querySelectorAll('.progress-fill').length,
+    // 弹窗（.modal 才是那个面板；.overlay 是一直挂在 DOM 里的遮罩容器，数它没有意义）
+    modals: document.querySelectorAll('.modal').length,
+    /*
+     * 弹窗的文字（正文 + 底部按钮）。与服务端来的值逐一对照（版本号、发布说明、通道名），
+     * 底部那排也一起取：这一版弹窗给的**动作**（上传升级 / 立即升级 / 关闭）本身就是断言对象 ——
+     * 比如检查失败时上传入口该留着、非 Docker 时该消失。
+     */
+    modalText: [...document.querySelectorAll('.modal-body, .modal-foot')]
+      .map((e) => e.textContent || '')
+      .join(' ')
   })
 };
 'ready'
@@ -506,41 +516,63 @@ const STEPS = [
     1800,
     { settingText: containsAll('Electron', 'Chromium', 'Node', '后端版本', 'v2.13.1') }
   ],
-  // 检查更新：mock 一律回「有新版本 1.4.2 → 1.5.0」，所以这句话只可能来自 /upgrade/check
+  /*
+   * 服务端升级弹窗：点「检查更新」→ 弹窗自己查一次 → 把两条通道都摆出来。
+   * 断言按内容：版本号只可能来自 /upgrade/check，且两条通道取的是**不同**的版本号 ——
+   * 若代码把同一个值画了两遍（比如只读了扁平的 latest_version），这里就会红。
+   * 「当前版本 v1.4.2」还顺带看着版本号只补一个 v。
+   */
   [
-    '27-settings-update-check',
-    "window.__t.click('.btn', '检查')",
-    1800,
-    { settingText: containsAll('有新版本', 'v1.4.2', 'v1.5.0') }
+    '27-upgrade-modal',
+    "window.__t.click('.btn', '检查更新')",
+    2600,
+    {
+      modals: exactly(1),
+      modalText: containsAll(
+        '当前版本',
+        'v1.4.2',
+        '正式版 v1.5.0',
+        '测试版 v1.6.0-dev.3',
+        '缓存目录切换后立即生效',
+        '上传升级'
+      )
+    }
+  ],
+  // 关掉：升级是服务端的后台任务，弹窗只是观察窗 —— 后面几步要在没有遮罩的界面上做
+  [
+    '28-upgrade-modal-closed',
+    "window.__t.click('.modal-foot .btn', '关闭')",
+    800,
+    { modals: exactly(0) }
   ],
 
   // ── 播放 / 面板 ────────────────────────────────────────────────────────
-  ['28-playing', "window.__t.click('.nav-item', '曲库')", 2400],
+  ['30-playing', "window.__t.click('.nav-item', '曲库')", 2400],
   // ⚠️ 双击歌曲行**只**开始播放，不会顺带打开右侧面板 —— 面板是显式的视图开关
   //    （控制栏的「歌词面板 / 播放队列」、左侧封面、Ctrl+L）。原先这里把歌词断言压在
   //    「双击」上，前提就不成立（那种写法跑出来 panel 恒为 0、歌词也恒为 0）。
   //    于是拆成两步：先确认真播上了，再显式打开面板看歌词。
-  ['29-playing-dblclick', "window.__t.dbl('.song-row')", 1800, { playerTitle: hasSong }],
+  ['31-playing-dblclick', "window.__t.dbl('.song-row')", 1800, { playerTitle: hasSong }],
   // 打开歌词面板：面板关着时 togglePanel 会打开并落在「正在播放」——歌词就在这一页。
   // ★ 选择器必须限定 .playerbar：面板自己的页签按钮也叫「播放队列 / 正在播放」，
   //   不限定就会命中面板里那个（DOM 里 .panel 排在 .playerbar 之前），
   //   于是「再点一次收起面板」这类断言会点错元素而假失败。
   [
-    '30-now-playing-panel',
+    '32-now-playing-panel',
     'window.__t.click(\'.playerbar button[aria-label="歌词面板"]\')',
     2600,
     { panel: exactly(1), lyricLines: exactly(10), lyricWords: atLeast(20) }
   ],
   // 面板开着但页签在「正在播放」→ 点队列按钮是**切页签**（不是收起）
   [
-    '31-queue-panel',
+    '33-queue-panel',
     'window.__t.click(\'.playerbar button[aria-label="播放队列"]\')',
     1400,
     { panel: exactly(1), queueItems: atLeast(1) }
   ],
   // 控制栏的页签在「已激活」时再点一次 = 收起面板（不是什么都不做）
   [
-    '32-panel-closed',
+    '34-panel-closed',
     'window.__t.click(\'.playerbar button[aria-label="播放队列"]\')',
     1400,
     { panel: exactly(0) }
@@ -550,13 +582,13 @@ const STEPS = [
   // 放在命令面板之前：面板的 Escape 绑在它自己的输入框上，从 window 派发关不掉，
   // 先折叠就不会让它盖在侧栏截图上。
   [
-    '33-sidebar-collapsed',
+    '35-sidebar-collapsed',
     "window.__t.click('.sidebar-foot .nav-item', '收起侧栏')",
     1600,
     { offCenter: atMost(1) }
   ],
   [
-    '34-command-palette',
+    '36-command-palette',
     "window.__t.key('k', { ctrlKey: true })",
     1400,
     { paletteItems: atLeast(1) }

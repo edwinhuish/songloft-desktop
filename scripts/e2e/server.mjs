@@ -840,8 +840,28 @@ const server = createServer((req, res) => {
       current_channel: 'stable',
       current_build_type: 'docker',
       latest_version: '1.5.0',
-      release_notes: '- 缓存目录切换后立即生效\n- 新增缓存转码码率选择'
+      release_notes: '- 缓存目录切换后立即生效\n- 新增缓存转码码率选择',
+      // 嵌套的 updates 是真实后端的形状（以通道为键）。两条通道取**不同**的版本号，
+      // 这样界面上的选择项才看得出是在按通道取，而不是把同一个值画了两遍。
+      updates: {
+        stable: {
+          type: 'stable',
+          version: '1.5.0',
+          build_time: '2026-10-12T10:00:00Z',
+          release_notes: '- 缓存目录切换后立即生效\n- 新增缓存转码码率选择'
+        },
+        dev: {
+          type: 'dev',
+          version: '1.6.0-dev.3',
+          build_time: '2026-10-13T02:00:00Z',
+          release_notes: '- 试试新的分面聚合'
+        }
+      }
     })
+  }
+  // 升级进度：没有升级在跑时后端就是 idle（弹窗打开时会先问一句，别看错当成在升级）
+  if (path === '/api/v1/upgrade/progress') {
+    return json(res, 200, { status: 'idle', progress: 0, current_step: '' })
   }
 
   // 兜底：把未实现的写操作都当成功，避免界面卡在 loading
