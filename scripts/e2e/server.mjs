@@ -561,8 +561,11 @@ const server = createServer((req, res) => {
 
   if (path === '/health') return json(res, 200, { status: 'ok' })
   if (path === '/api/v1/version') {
+    // 版本号刻意取「正式发版」的形态：真实后端在发版构建里注入的是 git tag 原值（自带 v）。
+    // 客户端若再无条件拼一个 v，界面上就是 vv2.13.1 —— 账号分区的断言正是按这个整串比的，
+    // 而 includes('v2.13.1') 抓不到它（vv2.13.1 本身就包含 v2.13.1）。
     return json(res, 200, {
-      version: 'mock-2026.10.12',
+      version: 'v2.13.1',
       git_commit: 'mockcafe',
       build_time: '2026-10-12T10:00:00Z'
     })

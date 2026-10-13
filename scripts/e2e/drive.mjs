@@ -199,7 +199,22 @@ window.__t = {
     menuItems: window.__t.menuTitles(),
     subMenuItems: window.__t.lastMenuTitles(),
     // 菜单里的分割线（渲染成 hr，不是 button，光断言条目文字看不见它）
-    menuDividers: document.querySelectorAll('.context-menu hr').length
+    menuDividers: document.querySelectorAll('.context-menu hr').length,
+    // 设置页左侧的分区名（含顺序）。分区是"对标原播放器"定下来的需求，
+    // 只算个数的话，少一个分区或换了次序都看不出来。
+    settingsNav: [...document.querySelectorAll('.settings-nav button')].map((e) => (e.textContent || '').trim()),
+    /*
+     * 设置页当前分区的卡片文字。
+     * 新分区显示的全是"从服务端读回来的值"，数卡片数/开关数区分不出"读到了"与
+     * "接口不存在、画成空壳"——两者渲染出来的结构一模一样。所以按内容断言。
+     */
+    settingText: [...document.querySelectorAll('.setting-card')].map((e) => e.textContent || '').join(' '),
+    /*
+     * 设置行右侧的小字（.setting-row-meta，版本号渲染在这里）。
+     * 必须整串比：断言里写 contains('v2.13.1') 是抓不到 vv2.13.1 的——它本身就包含
+     * v2.13.1。这里取出整串，多一个 v 立刻红。
+     */
+    metaTags: [...document.querySelectorAll('.setting-row-meta')].map((e) => (e.textContent || '').trim())
   })
 };
 'ready'
@@ -350,7 +365,7 @@ const STEPS = [
   ['13-recent', "window.__t.click('.nav-item', '最近播放')", 2400, { rows: exactly(10) }],
   ['14-favorites', "window.__t.click('.nav-item', '我喜欢')", 2400, { rows: exactly(6) }],
 
-  // ── 折叠菜单 → 二级菜单 → 设置四页 ─────────────────────────────────────
+  // ── 折叠菜单 → 二级菜单 → 设置十个分区 ───────────────────────────────────
   // 标题栏 LOGO 右侧的折叠按钮。断言用 equals 而不是 containsAll：菜单项的**顺序**
   // 也是需求的一部分，集合比会把「顺序错了」放过。「文件夹」不在菜单里 —— 它是曲库页的标签。
   [
@@ -378,7 +393,26 @@ const STEPS = [
     { subMenuItems: equals('深夜写码', '我喜欢的音乐', '通勤路上') }
   ],
   // 二级菜单开着也不影响接着点上一层的项（设置入口就在那儿）
-  ['17-settings-appearance', "window.__t.click('.context-menu button', '设置')", 1600],
+  [
+    '17-settings-appearance',
+    "window.__t.click('.context-menu button', '设置')",
+    1600,
+    // 分区名与顺序都算需求（对标原播放器定的）：少一个分区、或换次序，这条立刻红
+    {
+      settingsNav: equals(
+        '外观',
+        '播放与歌词',
+        '曲库与扫描',
+        '缓存管理',
+        '网络设置',
+        '数据管理',
+        '服务器',
+        '账号',
+        '快捷键',
+        '关于与更新'
+      )
+    }
+  ],
   [
     '18-settings-playback',
     "window.__t.click('.settings-nav button', '播放')",
@@ -391,35 +425,102 @@ const STEPS = [
     2200,
     { switches: atLeast(2) }
   ],
-  ['20-settings-server', "window.__t.click('.settings-nav button', '服务器')", 1600],
+  /*
+   * 缓存管理：这几个值全来自服务端（/cache-manage/stats + /config），接错线就渲染成
+   * 默认值或「读取失败」，而此时**结构是一样的**（卡片、开关、进度条都在）。
+   * 所以断言按内容：「640 MB」「137」只可能来自 mock 的 stats。
+   * 「转码码率」那一行只在 transcode_format 非空时才渲染 —— 读成空串它就整行消失。
+   */
+  [
+    '20-settings-cache',
+    "window.__t.click('.settings-nav button', '缓存管理')",
+    2400,
+    {
+      settingText: containsAll('137', '640 MB', '2 GB', '转码码率', '/var/lib/songloft/music_cache')
+    }
+  ],
+  // 网络设置：三条代理各挂一个端点，mock 里取的都**不是**默认值（空串 / 空数组才是默认），
+  // 于是「字段读错」会显示成「未设置」，跟读对了区分得开
+  [
+    '21-settings-network',
+    "window.__t.click('.settings-nav button', '网络设置')",
+    2400,
+    {
+      settingText: containsAll('192.168.1.9:7890', 'gh-proxy.example', '192.168.1.0/24'),
+      switches: atLeast(2)
+    }
+  ],
+  [
+    '22-settings-data',
+    "window.__t.click('.settings-nav button', '数据管理')",
+    1800,
+    { settingText: containsAll('导出歌单', '导入歌单') }
+  ],
+  ['23-settings-server', "window.__t.click('.settings-nav button', '服务器')", 1600],
+  // 账号：版本号整串比 —— vv2.13.1 这个缺陷只有这么断言才挡得住（见 metaTags 的注释）
+  [
+    '24-settings-account',
+    "window.__t.click('.settings-nav button', '账号')",
+    2400,
+    { metaTags: equals('v2.13.1'), settingText: containsAll('测试连接', 'ms ·') }
+  ],
+  // 快捷键页要能对上 App.tsx 里真实存在的绑定；漏一条（如 Ctrl+L）这条就红
+  [
+    '25-settings-shortcuts',
+    "window.__t.click('.settings-nav button', '快捷键')",
+    1400,
+    {
+      settingText: containsAll(
+        'Ctrl / Cmd + K',
+        'Ctrl / Cmd + L',
+        'Alt + ←',
+        '空格',
+        'Ctrl / Cmd + ,'
+      )
+    }
+  ],
+  // 关于与更新：应用版本来自主进程，后端版本来自探测（/version = v2.13.1），两条链路各占一行
+  [
+    '26-settings-about',
+    "window.__t.click('.settings-nav button', '关于与更新')",
+    1800,
+    { settingText: containsAll('Electron', 'Chromium', 'Node', '后端版本', 'v2.13.1') }
+  ],
+  // 检查更新：mock 一律回「有新版本 1.4.2 → 1.5.0」，所以这句话只可能来自 /upgrade/check
+  [
+    '27-settings-update-check',
+    "window.__t.click('.btn', '检查')",
+    1800,
+    { settingText: containsAll('有新版本', 'v1.4.2', 'v1.5.0') }
+  ],
 
   // ── 播放 / 面板 ────────────────────────────────────────────────────────
-  ['21-playing', "window.__t.click('.nav-item', '曲库')", 2400],
+  ['28-playing', "window.__t.click('.nav-item', '曲库')", 2400],
   // ⚠️ 双击歌曲行**只**开始播放，不会顺带打开右侧面板 —— 面板是显式的视图开关
   //    （控制栏的「歌词面板 / 播放队列」、左侧封面、Ctrl+L）。原先这里把歌词断言压在
   //    「双击」上，前提就不成立（那种写法跑出来 panel 恒为 0、歌词也恒为 0）。
   //    于是拆成两步：先确认真播上了，再显式打开面板看歌词。
-  ['22-playing-dblclick', "window.__t.dbl('.song-row')", 1800, { playerTitle: hasSong }],
+  ['29-playing-dblclick', "window.__t.dbl('.song-row')", 1800, { playerTitle: hasSong }],
   // 打开歌词面板：面板关着时 togglePanel 会打开并落在「正在播放」——歌词就在这一页。
   // ★ 选择器必须限定 .playerbar：面板自己的页签按钮也叫「播放队列 / 正在播放」，
   //   不限定就会命中面板里那个（DOM 里 .panel 排在 .playerbar 之前），
   //   于是「再点一次收起面板」这类断言会点错元素而假失败。
   [
-    '23-now-playing-panel',
+    '30-now-playing-panel',
     'window.__t.click(\'.playerbar button[aria-label="歌词面板"]\')',
     2600,
     { panel: exactly(1), lyricLines: exactly(10), lyricWords: atLeast(20) }
   ],
   // 面板开着但页签在「正在播放」→ 点队列按钮是**切页签**（不是收起）
   [
-    '24-queue-panel',
+    '31-queue-panel',
     'window.__t.click(\'.playerbar button[aria-label="播放队列"]\')',
     1400,
     { panel: exactly(1), queueItems: atLeast(1) }
   ],
   // 控制栏的页签在「已激活」时再点一次 = 收起面板（不是什么都不做）
   [
-    '25-panel-closed',
+    '32-panel-closed',
     'window.__t.click(\'.playerbar button[aria-label="播放队列"]\')',
     1400,
     { panel: exactly(0) }
@@ -429,13 +530,13 @@ const STEPS = [
   // 放在命令面板之前：面板的 Escape 绑在它自己的输入框上，从 window 派发关不掉，
   // 先折叠就不会让它盖在侧栏截图上。
   [
-    '26-sidebar-collapsed',
+    '33-sidebar-collapsed',
     "window.__t.click('.sidebar-foot .nav-item', '收起侧栏')",
     1600,
     { offCenter: atMost(1) }
   ],
   [
-    '27-command-palette',
+    '34-command-palette',
     "window.__t.key('k', { ctrlKey: true })",
     1400,
     { paletteItems: atLeast(1) }
