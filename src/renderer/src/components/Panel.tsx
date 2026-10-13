@@ -115,13 +115,6 @@ function NowPlaying(): React.JSX.Element {
 }
 
 /**
- * 播放队列。
- *
- * ★ 导出是为了给**迷你模式那块面板**复用（见 MiniPlayer.tsx）：同一个队列在两处出现，
- *   两套实现迟早分叉（拖拽排序、右键菜单、跟随当前曲滚动…都得各写一遍）。
- *   注意它自己不带滚动容器 —— 谁挂它谁负责给（抽屉那边是 .panel-body，迷你那边是 .mini-queue）。
- */
-/**
  * 从队列列表往上找**第一个真的能滚的祖先**：抽屉里是 .panel-body，迷你模式里是 .mini-queue。
  *
  * 存在的理由见下面那段 effect：我们要自己滚，就不能再让浏览器替我们猜容器。
@@ -134,7 +127,16 @@ function findScrollParent(el: HTMLElement | null): HTMLElement | null {
   return null
 }
 
-export function Queue(): React.JSX.Element {
+/**
+ * 播放队列。
+ *
+ * ★ 导出是为了给**迷你模式那块面板**复用（见 MiniPlayer.tsx）：同一个队列在两处出现，
+ *   两套实现迟早分叉（拖拽排序、右键菜单、跟随当前曲滚动…都得各写一遍）。
+ *   注意它自己不带滚动容器 —— 谁挂它谁负责给（抽屉那边是 .panel-body，迷你那边是 .mini-queue）。
+ * ★ currentSlot：定位当前曲时，要它落在容器**从上往下第 currentSlot+1 格**（0 = 只保证看得见）。
+ *   迷你面板给 2（第 3 格），抽屉给默认的 0 —— 理由见下面那段 effect 的说明。
+ */
+export function Queue({ currentSlot = 0 }: { currentSlot?: number }): React.JSX.Element {
   const queue = usePlayer((s) => s.queue)
   const order = usePlayer((s) => s.order)
   const cursor = usePlayer((s) => s.cursor)
@@ -147,7 +149,7 @@ export function Queue(): React.JSX.Element {
   const listRef = useRef<HTMLDivElement>(null)
   const currentIndex = cursor >= 0 && cursor < order.length ? order[cursor] : -1
 
-  // 播放到下一首时把当前项滚进视野
+  // 挂载（面板打开）与换曲时，把当前项摆到它该在的位置上
   useEffect(() => {
     if (currentIndex < 0) return
     const list = listRef.current
@@ -157,21 +159,50 @@ export function Queue(): React.JSX.Element {
 
     /*
      * ★ 自己算偏移，**不用 item.scrollIntoView()**：那个 API 会把「它所有的祖先滚动容器」
-     *   依次滚一遍，视口也在内。迷你模式下窗口只有 400×480，而列表项在文档里的位置可能
-     *   远在窗口下方（被 .mini-queue 剪掉的那些仍然占着文档坐标），于是那一下会连着视口
-     *   一起滚 —— 整条迷你播放器被顶出窗外，右上角那三颗窗口钮跟着不见。
-     *   这里只滚这一个容器，而且只在需要时滚**最小**的距离（等价于 block: 'nearest'：
-     *   在上方露不出来就贴顶、在下方露不出来就贴底，已经在视野里就不动）。
+     *   依次滚一遍，视口也在内。迷你窗只有 400×480，而列表项在文档坐标里可能远在窗口下方
+     *   （被 .mini-queue 剪掉的那些仍然占着文档坐标），于是那一下会连着视口一起滚 ——
+     *   整条迷你播放器被顶出窗外，右上角那三颗窗口钮跟着不见。
+     *
+     * ★ 两种落法，用途不同：
+     *   · currentSlot = 0（抽屉）：只保证看得见 —— 在上方露不出来就贴顶、下方露不出来就贴底，
+     *     已经在视野里就一动不动（等价于 block: 'nearest'）。
+     *   · currentSlot > 0（迷你面板）：**固定**落在从上往下第 currentSlot+1 格，上面留出
+     *     currentSlot 行。面板只有 416px 高，只保证「看得见」的话当前曲会贴着下边缘、
+     *     甚至掉到视野之外。
+     *
+     * ★ 目标只用「项相对容器顶部的距离」算，**不牵扯可视高度**，也就不用自己夹上限
+     *   （给过大的值由引擎夹到 max）。这一点在迷你面板刚展开时是决定性的：那会儿窗口还没被
+     *   主进程加高，容器的 clientHeight 是 0，但列表是照自身高度铺开的，那个距离量得照样准；
+     *   等容器长起来，它正好停在第 currentSlot+1 格。反过来，若按可视高度去算（或先入为主地
+     *   认为「没高度就没法算」），算出来的就是 0 高度下的 0 —— 窗口一长高全错位，表现正是
+     *   「打开播放列表，当前曲却跑到下面看不见的地方」。
      */
     const cRect = container.getBoundingClientRect()
     const iRect = item.getBoundingClientRect()
-    let delta = 0
-    if (iRect.top < cRect.top) delta = iRect.top - cRect.top
-    else if (iRect.bottom > cRect.bottom) delta = iRect.bottom - cRect.bottom
-    if (delta === 0) return
+    /** 当前项相对容器**滚动原点**的位置（与容器此刻有多高无关） */
+    const offset = container.scrollTop + (iRect.top - cRect.top)
 
-    container.scrollTo({ top: container.scrollTop + delta, behavior: 'smooth' })
-  }, [currentIndex])
+    let target: number
+    if (currentSlot > 0) {
+      target = offset - currentSlot * item.offsetHeight
+    } else {
+      const delta =
+        iRect.top < cRect.top
+          ? iRect.top - cRect.top
+          : iRect.bottom > cRect.bottom
+            ? iRect.bottom - cRect.bottom
+            : 0
+      if (delta === 0) return
+      target = offset + delta
+    }
+
+    /* 容器还没有高度时（迷你面板刚展开那一下）用即时跳转：那时做平滑动画没有意义，
+       而且动画可能被随后的尺寸变化打断，停在半路上。 */
+    container.scrollTo({
+      top: Math.max(0, target),
+      behavior: container.clientHeight > 0 ? 'smooth' : 'instant'
+    })
+  }, [currentIndex, currentSlot])
 
   if (queue.length === 0) {
     return (

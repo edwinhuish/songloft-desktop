@@ -209,7 +209,9 @@ export function MiniPlayer(): React.JSX.Element {
             <LyricsView compact />
           ) : (
             <div className="mini-queue">
-              <Queue />
+              {/* currentSlot = 2：当前曲固定落在**从上往下第 3 格**（上面留两行）。
+                  面板只有 416px 高，只保证「看得见」的话它会贴着下边缘、或干脆在视野之外。 */}
+              <Queue currentSlot={2} />
             </div>
           )}
         </div>
