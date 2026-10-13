@@ -6,7 +6,7 @@
  */
 
 import { readFile, writeFile } from 'node:fs/promises'
-import { basename } from 'node:path'
+import { basename, extname } from 'node:path'
 
 import { dialog, type BrowserWindow } from 'electron'
 
@@ -18,14 +18,33 @@ import type { FileOpenResult, FileSaveResult } from '@shared/ipc'
  */
 const MAX_READ_BYTES = 32 * 1024 * 1024
 
-const JSON_FILTERS = [{ name: 'JSON 备份', extensions: ['json'] }]
+/**
+ * 保存对话框的扩展名过滤器，按建议文件名的扩展名挑。
+ *
+ * 原先写死一个「JSON 备份」—— 那对歌单备份是对的，对导出日志（.log 纯文本）就是在说谎：
+ * 下拉里写着 JSON，存的却是日志。
+ */
+const JSON_FILTER = { name: 'JSON 备份', extensions: ['json'] }
+
+const SAVE_FILTERS: Record<string, { name: string; extensions: string[] }> = {
+  json: JSON_FILTER,
+  log: { name: '日志文本', extensions: ['log', 'txt'] }
+}
+
+const ALL_FILES_FILTER = { name: '所有文件', extensions: ['*'] }
+
+/** 认不出的扩展名就只给「所有文件」：给个对不上的过滤器，比不给更糟 */
+function saveFilters(suggestedName: string): { name: string; extensions: string[] }[] {
+  const filter = SAVE_FILTERS[extname(suggestedName).slice(1).toLowerCase()]
+  return filter ? [filter, ALL_FILES_FILTER] : [ALL_FILES_FILTER]
+}
 
 export async function saveTextFile(
   window: BrowserWindow | null,
   suggestedName: string,
   contents: string
 ): Promise<FileSaveResult> {
-  const options = { defaultPath: suggestedName, filters: JSON_FILTERS }
+  const options = { defaultPath: suggestedName, filters: saveFilters(suggestedName) }
   const result = window
     ? await dialog.showSaveDialog(window, options)
     : await dialog.showSaveDialog(options)
@@ -35,7 +54,8 @@ export async function saveTextFile(
 }
 
 export async function openTextFile(window: BrowserWindow | null): Promise<FileOpenResult | null> {
-  const options = { properties: ['openFile' as const], filters: JSON_FILTERS }
+  // 打开框目前唯一的用途是导入歌单备份（JSON），所以过滤器就固定成它
+  const options = { properties: ['openFile' as const], filters: [JSON_FILTER] }
   const result = window
     ? await dialog.showOpenDialog(window, options)
     : await dialog.showOpenDialog(options)

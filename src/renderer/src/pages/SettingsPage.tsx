@@ -68,6 +68,7 @@ import {
   confirmServerUploadUpgrade,
   deleteSong,
   exportPlaylists,
+  exportServerLogs,
   findDuplicates,
   getAutoScan,
   getCacheConfig,
@@ -78,6 +79,7 @@ import {
   getGithubProxy,
   getHlsProxyEnabled,
   getHttpProxy,
+  getLogLevel,
   getMetadataRefreshProgress,
   getMusicPath,
   getProxyAllowlist,
@@ -97,6 +99,7 @@ import {
   setGithubProxy,
   setHlsProxyEnabled,
   setHttpProxy,
+  setLogLevel,
   setProxyAllowlist,
   setRemoteTitleSource,
   setScanAutoCreatePlaylists,
@@ -111,7 +114,8 @@ import {
   updateCacheConfig,
   updateMusicPath,
   uploadServerBinary,
-  validateCacheDir
+  validateCacheDir,
+  type LogLevel
 } from '@/api/endpoints'
 import { useAsync } from '@/hooks/useAsync'
 import {
@@ -2774,6 +2778,104 @@ const ABOUT_LINKS: { href: string; label: string }[] = [
   { href: UPSTREAM_URL, label: '原项目' }
 ]
 
+/**
+ * 日志等级的可选项。
+ *
+ * 文案照原播放器：这四个名字光看是分不出方向的 —— Debug 要说明「详细，调试用」，
+ * Info 要说明「默认」，否则用户不知道该往哪边调。
+ */
+const LOG_LEVEL_OPTIONS: SelectOption<LogLevel>[] = [
+  { value: 'debug', label: 'Debug', desc: '详细，调试用' },
+  { value: 'info', label: 'Info', desc: '默认' },
+  { value: 'warn', label: 'Warn', desc: '只记警告与错误' },
+  { value: 'error', label: 'Error', desc: '仅错误' }
+]
+
+function logLevelLabel(level: LogLevel): string {
+  const option = LOG_LEVEL_OPTIONS.find((item) => item.value === level)
+  return option ? `${option.label}（${option.desc}）` : level
+}
+
+/**
+ * 日志。
+ *
+ * 两项都作用于**服务端**，这点必须在文案里说清：
+ *   * 等级是后端 slog 的全局等级 —— 改了对所有客户端生效，且即时生效（不用重启后端）；
+ *   * 导出的是后端落盘的日志（最近 10 MiB，逐行脱敏后是纯文本），供提 issue 时附上。
+ *
+ * 桌面端自己不落盘日志，所以这里没有「客户端日志」这一项 —— 与其在文案里含糊，不如说清。
+ */
+function LogSettings(): React.JSX.Element {
+  const level = useAsync(() => getLogLevel(requireClient()), [])
+  const [exporting, setExporting] = useState(false)
+
+  const doExport = (): void => {
+    setExporting(true)
+    void exportServerLogs(requireClient())
+      // 写盘交给主进程（渲染层没有文件系统权限）。后端返回的就是纯文本正文，不需要解包
+      .then((text) =>
+        window.songloft.files.save(
+          `songloft-backend-logs-${dateStamp().replace(/-/g, '')}.log`,
+          text
+        )
+      )
+      .then((saved) => {
+        if (saved.saved) toast('已导出后端日志', 'success', saved.path ?? undefined)
+      })
+      .catch((error: unknown) =>
+        toast('导出日志失败', 'error', error instanceof Error ? error.message : undefined)
+      )
+      .finally(() => setExporting(false))
+  }
+
+  return (
+    <Card title="日志">
+      <Row
+        server
+        title="日志等级"
+        desc={
+          level.error
+            ? `读取失败：${level.error}`
+            : '后端日志的详细程度，对所有客户端生效；调高只是多写字，不影响播放与扫描'
+        }
+      >
+        <SettingSelect
+          ariaLabel="日志等级"
+          width={150}
+          value={level.data ?? 'info'}
+          options={LOG_LEVEL_OPTIONS}
+          disabled={level.loading}
+          onChange={(next) => {
+            void setLogLevel(requireClient(), next)
+              .then((saved) => {
+                level.reload()
+                toast(`日志等级已切换为 ${logLevelLabel(saved)}`, 'success')
+              })
+              .catch((error: unknown) =>
+                toast(
+                  '切换日志等级失败',
+                  'error',
+                  error instanceof Error ? error.message : undefined
+                )
+              )
+          }}
+        />
+      </Row>
+
+      <Row
+        server
+        title="导出日志"
+        desc="把后端最近 10 MiB 日志脱敏后导出成文本文件（token、密钥、内网地址之类会抹掉），提 issue 时附上它"
+      >
+        <button type="button" className="btn" disabled={exporting} onClick={doExport}>
+          {exporting ? <IconLoader size={15} /> : <IconDownload size={15} />}
+          导出日志
+        </button>
+      </Row>
+    </Card>
+  )
+}
+
 function AboutSettings(): React.JSX.Element {
   const { backendVersion } = useAuth()
   const info = useAsync<AppInfo>(() => window.songloft.app.info(), [])
@@ -2795,7 +2897,11 @@ function AboutSettings(): React.JSX.Element {
 
   return (
     <>
-      <Card title="Songloft Desktop">
+      {/* 顺序照原播放器的「关于与更新」分类：先更新、再日志，最后才是关于本身 */}
+      <UpdateCard />
+      <LogSettings />
+
+      <Card title="关于">
         <Row
           title="这是什么"
           desc="songloft-player 的 Electron 桌面重写版：只做桌面端，用一套 Web 技术栈换取更小的体积与更顺的宽屏布局。数据与后端协议完全沿用原项目。"
@@ -2828,8 +2934,6 @@ function AboutSettings(): React.JSX.Element {
           ))
         )}
       </Card>
-
-      <UpdateCard />
     </>
   )
 }

@@ -814,6 +814,41 @@ export function getServerUpgradeProgress(client: ApiClient): Promise<ServerUpgra
   }))
 }
 
+/* ───────────────────────────── 日志 ───────────────────────────── */
+
+/** 后端 slog 的等级。后端只认这四个（别的写法 PUT 会被 400 挡回） */
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+const LOG_LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error']
+
+/** 认不出的值退回 info —— 这也正是后端自己的兜底行为，两边不会打架 */
+function normalizeLogLevel(value: string | undefined): LogLevel {
+  return LOG_LEVELS.find((level) => level === value) ?? 'info'
+}
+
+export function getLogLevel(client: ApiClient): Promise<LogLevel> {
+  return client
+    .request<{ level?: string }>('/settings/log-level')
+    .then((res) => normalizeLogLevel(res.level))
+}
+
+export function setLogLevel(client: ApiClient, level: LogLevel): Promise<LogLevel> {
+  return client
+    .request<{ level?: string }>('/settings/log-level', { method: 'PUT', body: { level } })
+    .then((res) => normalizeLogLevel(res.level ?? level))
+}
+
+/**
+ * 导出后端日志。
+ *
+ * ★ 后端返回的是 **text/plain** 附件正文（最近 10 MiB 的落盘日志按时间拼接、逐行脱敏），
+ *   不是 JSON，也没有 zip 包。所以这里不能用解 JSON 那套读法 —— ApiClient 对非 JSON 的
+ *   响应体会原样返回字符串（见 client.ts 的 parseBody）。
+ */
+export function exportServerLogs(client: ApiClient): Promise<string> {
+  return client.request<string>('/logs/export')
+}
+
 export function getHlsProxyEnabled(client: ApiClient): Promise<boolean> {
   return client
     .request<{ enabled?: boolean }>('/settings/hls-proxy')
