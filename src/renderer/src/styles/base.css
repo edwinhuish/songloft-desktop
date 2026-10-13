@@ -924,15 +924,16 @@ html[data-menu='open'] .plugin-view {
    ★ 左右各往外让出一个侧栏内边距（负 margin + 正 padding），不是绕弯：
      · 左侧：.nav-item[aria-current] 的强调条画在 left: -内边距 处，而滚动容器本身就是
        裁切线 —— 不让出来的话歌单项的强调条会被裁掉（导航项有、歌单项没有，看着像 bug）；
-     · 右侧：滚动条是**实体**（10px，见文件顶部那套 ::-webkit-scrollbar），占的是
-       padding box 最右那一条 —— 让出去之后它才贴住容器的右边缘（也就是侧栏的右边缘），
-       否则会悬在内边距中间、右边还空着一条。让出的那份 padding 同时把列表项与它隔开，
-       滑块不会蹭到歌单名和条数。
+     · 右侧：滚动条是**实体**，占的是 padding box 最右那一条 —— 让出去之后它才贴住容器的
+       右边缘（也就是侧栏的右边缘），否则会悬在内边距中间、右边还空着一条。
      两侧都跟着 --sidebar-pad-x 走，所以密度换挡时强调条、裁切线与滚动条始终是同一条线。
-   ★ 这里刻意**不**上 scrollbar-gutter: stable（.main-scroll / .ext-scroll 那两处都上了）：
-     常驻 10px 槽位会让歌单项右端的条数比上面导航项那个「歌单」计数**永久**左移 10px，
-     而这两个数字本来是同一列。代价是列表刚够溢出时行宽跳 10px —— 只影响真装满了的那些
-     用户，比所有人永久错位划算。 */
+   ★ 右边那一条内边距**交给滚动槽来占**（padding-right 归零 + scrollbar-gutter: stable +
+     槽宽取 --sidebar-pad-x，见下面那两条滚动条规则）。两边宽度因此一样：
+       · 槽常驻：不留的话，列表一溢出，右侧就被滚动条再吃掉一条 —— 「内边距 + 滚动条」
+         比左边的内边距宽出一截，一眼就看出偏心，行宽还会在刚够溢出的那一刻跳一下；
+       · 槽宽取 --sidebar-pad-x 而不是全局那 10px：这样它正好落进这段空档里，滑块不必挤到
+         列表项身上，折叠态的图标与封面也仍然居中（居中是按内容盒算的，槽也是内容盒的一部分）。
+     .main-scroll / .ext-scroll 也是常驻槽位，理由同源。 */
 .sidebar-playlists {
   display: flex;
   flex-direction: column;
@@ -944,8 +945,12 @@ html[data-menu='open'] .plugin-view {
   margin: 0 calc(-1 * var(--sidebar-pad-x));
   /* 底部留出空档：右下角那颗「收起 / 展开」按钮浮在这块上（见 .sidebar-toggle），
      不留空档的话，列表滚到底时最后一行的**右侧**（歌单条数那个数字）会被它盖住。
-     ★ 这个空档不随密度压到 34 以下：按钮本身没变小，压下去它就压到行上了 */
-  padding: 0 var(--sidebar-pad-x) var(--nav-list-pad-bottom) var(--sidebar-pad-x);
+     ★ 这个空档不随密度压到 34 以下：按钮本身没变小，压下去它就压到行上了
+     ★ 右侧内边距是 0：那一条由滚动槽占掉（见上面那段说明）。「槽宽 = --sidebar-pad-x」
+       这层关系只写一处 —— 下面那条 ::-webkit-scrollbar 的 width */
+  padding: 0 0 var(--nav-list-pad-bottom) var(--sidebar-pad-x);
+  /* 槽位常驻（不管是哪一档密度、列表溢没溢出），滚动条出现与否都不再改变内容宽度 */
+  scrollbar-gutter: stable;
   transition:
     gap var(--dur-3) var(--ease),
     margin var(--dur-3) var(--ease),
@@ -968,10 +973,14 @@ html[data-menu='open'] .plugin-view {
 /* 歌单列表的滚动条：三档状态机。
    ① 什么都不悬浮          —— 半透明（--surface-1，明度阶梯里最淡的一档）
    ② 鼠标进入这块可滚动区域  —— 显形（--surface-2）
-   ③ 鼠标直接压在滚动条上    —— 再提亮一档（--surface-3）并加粗（4px → 8px），便于点击拖动
+   ③ 鼠标直接压在滚动条上    —— 再提亮一档（--surface-3）并加粗（4px → 6px），便于点击拖动
 
-   可见宽度 = 轨道宽（10px）减去左右透明边框之和 —— 全局那套用 background-clip: padding-box
-   把透明边框当留白，所以「加粗」只需改边框宽度：轨道宽度一动，滚动槽跟着变、整个列表会
+   ★ 槽宽取 --sidebar-pad-x（舒适 8px / 紧凑 9px），跟全局那 10px 不同：右侧那一段空档
+     只有内边距那么宽（见 .sidebar-playlists 的说明），槽再宽就顶到列表项身上了。
+     宽度这么定之后，「内容右缘 → 侧栏右边缘」与左边一样宽。
+
+   可见宽度 = 槽宽减去左右透明边框之和 —— 全局那套用 background-clip: padding-box
+   把透明边框当留白，所以「加粗」只需改边框宽度：槽宽一动，滚动槽跟着变、整个列表会
    左右抖一下；边框怎么改都不影响布局。透明边框全留在**左侧**，滑块永远贴着右边缘、
    加粗也只往左长，右侧那 1px 外边距在每一档都留着。
 
@@ -983,12 +992,16 @@ html[data-menu='open'] .plugin-view {
        整条规则连同里面的声明会被**整份丢弃** —— 跟合法的写法合在一起就一起废了。
    ★ 只写 background-color（长写）而不是 background（简写）：简写会把全局那条设的
      background-clip: padding-box 重置回 border-box，透明边框就兜不住背景了 ——
-     滑块会在悬浮时悄悄铺满整条 10px 轨道、右侧 1px 也一起没掉。
+     滑块会在悬浮时悄悄铺满整条槽、右侧 1px 也一起没掉。
    ★ transition 写在基础那条上：滚动条伪元素能不能跑过渡由引擎决定（Chromium 的滚动条
      由合成器绘制，有可能直接跳变）。写了不亏 —— 不支持时它就当没看见，三档照样切换。 */
+.sidebar-playlists::-webkit-scrollbar {
+  width: var(--sidebar-pad-x);
+}
+
 .sidebar-playlists::-webkit-scrollbar-thumb {
-  /* 10 - 5 - 1 = 4px 可见 */
-  border-width: 0 1px 0 5px;
+  /* 槽宽 8 - 左 3 - 右 1 = 4px 可见（紧凑档槽宽 9，可见 5px，同一套边框值不必再分档） */
+  border-width: 0 1px 0 3px;
   background-color: var(--surface-1);
   transition:
     background-color var(--dur-2) var(--ease),
@@ -1000,7 +1013,7 @@ html[data-menu='open'] .plugin-view {
   background-color: var(--surface-2);
 }
 
-/* ③ 鼠标直接压在滚动条上：提亮 + 加粗到 8px（10 - 1 - 1） */
+/* ③ 鼠标直接压在滚动条上：提亮 + 加粗（8 - 1 - 1 = 6px 可见） */
 .sidebar-playlists::-webkit-scrollbar-thumb:hover {
   background-color: var(--surface-3);
   border-width: 0 1px 0 1px;
