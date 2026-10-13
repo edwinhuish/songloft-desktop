@@ -893,10 +893,19 @@ html[data-menu='open'] .plugin-view {
   transition: opacity var(--dur-2) var(--ease) var(--dur-2);
 }
 
-/* 歌单滚动区。左侧让出一个侧栏内边距（负 margin + 正 padding）不是绕弯：
-   .nav-item[aria-current] 的强调条画在 left: -内边距 处，而滚动容器本身就是裁切线 ——
-   不让出来的话歌单项的强调条会被裁掉（导航项有、歌单项没有，看着像 bug）。
-   两侧都跟着 --sidebar-pad-x 走，所以密度换挡时强调条与裁切线始终同一条。 */
+/* 歌单滚动区。
+   ★ 左右各往外让出一个侧栏内边距（负 margin + 正 padding），不是绕弯：
+     · 左侧：.nav-item[aria-current] 的强调条画在 left: -内边距 处，而滚动容器本身就是
+       裁切线 —— 不让出来的话歌单项的强调条会被裁掉（导航项有、歌单项没有，看着像 bug）；
+     · 右侧：滚动条是**实体**（10px，见文件顶部那套 ::-webkit-scrollbar），占的是
+       padding box 最右那一条 —— 让出去之后它才贴住容器的右边缘（也就是侧栏的右边缘），
+       否则会悬在内边距中间、右边还空着一条。让出的那份 padding 同时把列表项与它隔开，
+       滑块不会蹭到歌单名和条数。
+     两侧都跟着 --sidebar-pad-x 走，所以密度换挡时强调条、裁切线与滚动条始终是同一条线。
+   ★ 这里刻意**不**上 scrollbar-gutter: stable（.main-scroll / .ext-scroll 那两处都上了）：
+     常驻 10px 槽位会让歌单项右端的条数比上面导航项那个「歌单」计数**永久**左移 10px，
+     而这两个数字本来是同一列。代价是列表刚够溢出时行宽跳 10px —— 只影响真装满了的那些
+     用户，比所有人永久错位划算。 */
 .sidebar-playlists {
   display: flex;
   flex-direction: column;
@@ -905,11 +914,11 @@ html[data-menu='open'] .plugin-view {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  margin-left: calc(-1 * var(--sidebar-pad-x));
+  margin: 0 calc(-1 * var(--sidebar-pad-x));
   /* 底部留出空档：右下角那颗「收起 / 展开」按钮浮在这块上（见 .sidebar-toggle），
      不留空档的话，列表滚到底时最后一行的**右侧**（歌单条数那个数字）会被它盖住。
      ★ 这个空档不随密度压到 34 以下：按钮本身没变小，压下去它就压到行上了 */
-  padding: 0 0 var(--nav-list-pad-bottom) var(--sidebar-pad-x);
+  padding: 0 var(--sidebar-pad-x) var(--nav-list-pad-bottom) var(--sidebar-pad-x);
   transition:
     gap var(--dur-3) var(--ease),
     margin var(--dur-3) var(--ease),
@@ -918,6 +927,30 @@ html[data-menu='open'] .plugin-view {
      续出去只会让人以为整个侧栏在动。标准属性，各引擎都认；
      -webkit-overflow-scrolling 是 iOS Safari 的旧开关，Chromium 里是空操作。 */
   overscroll-behavior: contain;
+}
+
+/* 滑块贴住容器右边缘：外边距收到 1px。
+   全局那套（本文件顶部）给的是 3px 透明边框 + padding-box 裁切 —— 3px 会让滑块看着
+   浮在轨道中间，而且可见宽度只剩 4px（10 - 3×2），在这种浅色玻璃底上几乎看不出来；
+   收到 1px 之后可见宽度 8px，溢出时一眼能看到，右边缘也就只剩 1px 外边距。
+   ★ 只覆盖 border-width：透明边框自身、background-clip、底色与 hover 变亮都沿用全局
+     那一条，不在这里重写第二份（那边改了这里跟着改）；轨道本来就是透明且贴着右边缘的，
+     不需要动。 */
+.sidebar-playlists::-webkit-scrollbar-thumb {
+  border-width: 1px;
+}
+
+/* 非 WebKit 引擎（Firefox 之类）根本拿不到 ::-webkit-scrollbar 那套：给一条标准属性兜底。
+   ★ 必须包在 @supports not selector(...) 里：Chromium 一旦看到 scrollbar-width /
+     scrollbar-color，就**整份忽略** ::-webkit-scrollbar —— 不包的话这条「兜底」反而会把
+     上面调好的 1px 外边距一起废掉。
+   （本应用跑在 Electron 里，渲染层永远是 Chromium，这一支实际到不了；它只是保证换引擎
+     时行为不退化。兜底那支没有 hover 变亮，所以颜色取明显一档。） */
+@supports not selector(::-webkit-scrollbar) {
+  .sidebar-playlists {
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-3) transparent;
+  }
 }
 
 /* 收起 / 展开侧栏。
