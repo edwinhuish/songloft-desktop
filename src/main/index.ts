@@ -28,7 +28,7 @@ import { fetchCoverBytes, probeServer } from './probe'
 import { PLUGIN_PARTITION } from '@shared/plugin'
 import { ConfigStore } from './store'
 import { createTray, destroyTray, render as renderTray } from './tray'
-import { createMainWindow, setMiniMode } from './windows'
+import { applyWindowOnTop, createMainWindow, setMiniMode } from './windows'
 
 /**
  * ★ Linux 桌面集成身份（Wayland 的 app_id / X11 的 WM_CLASS）。
@@ -267,19 +267,39 @@ function attachWindowHandlers(window: BrowserWindow): void {
 }
 
 // ────────────────────────────────── IPC ──────────────────────────────────
+
+/**
+ * patch 里**显式**给了这一项吗。
+ *
+ * 用 hasOwnProperty 而不是判值：`{ volume: 0 }` 与「没提 volume」是两回事，
+ * 有些 patch 项带着副作用（改置顶要落窗口、改 TLS 要重装策略），只有显式给了才该触发。
+ */
+function has(obj: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key)
+}
+
 function registerIpcHandlers(): void {
   // 设置
   ipcMain.handle(IPC.settingsGet, () => store.getSettings())
   ipcMain.handle(IPC.settingsPatch, (_event, patch: Partial<AppSettings>) => {
     const next = store.patchSettings(patch)
-    if (Object.prototype.hasOwnProperty.call(patch, 'allowInsecureTls')) {
+    if (has(patch, 'allowInsecureTls')) {
       applyTlsPolicy(next.allowInsecureTls)
+    }
+    /*
+     * 置顶是**窗口状态**而不是界面状态：写入配置只是记住了偏好，还得当场落到真窗口上
+     * （两份设置各管自己那种形态，见 windows.ts 的 applyWindowOnTop）。
+     */
+    if (has(patch, 'alwaysOnTop') || has(patch, 'miniAlwaysOnTop')) {
+      applyWindowOnTop()
     }
     return next
   })
   ipcMain.handle(IPC.settingsReset, () => {
     const next = store.resetSettings()
     applyTlsPolicy(next.allowInsecureTls)
+    // 复位会把两份置顶设置一起打回默认（大窗口关、迷你开），窗口也得跟着回去
+    applyWindowOnTop()
     return next
   })
 

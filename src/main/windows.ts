@@ -33,8 +33,13 @@ const MINI_PANEL_SIZE = { width: 400, height: 480 }
 
 export interface MiniModeController {
   setState: (state: MiniModeState) => void
-  /** 重新落一遍迷你态的窗口状态（见 createMainWindow 里的 reassertMiniWindow）。不在迷你态时是空操作 */
-  reassert: () => void
+  /**
+   * 按「当前形态 + 对应那份置顶设置」重落一次置顶。
+   *
+   * 设置里那两份置顶（普通 / 迷你）改了就调它 —— 置顶是**窗口状态**不是界面状态，
+   * 渲染层改完设置只能到这儿落地（见 createMainWindow 里的 applyWindowOnTop）。
+   */
+  applyOnTop: () => void
 }
 
 /**
@@ -53,6 +58,15 @@ let miniController: MiniModeController | null = null
  */
 export function setMiniMode(state: MiniModeState): void {
   miniController?.setState(state)
+}
+
+/**
+ * 设置里那份置顶改了 —— 让真窗口跟上。
+ *
+ * 只处理置顶：尺寸/位置不归设置管（那是用户拖出来的），所以不复用完整的状态重落。
+ */
+export function applyWindowOnTop(): void {
+  miniController?.applyOnTop()
 }
 
 /** 开发态由 electron-vite 注入；打包后为 undefined */
@@ -182,7 +196,7 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
   }
 
   /**
-   * 迷你态的「浮在别的窗口之上」。**分平台各做各的那一份**，因为三个平台的机制与坑都不一样：
+   * 把「置顶」落到真窗口上。**分平台各做各的那一份**，因为三个平台的机制与坑都不一样：
    *
    * · Windows：`setAlwaysOnTop(true)` 就是 HWND_TOPMOST，一句够用（level 参数它不认，传了无害）。
    * · macOS：level 在这里才有意义 —— 'floating' 是「浮在普通窗口之上、但在菜单栏与系统通知
@@ -195,11 +209,16 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
    *   没有可写的 API —— 真正让置顶在这类会话下成立的是启动时改用 X11 后端，见 index.ts
    *   顶部那段 ozone-platform 的说明。
    */
-  const setMiniAlwaysOnTop = (on: boolean): void => {
+  const setWindowOnTop = (on: boolean, acrossSpaces: boolean): void => {
     if (on) {
       window.setAlwaysOnTop(true, 'floating')
+      /*
+       * macOS 上「跨所有空间 + 全屏之上」只有迷你条需要 —— 它是个挂在屏幕角上的浮窗，
+       * 用户切空间、别人进全屏时它都该还在。大窗口的「置顶」就是老老实实浮在普通窗口之上，
+       * 别顺手改掉它的工作区归属（那是另一件事，用户没要）。
+       */
       if (process.platform === 'darwin') {
-        window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+        window.setVisibleOnAllWorkspaces(acrossSpaces, { visibleOnFullScreen: acrossSpaces })
       }
       return
     }
@@ -208,21 +227,43 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
   }
 
   /**
-   * 把迷你态的窗口状态重新落一遍 —— **尺寸与置顶一起**。
+   * 当前形态该不该置顶：**迷你态看迷你那份设置，正常态看正常那份**，两份互不影响。
+   *
+   * 「该不该」每次现读设置而不是缓存一份在内存里：设置可能在任何一刻被改（右键菜单、
+   * 设置向导、将来的托盘菜单），缓存就得再维护一处「什么时候刷新」—— 而这里读的是一次
+   * 内存对象拷贝，比那套同步便宜得多，也不会漏。
+   */
+  const shouldWindowBeOnTop = (): boolean => {
+    const settings = store.getSettings()
+    return miniActive ? settings.miniAlwaysOnTop : settings.alwaysOnTop
+  }
+
+  /** 按「当前形态 + 对应那份设置」落一次置顶。设置改了、形态变了、平台把状态摆回去了，都走它 */
+  const applyWindowOnTop = (): void => {
+    if (window.isDestroyed()) return
+    setWindowOnTop(shouldWindowBeOnTop(), miniActive)
+  }
+
+  /**
+   * 重新落一遍当前形态的窗口状态 —— **置顶与（迷你态的）尺寸一起**。
    *
    * 两件都要，是因为平台在几个时机（退出全屏、取消最大化、从最小化回来、隐藏后再显示）
    * 会把「窗口状态」整份摆回去，而置顶是这份状态里的一项：只补尺寸的话，表现是「小窗还在，
    * 却不再浮在别的窗口上面了」—— 用户看到的是「置顶时灵时不灵」。
    * 幂等：重复设没有副作用（与 applyMiniSize 同一个口径）。
    */
-  const reassertMiniWindow = (): void => {
-    if (!miniActive || window.isDestroyed()) return
-    setMiniAlwaysOnTop(true)
-    applyMiniSize()
+  const reassertWindowState = (): void => {
+    if (window.isDestroyed()) return
+    applyWindowOnTop()
+    // 尺寸只有迷你态才归我们管：正常态的尺寸/位置是用户与平台的
+    if (miniActive) applyMiniSize()
   }
 
+  /* 启动就落一次：两份设置里正常态那份现在就生效（迷你那份等进迷你时再说） */
+  applyWindowOnTop()
+
   miniController = {
-    reassert: reassertMiniWindow,
+    applyOnTop: applyWindowOnTop,
     setState: (state) => {
       if (window.isDestroyed()) return
 
@@ -248,15 +289,15 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
         // 正常态的最小尺寸（1080×660）比迷你窗还大，不放宽的话 setBounds 会被它顶回去
         window.setMinimumSize(MINI_SIZE.width, MINI_SIZE.height)
         window.setResizable(false)
-        // 尺寸 + 置顶（迷你播放器的用法就是「停在别的东西旁边」）一并落一次
-        reassertMiniWindow()
+        // 尺寸 + 置顶（这里取的已经是迷你那份设置，与正常态那份无关）一并落一次
+        reassertWindowState()
         return
       }
 
       if (!restore) return
       window.setResizable(true)
-      // 退出迷你：置顶（macOS 还带着「跨空间 / 全屏之上」）一并还回去
-      setMiniAlwaysOnTop(false)
+      // 退出迷你：置顶换成**正常态那份设置**（用户之前给大窗口设的是开就还是开）
+      reassertWindowState()
       window.setMinimumSize(MIN_WIDTH, MIN_HEIGHT)
       window.setBounds(restore.bounds)
       if (restore.maximized) window.maximize()
@@ -268,16 +309,16 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
   /*
    * 退出全屏 / 取消最大化是**异步**的（Linux 上尤其明显）：平台随后会把「退出这两个状态
    * 该还原到的窗口状态」摆上去，把刚设好的迷你尺寸（还有置顶）覆盖掉 —— 表现是大窗里画着
-   * 一条小播放条，或者小窗不再浮在上面。所以这几件事落定之后再补一次。
+   * 一条小播放条，或者窗口不再浮在上面。所以这几件事落定之后再补一次。
    */
-  window.on('leave-full-screen', reassertMiniWindow)
-  window.on('unmaximize', reassertMiniWindow)
+  window.on('leave-full-screen', reassertWindowState)
+  window.on('unmaximize', reassertWindowState)
   /* 从最小化回来（迷你条右上角就有一颗最小化钮，托盘 / 任务栏也能唤回）同样是「状态被摆回」
      的时机之一，一并补。 */
-  window.on('restore', reassertMiniWindow)
+  window.on('restore', reassertWindowState)
   /* 从托盘 / 任务栏重新显示（closeToTray 那条路是 hide→show，不经过 minimize）。
      macOS 上 setVisibleOnAllWorkspaces 也会在隐藏/显示之间被平台摆回，同样要补。 */
-  window.on('show', reassertMiniWindow)
+  window.on('show', reassertWindowState)
 
   // ── 位置尺寸记忆（防抖：拖动窗口期间不该狂写盘）────────────────────────
   let saveTimer: NodeJS.Timeout | null = null

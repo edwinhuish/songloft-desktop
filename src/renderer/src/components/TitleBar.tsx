@@ -39,6 +39,7 @@ import {
   IconListMusic,
   IconMaximize,
   IconMinimize,
+  IconPin,
   IconPuzzle,
   IconRestore,
   IconSearch,
@@ -46,9 +47,10 @@ import {
   IconSliders,
   IconStore
 } from './Icons'
-import { useContextMenu, type MenuItem } from './ContextMenu'
+import { openMenuFromEvent, useContextMenu, type MenuItem } from './ContextMenu'
 import { PluginIcon } from './PluginIcon'
 import { Cover } from './primitives'
+import { useSettings } from '@/state/useSettings'
 import { useUi } from '@/state/useUi'
 import { regularPlaylists, usePlaylists } from '@/state/usePlaylists'
 import { useDisplayablePlugins, usePlugins } from '@/state/usePlugins'
@@ -64,6 +66,9 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   const navigate = useUi((s) => s.navigate)
   const showSurface = useUi((s) => s.showSurface)
   const surface = useUi((s) => s.surface)
+  /** 普通窗口那份置顶设置（与迷你窗口那份分开存，见 AppSettings 的说明） */
+  const alwaysOnTop = useSettings((s) => s.settings.alwaysOnTop)
+  const patchSettings = useSettings((s) => s.patch)
   const playlists = usePlaylists((s) => s.playlists)
   // 与侧栏「我的歌单」用同一个过滤器，两处名单不会各自漂移
   const myPlaylists = regularPlaylists(playlists)
@@ -245,7 +250,25 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   ]
 
   return (
-    <header className="titlebar" onDoubleClick={handleDoubleClick}>
+    <header
+      className="titlebar"
+      onDoubleClick={handleDoubleClick}
+      /*
+       * 右键标题栏 = 它的「窗口菜单」。这里只放**窗口级**的开关，与标题栏上那排按钮不重复：
+       * 置顶（普通窗口那份，与迷你窗口那份各存各的，见 shared/ipc 的 AppSettings）。
+       * 拖拽区里右键仍然能收到 contextmenu（左键才被拿去拖窗口），与按钮的 no-drag 无关。
+       */
+      onContextMenu={(event) =>
+        openMenuFromEvent(event, [
+          {
+            key: 'always-on-top',
+            label: alwaysOnTop ? '取消窗口置顶' : '窗口置顶',
+            icon: <IconPin size={15} />,
+            onClick: () => void patchSettings({ alwaysOnTop: !alwaysOnTop })
+          }
+        ])
+      }
+    >
       <div className="titlebar-brand">
         {/* 拆分按钮：左半回播放页，右半开导航菜单。
             它落在拖拽区里，靠 base.css 的 `.titlebar button { -webkit-app-region: no-drag }`

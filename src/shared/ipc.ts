@@ -185,6 +185,19 @@ export interface AppSettings {
   lyricShowRoman: boolean
   /** 关闭窗口时最小化到托盘而不是退出 */
   closeToTray: boolean
+  /**
+   * 普通（非迷你）窗口是否置顶。
+   *
+   * ★ 与 miniAlwaysOnTop **各存一份、互不影响**：它们是「两种形态各自的窗口偏好」，不是同一个
+   *   开关的两种读法。合并成一个的话，用户为了不让大窗口挡着别人而关掉置顶，迷你条也会跟着
+   *   掉下去 —— 而迷你条的整个用法就是浮在别的窗口之上。
+   */
+  alwaysOnTop: boolean
+  /**
+   * 迷你窗口是否置顶。**默认开**：迷你模式就是「挂在屏幕一角、停在别的东西旁边」，
+   * 不浮着就失去意义了（想让它安静待着的人可以在迷你条上右键关掉）。
+   */
+  miniAlwaysOnTop: boolean
   /** 默认音量 0–1 */
   volume: number
   playMode: PlayMode
@@ -244,6 +257,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   lyricShowTranslation: true,
   lyricShowRoman: false,
   closeToTray: false,
+  // 大窗口默认不置顶：它是要跟别的窗口并排用的，浮在最上层只会碍事
+  alwaysOnTop: false,
+  // 迷你条默认置顶：见 AppSettings.miniAlwaysOnTop 的说明
+  miniAlwaysOnTop: true,
   volume: 0.8,
   playMode: 'order',
   volumeNormalize: false,

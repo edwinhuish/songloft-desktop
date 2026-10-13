@@ -29,18 +29,21 @@ import {
   IconLyrics,
   IconMinimize,
   IconPause,
+  IconPin,
   IconPlay,
   IconQueue,
   IconRestore,
   IconSkipBack,
   IconSkipForward
 } from './Icons'
+import { openMenuFromEvent } from './ContextMenu'
 import { LyricsView } from './LyricsView'
 import { Queue } from './Panel'
 import { PlayerProgress } from './PlayerProgress'
 import { Cover } from './primitives'
 import { displayArtist, formatDuration } from '@/lib/format'
 import { usePlayer } from '@/state/usePlayer'
+import { useSettings } from '@/state/useSettings'
 import { useUi } from '@/state/useUi'
 
 export function MiniPlayer(): React.JSX.Element {
@@ -49,6 +52,9 @@ export function MiniPlayer(): React.JSX.Element {
   const panel = useUi((s) => s.miniPanel)
   const togglePanel = useUi((s) => s.toggleMiniPanel)
   const setMini = useUi((s) => s.setMini)
+  /** 迷你窗口自己那份置顶设置（默认开，与普通窗口那份各存各的，见 AppSettings 的说明） */
+  const miniOnTop = useSettings((s) => s.settings.miniAlwaysOnTop)
+  const patchSettings = useSettings((s) => s.patch)
   /** 与底栏同一份用途：拖动进度条时手上的位置（这里显示成那行时长） */
   const [scrub, setScrub] = useState<number | null>(null)
 
@@ -65,7 +71,24 @@ export function MiniPlayer(): React.JSX.Element {
 
   return (
     <div className="mini-player" data-expanded={panel !== null ? 'true' : undefined}>
-      <footer className="mini-bar">
+      <footer
+        className="mini-bar"
+        /*
+         * 右键这条播放条 = 迷你窗的「窗口菜单」。挂在条上而不是外面那个 .mini-player 上：
+         * 面板（队列 / 歌词）里各有自己的右键菜单（歌曲菜单），套一层会把它们盖掉。
+         * 拖拽区里右键仍能收到 contextmenu（只有左键被拿去拖窗口）。
+         */
+        onContextMenu={(event) =>
+          openMenuFromEvent(event, [
+            {
+              key: 'mini-always-on-top',
+              label: miniOnTop ? '取消迷你窗口置顶' : '迷你窗口置顶',
+              icon: <IconPin size={14} />,
+              onClick: () => void patchSettings({ miniAlwaysOnTop: !miniOnTop })
+            }
+          ])
+        }
+      >
         <PlayerProgress
           duration={duration}
           position={player.currentTime}
