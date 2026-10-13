@@ -14,19 +14,22 @@ const MIN_WIDTH = 1080
 const MIN_HEIGHT = 660
 
 /**
- * 迷你模式的两种窗口尺寸：只有播放条 / 播放条 + 歌词。
+ * 迷你模式的两种窗口尺寸：只有播放条 / 播放条 + 下方那块面板。
  *
  * 与渲染层是对着定的：那条播放条在 CSS 里是 64px 高（`.mini-player` 的 --mini-bar-h），
- * 展开歌词那档 380 减掉它，剩下的正好是一屏歌词。改一边就要看一眼另一边。
+ * 展开那档 480 减掉它，剩下的 416px 就是面板那一屏。改一边就要看一眼另一边。
+ *
+ * ★ 面板里装的是**歌词还是播放队列，主进程不管**（两者共用这一份高度，见 MiniModeState）：
+ *   于是「换内容」不动窗口尺寸，切来切去不会跳。
  *
  * ★ 宽度取 400（约一屏正常窗口的三分之一）仍是**刻意的窄**：它就是个挂在屏幕角上的小挂件，
  *   左边那 64px 是贴左缘的全高封面（见 components.css 的 .mini-bar .cover），其余放歌名/歌手
- *   与三颗传输键 + 歌词键，歌名那栏剩一百七十来 px（长标题仍会截）；时长则居中落在控件行下方
- *   那条缝里（见 .mini-time）。想让标题再多显示几个字就得从别处让：封面、那三个控件、
- *   或这条宽度本身 —— 都不能白来。
+ *   与三颗传输键 + 歌词键 + 队列键，歌名那栏剩下一百三十来 px（长标题仍会截）；时长则居中
+ *   落在控件行下方那条缝里（见 .mini-time）。想让标题再多显示几个字就得从别处让：
+ *   封面、那几颗控件、或这条宽度本身 —— 都不能白来。
  */
 const MINI_SIZE = { width: 400, height: 64 }
-const MINI_LYRICS_SIZE = { width: 400, height: 380 }
+const MINI_PANEL_SIZE = { width: 400, height: 480 }
 
 export interface MiniModeController {
   setState: (state: MiniModeState) => void
@@ -164,17 +167,18 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
    * 而且再也长不回来**（配置里没有第二份「正常尺寸」可用）。
    */
   let miniActive = false
-  let miniLyrics = false
+  /** 下方那块面板（歌词或队列）是否展开 —— 只影响高度，装什么由渲染层定 */
+  let miniPanelOpen = false
   /**
    * 进迷你之前的窗口形态。
    * 用 getNormalBounds() 取：最大化/全屏下 getBounds() 给的是屏幕那么大，照着还原等于没还原。
    */
   let restore: { bounds: Rectangle; maximized: boolean; fullscreen: boolean } | null = null
 
-  /** 按当前「有无歌词」把窗口摆到迷你尺寸上（位置不动：它就在用户刚才停下的地方） */
+  /** 按当前「面板有没有展开」把窗口摆到迷你尺寸上（位置不动：它就在用户刚才停下的地方） */
   const applyMiniSize = (): void => {
     const [x, y] = window.getPosition()
-    window.setBounds({ x, y, ...(miniLyrics ? MINI_LYRICS_SIZE : MINI_SIZE) })
+    window.setBounds({ x, y, ...(miniPanelOpen ? MINI_PANEL_SIZE : MINI_SIZE) })
   }
 
   /**
@@ -197,16 +201,16 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
       if (window.isDestroyed()) return
 
       if (state.mini === miniActive) {
-        // 已经在迷你里：唯一还可能变的是「歌词展开」
-        if (miniActive && state.lyrics !== miniLyrics) {
-          miniLyrics = state.lyrics
+        // 已经在迷你里：唯一还可能变的是「下方那块面板开没开」
+        if (miniActive && state.expanded !== miniPanelOpen) {
+          miniPanelOpen = state.expanded
           applyMiniSize()
         }
         return
       }
 
       miniActive = state.mini
-      miniLyrics = state.lyrics
+      miniPanelOpen = state.expanded
 
       if (miniActive) {
         const maximized = window.isMaximized()

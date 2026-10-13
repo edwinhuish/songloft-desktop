@@ -118,7 +118,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 export function App(): React.JSX.Element {
   const status = useAuth((s) => s.status)
   const mini = useUi((s) => s.mini)
-  const miniLyrics = useUi((s) => s.miniLyrics)
+  const miniPanel = useUi((s) => s.miniPanel)
   const started = useRef(false)
 
   /**
@@ -136,8 +136,9 @@ export function App(): React.JSX.Element {
       提示原本那 58px 的落点会被直接顶出窗外（见 components.css 里那条 html[data-mini]）。
     */
     document.documentElement.dataset.mini = mini ? 'true' : 'false'
-    void window.songloft.window.setMini({ mini, lyrics: miniLyrics })
-  }, [mini, miniLyrics])
+    // 主进程只要知道「下方那块面板开没开」（装歌词还是队列由 MiniPlayer 自己定）
+    void window.songloft.window.setMini({ mini, expanded: miniPanel !== null })
+  }, [mini, miniPanel])
 
   /* ── 启动编排（一次）───────────────────────────────────────────── */
   useEffect(() => {

@@ -1,22 +1,25 @@
 /**
- * 迷你模式的全部界面：一条紧凑播放条，外加一块可展开的歌词。
+ * 迷你模式的全部界面：一条紧凑播放条，外加一块可展开的面板（歌词或播放队列）。
  *
  * ★ 它不是「另一个播放器」：读同一个 usePlayer、调同一套 seek / toggle / next / previous，
- *   进度条连组件都复用底栏那一份（PlayerProgress）。「与现有底栏保持一致」只有这样才守得住 ——
- *   各写一套的话，两处的拖动手感（松手才 seek）与键盘行为迟早分叉。
+ *   进度条连组件都复用底栏那一份（PlayerProgress），队列连组件都复用抽屉那一份（Panel 的
+ *   Queue）。「与现有底栏保持一致」只有这样才守得住 —— 各写一套的话，两处的拖动手感
+ *   （松手才 seek）、拖拽排序、跟随当前曲滚动迟早分叉。
  * ★ 窗口是无边框的，标题栏此刻正被藏着 —— 拖拽区与那三颗窗口钮（最小化 / 退出迷你模式 /
  *   关闭）都得自己给，少一颗就是「这个窗挪不动 / 回不去 / 关不掉」。三颗照标题栏右端那一组
  *   的样子来（同用 .win-btn，只是各小一档），并排落在条的**右上角** —— 那是这个动作在桌面
  *   应用里的固定位置，两种形态下长相一致，用户不必重新找。
- * ★ 条上那一行只放播放必需的东西（封面 / 歌名 / 上一首 / 播放 / 下一首 / 歌词）：
- *   迷你模式的意思就是把它挂在屏幕一角，不该再摆音量条、播放模式、队列那一整套。
+ * ★ 条上那一行只放播放必需的东西（封面 / 歌名 / 上一首 / 播放 / 下一首 / 歌词 / 队列）：
+ *   迷你模式的意思就是把它挂在屏幕一角，不该再摆音量条、播放模式、收藏那一整套。
  *   窗口钮（右上角）与时长（右下角）因此都**不进那一行**，各自绝对定位，落在这 64px
  *   里本来就空着的两条缝里 —— 控件行垂直居中，上下各空出一条来（见 .mini-window-actions
  *   与 .mini-time）：条里那点横向余量只有歌名在吃，让谁去占一行就是把歌名挤窄。
- * ★ 栅格的顺序是「播放条在**上**、歌词在下」（DOM 顺序同此），不是反过来：窗口加高时长的是
- *   下半截（main/windows.ts 的 applyMiniSize 不动位置），歌词摆下面才等于「原地展开」——
- *   摆上面的话一展开这一整排控件就要往下跳 300 多 px。进度线贴在播放条的下边缘，
- *   于是收起时它正好落在窗口下边缘，展开时它又正好是「播放条 / 歌词」的分界线。
+ * ★ 歌词与队列**共用下方那一块面板**（见 MiniPanel）：两颗钮互斥，尺寸只跟「开没开」有关，
+ *   所以换内容不闪不跳。
+ * ★ 栅格的顺序是「播放条在**上**、面板在下」（DOM 顺序同此），不是反过来：窗口加高时长的是
+ *   下半截（main/windows.ts 的 applyMiniSize 不动位置），面板摆下面才等于「原地展开」——
+ *   摆上面的话一展开这一整排控件就要往下跳 400 px。进度线贴在播放条的下边缘，
+ *   于是收起时它正好落在窗口下边缘，展开时它又正好是「播放条 / 面板」的分界线。
  */
 
 import { useMemo, useState } from 'react'
@@ -27,11 +30,13 @@ import {
   IconMinimize,
   IconPause,
   IconPlay,
+  IconQueue,
   IconRestore,
   IconSkipBack,
   IconSkipForward
 } from './Icons'
 import { LyricsView } from './LyricsView'
+import { Queue } from './Panel'
 import { PlayerProgress } from './PlayerProgress'
 import { Cover } from './primitives'
 import { displayArtist, formatDuration } from '@/lib/format'
@@ -40,8 +45,9 @@ import { useUi } from '@/state/useUi'
 
 export function MiniPlayer(): React.JSX.Element {
   const player = usePlayer()
-  const lyricsOpen = useUi((s) => s.miniLyrics)
-  const setMiniLyrics = useUi((s) => s.setMiniLyrics)
+  /** 下方那块面板装什么（null = 收起）。歌词与播放队列共用它，见 MiniPanel */
+  const panel = useUi((s) => s.miniPanel)
+  const togglePanel = useUi((s) => s.toggleMiniPanel)
   const setMini = useUi((s) => s.setMini)
   /** 与底栏同一份用途：拖动进度条时手上的位置（这里显示成那行时长） */
   const [scrub, setScrub] = useState<number | null>(null)
@@ -58,7 +64,7 @@ export function MiniPlayer(): React.JSX.Element {
   const position = scrub ?? player.currentTime
 
   return (
-    <div className="mini-player" data-lyrics={lyricsOpen ? 'true' : undefined}>
+    <div className="mini-player" data-expanded={panel !== null ? 'true' : undefined}>
       <footer className="mini-bar">
         <PlayerProgress
           duration={duration}
@@ -130,12 +136,23 @@ export function MiniPlayer(): React.JSX.Element {
         <button
           type="button"
           className="icon-btn"
-          data-active={lyricsOpen}
-          data-tip={lyricsOpen ? '收起歌词' : '展开歌词'}
-          aria-label={lyricsOpen ? '收起歌词' : '展开歌词'}
-          onClick={() => setMiniLyrics(!lyricsOpen)}
+          data-active={panel === 'lyrics'}
+          data-tip={panel === 'lyrics' ? '收起歌词' : '歌词'}
+          aria-label={panel === 'lyrics' ? '收起歌词' : '歌词'}
+          onClick={() => togglePanel('lyrics')}
         >
           <IconLyrics size={17} />
+        </button>
+        {/* 队列与歌词共用下面那一块面板，所以两颗钮互斥：点另一颗是**换内容**，不是叠一层 */}
+        <button
+          type="button"
+          className="icon-btn"
+          data-active={panel === 'queue'}
+          data-tip={panel === 'queue' ? '收起播放队列' : '播放队列'}
+          aria-label={panel === 'queue' ? '收起播放队列' : '播放队列'}
+          onClick={() => togglePanel('queue')}
+        >
+          <IconQueue size={17} />
         </button>
         {/*
           右上角那一组：最小化 / 退出迷你模式 / 关闭（从左至右，与标题栏右端同序）。
@@ -175,12 +192,22 @@ export function MiniPlayer(): React.JSX.Element {
       </footer>
 
       {/*
-        展开时才挂歌词，且挂在播放条**之后**（它在进度线下方）。窗口高度是主进程一步到位的
+        展开时才挂面板，且挂在播放条**之后**（它在进度线下方）。窗口高度是主进程一步到位的
         （原生窗口的尺寸做不了动画），内容这边补一点淡入，看着才不像「啪」地一下多出一块。
+
+        ★ 歌词与队列共用这一块地方：主进程那边只有「开没开」一个布尔量，换内容不动窗口尺寸，
+          所以两颗钮之间来回点不会闪也不会跳。队列那一份要自己给滚动容器（见 .mini-queue）——
+          歌词那边是 LyricsView 里的 .lyrics 自带 flex: 1 + overflow-y: auto。
       */}
-      {lyricsOpen ? (
-        <div className="mini-lyrics">
-          <LyricsView compact />
+      {panel ? (
+        <div className="mini-panel">
+          {panel === 'lyrics' ? (
+            <LyricsView compact />
+          ) : (
+            <div className="mini-queue">
+              <Queue />
+            </div>
+          )}
         </div>
       ) : null}
     </div>

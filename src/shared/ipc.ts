@@ -67,14 +67,17 @@ export interface WindowState {
 }
 
 /**
- * 迷你模式的两个开关：是否迷你 + 迷你里歌词是否展开。
+ * 迷你模式的两个开关：是否迷你 + 迷你里下方那块面板是否展开。
  *
  * 两个一起传，是因为它们共同决定窗口高度。分两次传的话，主进程会在两次调用之间先摆出
  * 一个中间尺寸 —— 那一下是看得见的。
+ *
+ * ★ 面板里装的是歌词还是播放队列，主进程**不关心**（两者共用同一份高度）：所以这里只有
+ *   一个布尔量，而不是 `panel: 'lyrics' | 'queue' | null`。
  */
 export interface MiniModeState {
   mini: boolean
-  lyrics: boolean
+  expanded: boolean
 }
 
 export type MediaCommand =

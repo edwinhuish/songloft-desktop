@@ -114,7 +114,14 @@ function NowPlaying(): React.JSX.Element {
   )
 }
 
-function Queue(): React.JSX.Element {
+/**
+ * 播放队列。
+ *
+ * ★ 导出是为了给**迷你模式那块面板**复用（见 MiniPlayer.tsx）：同一个队列在两处出现，
+ *   两套实现迟早分叉（拖拽排序、右键菜单、跟随当前曲滚动…都得各写一遍）。
+ *   注意它自己不带滚动容器 —— 谁挂它谁负责给（抽屉那边是 .panel-body，迷你那边是 .mini-queue）。
+ */
+export function Queue(): React.JSX.Element {
   const queue = usePlayer((s) => s.queue)
   const order = usePlayer((s) => s.order)
   const cursor = usePlayer((s) => s.cursor)

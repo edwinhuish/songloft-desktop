@@ -846,12 +846,13 @@
 }
 
 /* ── 迷你模式（见 components/MiniPlayer.tsx）──────────────────────────────
-   窗口就只有这一块：上面一条播放条（进度线压着它的下边缘）、下面可展开的歌词。 */
+   窗口就只有这一块：上面一条播放条（进度线压着它的下边缘）、下面可展开的一块面板
+   （歌词或播放队列，两者共用同一个位置与高度，见 MiniPanel）。 */
 
 .mini-player {
-  /* 播放条的高度 = 条里最高那件东西（封面 40px）加上下各 12px 的余量。
-     主进程算迷你窗总高（main/windows.ts 的 MINI_SIZE / MINI_LYRICS_SIZE）时就是按它留位的
-     —— 改这里要连那边一起看，两处差一档就是「条里空出一截」或「控件被裁掉」。 */
+  /* 播放条的高度 = 条里最高那件东西（贴左缘的全高封面 64px）。主进程算迷你窗总高
+     （main/windows.ts 的 MINI_SIZE / MINI_PANEL_SIZE）时就是按它留位的 —— 改这里要连那边
+     一起看，两处差一档就是「条里空出一截」或「控件被裁掉」。 */
   --mini-bar-h: 64px;
   display: grid;
   /*
@@ -868,30 +869,30 @@
 }
 
 /*
- * 展开歌词：播放条钉在顶上那 --mini-bar-h，多出来的高度整块给歌词。
- * ★ 刻意**不是**「歌词在上、播放条在下」（原生面 .surface-native 是那个形状，这里不跟着走）：
- *   窗口加高时位置不动、长的是下半截（main/windows.ts 的 applyMiniSize），歌词若摆上面，
- *   一展开整排控件就得往下跳 300 多 px —— 用户刚要去点的按钮会跑掉。钉住播放条、新空间
+ * 面板展开：播放条钉在顶上那 --mini-bar-h，多出来的高度整块给面板。
+ * ★ 刻意**不是**「面板在上、播放条在下」（原生面 .surface-native 是那个形状，这里不跟着走）：
+ *   窗口加高时位置不动、长的是下半截（main/windows.ts 的 applyMiniSize），面板若摆上面，
+ *   一展开整排控件就得往下跳 400 px —— 用户刚要去点的按钮会跑掉。钉住播放条、新空间
  *   落在下方，手感才是「原地展开」，也才谈得上「不影响其他控件的布局与操作」。
  */
-.mini-player[data-lyrics='true'] {
+.mini-player[data-expanded='true'] {
   grid-template-rows: var(--mini-bar-h) minmax(0, 1fr);
 }
 
-/* 歌词区。展开时淡入上浮一下：窗口高度是主进程一步到位的（原生窗口尺寸做不了动画），
-   内容这边补一点过渡，看着才不像「啪」地一下凭空多出一块。
-   ★ 必须是 flex 列：里面的 .lyrics 靠 `flex: 1` + `overflow-y: auto` 撑成一屏可滚的歌词，
-      不给它这个前提的话，那份 flex 规则无处生效，歌词会按内容高度长出去被 overflow 剪掉
-      —— 表现是「歌词显示不全，也滚不动」。 */
-.mini-lyrics {
+/* 面板（歌词 / 播放队列）。展开时淡入上浮一下：窗口高度是主进程一步到位的（原生窗口尺寸
+   做不了动画），内容这边补一点过渡，看着才不像「啪」地一下凭空多出一块。
+   ★ 必须是 flex 列：里面的内容靠 `flex: 1` + `overflow-y: auto` 撑成一屏可滚的东西，
+      不给它这个前提的话，那份 flex 规则无处生效，内容会按自身高度长出去被 overflow 剪掉
+      —— 表现是「显示不全，也滚不动」。 */
+.mini-panel {
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  animation: mini-lyrics-in var(--dur-3) var(--ease);
+  animation: mini-panel-in var(--dur-3) var(--ease);
 }
 
-@keyframes mini-lyrics-in {
+@keyframes mini-panel-in {
   from {
     opacity: 0;
     transform: translateY(10px);
@@ -900,6 +901,15 @@
     opacity: 1;
     transform: none;
   }
+}
+
+/* 队列那一份的滚动容器。
+   歌词不用它 —— LyricsView 里的 .lyrics 自带 flex: 1 与 overflow-y: auto；
+   Queue 则是「谁挂它谁给滚动容器」（抽屉那边给的是 .panel-body），这里就照那份写。 */
+.mini-queue {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /*
@@ -913,8 +923,8 @@
   position: relative;
   display: flex;
   align-items: center;
-  /* 6px / 右边 10px 而不是常规那 10 与 12：这一条横排要放下 6 件东西（封面 / 歌名 /
-     三颗传输键 / 歌词），而窗口只有 400px 宽 —— 间距与内边距是唯一不牺牲可读性的余量。
+  /* 6px / 右边 10px 而不是常规那 10 与 12：这一条横排要放下 7 件东西（封面 / 歌名 /
+     三颗传输键 / 歌词 / 队列），而窗口只有 400px 宽 —— 间距与内边距是唯一不牺牲可读性的余量。
      ★ 左内边距是 0：左边那一格是**贴到窗口左缘**的全高封面（见下），它自己就是边缘；
        有内边距反而要从它身上再抠掉一层。 */
   gap: 6px;

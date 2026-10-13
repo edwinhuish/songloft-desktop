@@ -63,6 +63,15 @@ export function isExtensionRoute(route: Route): route is ExtensionRoute {
 
 export type PanelTab = 'now-playing' | 'queue'
 
+/**
+ * 迷你模式里下方那块可展开的面板装什么。
+ *
+ * ★ 两样**共用同一块地方、同一份高度**（见 main/windows.ts 的 MINI_PANEL_SIZE）：
+ *   主进程只关心「开没开」，装的是歌词还是队列由渲染层自己决定（送回主进程的是
+ *   MiniModeState.expanded 这个布尔量）—— 于是换内容不会动窗口尺寸，切过去切回来不会跳。
+ */
+export type MiniPanel = 'lyrics' | 'queue'
+
 interface UiState {
   surface: Surface
   /** 原生那一面停在哪儿。切去扩展面时**不动它** —— 切回来就是离开时的样子 */
@@ -88,11 +97,11 @@ interface UiState {
    *
    * ★ 界面状态在这儿，**窗口几何在主进程** —— 两边由 App 里一个 effect 对齐。
    *   不把尺寸也塞进这个 store：那是窗口的事，渲染层拍脑袋定一个尺寸只会和真正
-   *   生效的那份（MINI_SIZE / MINI_LYRICS_SIZE）漂开。
+   *   生效的那份（MINI_SIZE / MINI_PANEL_SIZE）漂开。
    */
   mini: boolean
-  /** 迷你模式里那一块歌词是否展开 */
-  miniLyrics: boolean
+  /** 迷你模式里下方那块面板：null = 收起，装歌词还是播放队列见 MiniPanel */
+  miniPanel: MiniPanel | null
   /**
    * 进迷你之前记下的正常窗口尺寸。
    *
@@ -126,7 +135,8 @@ interface UiState {
   setSidebarAutoCollapsed: (collapsed: boolean) => void
   setPaletteOpen: (open: boolean) => void
   setMini: (mini: boolean) => void
-  setMiniLyrics: (open: boolean) => void
+  /** 与底栏的 togglePanel 同一套语义：点同一颗就是收起，点另一颗是换内容（不闪、不跳） */
+  toggleMiniPanel: (panel: MiniPanel) => void
   setAddToPlaylistTarget: (songIds: number[] | null) => void
   setSelection: (selection: number[], anchor?: number | null) => void
   clearSelection: () => void
@@ -147,7 +157,7 @@ export const useUi = create<UiState>((set, get) => ({
   sidebarAutoCollapsed: false,
   paletteOpen: false,
   mini: false,
-  miniLyrics: false,
+  miniPanel: null,
   miniRestore: null,
   addToPlaylistTarget: null,
   selection: [],
@@ -227,7 +237,8 @@ export const useUi = create<UiState>((set, get) => ({
         ? { width: window.innerWidth, height: window.innerHeight }
         : state.miniRestore
     })),
-  setMiniLyrics: (open) => set({ miniLyrics: open }),
+  toggleMiniPanel: (panel) =>
+    set((state) => ({ miniPanel: state.miniPanel === panel ? null : panel })),
   setAddToPlaylistTarget: (songIds) => set({ addToPlaylistTarget: songIds }),
   setSelection: (selection, anchor) =>
     set({ selection, selectionAnchor: anchor === undefined ? null : anchor }),
