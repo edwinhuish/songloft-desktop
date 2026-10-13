@@ -817,17 +817,32 @@
   color: var(--text-3);
 }
 
+/*
+ * 底栏上的图标钮比全局那 32px 大一档（38px）。
+ * 里面那几颗图标已经放大到 1.5 倍（16→24 / 17→26 / 19→28，见 components/PlayerBar.tsx），
+ * 钮不跟着长的话字形会顶到悬浮底色（那层底色就是这颗钮的尺寸）的边上。
+ * ★ 只长到 38 而不是 48（1.5 倍）：再大就超过主播放键那 44px 了，主次当场翻过来 ——
+ *   主播放键刻意没动，它仍该是这一条上最大的那颗。
+ */
+.playerbar .icon-btn {
+  width: 38px;
+  height: 38px;
+}
+
+/* 8px 而不是 6px：钮大了，间距按同比例跟上（6/32 ≈ 8/38），一排排开才不显得挤在一起。
+   两组的间距口径一致：中间那组是「模式 / 上一首 / 播放 / 下一首」，右边是「音轨 / 歌词 /
+   队列 / 迷你 / 音量」。 */
 .playerbar-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .playerbar-right {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 8px;
 }
 
 .playerbar-time {

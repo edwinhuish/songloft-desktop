@@ -32,11 +32,24 @@ import { usePlayer } from '@/state/usePlayer'
 import { usePlaylists } from '@/state/usePlaylists'
 import { useUi } from '@/state/useUi'
 
+/**
+ * 底栏里的图标尺寸。
+ *
+ * ★ 规则：**除主播放键外一律是原值的 1.5 倍**（16 → 24、17 → 26、19 → 28）。
+ *   原来那几颗在宽屏底栏上偏小，一眼看不出画的是什么；放大之后主次仍然清楚 ——
+ *   主播放键（44px 实心圆 + 19px 图标）刻意没动：它靠「整条上唯一的实心圆 + accent 填充」
+ *   立在那儿，不必再靠尺寸压别人一头。旁边的钮跟着长了一档（38px，见 components.css
+ *   的 .playerbar .icon-btn），否则 1.5 倍的字形会顶到悬浮底色的边上。
+ */
+const ICON_SM = 24 // 原 16：收藏、播放模式
+const ICON_MD = 26 // 原 17：歌词 / 队列 / 迷你 / 音量
+const ICON_LG = 28 // 原 19：上一首 / 下一首
+
 const MODE_ICON: Record<PlayMode, React.ReactNode> = {
-  order: <IconRepeat size={16} />,
-  loop: <IconRepeat size={16} />,
-  single: <IconRepeatOne size={16} />,
-  random: <IconShuffle size={16} />
+  order: <IconRepeat size={ICON_SM} />,
+  loop: <IconRepeat size={ICON_SM} />,
+  single: <IconRepeatOne size={ICON_SM} />,
+  random: <IconShuffle size={ICON_SM} />
 }
 
 const MODE_LABEL: Record<PlayMode, string> = {
@@ -105,7 +118,7 @@ export function PlayerBar(): React.JSX.Element {
             aria-label={favorited ? '取消收藏' : '收藏'}
             onClick={() => void toggleFavorite(song)}
           >
-            <IconHeart size={16} filled={favorited} />
+            <IconHeart size={ICON_SM} filled={favorited} />
           </button>
         ) : null}
       </div>
@@ -131,7 +144,7 @@ export function PlayerBar(): React.JSX.Element {
           disabled={!song}
           onClick={() => void player.previous()}
         >
-          <IconSkipBack size={19} />
+          <IconSkipBack size={ICON_LG} />
         </button>
 
         <button
@@ -153,7 +166,7 @@ export function PlayerBar(): React.JSX.Element {
           disabled={!song}
           onClick={() => void player.next(false)}
         >
-          <IconSkipForward size={19} />
+          <IconSkipForward size={ICON_LG} />
         </button>
 
         <span className="playerbar-time">
@@ -187,7 +200,7 @@ export function PlayerBar(): React.JSX.Element {
           aria-label="歌词面板"
           onClick={() => togglePanel('now-playing')}
         >
-          <IconLyrics size={17} />
+          <IconLyrics size={ICON_MD} />
         </button>
 
         <button
@@ -198,7 +211,7 @@ export function PlayerBar(): React.JSX.Element {
           aria-label="播放队列"
           onClick={() => togglePanel('queue')}
         >
-          <IconQueue size={17} />
+          <IconQueue size={ICON_MD} />
         </button>
 
         {/*
@@ -214,7 +227,7 @@ export function PlayerBar(): React.JSX.Element {
           aria-label={mini ? '退出迷你模式' : '迷你模式'}
           onClick={() => setMini(!mini)}
         >
-          <IconMini size={17} />
+          <IconMini size={ICON_MD} />
         </button>
 
         <div className="volume-group">
@@ -226,9 +239,9 @@ export function PlayerBar(): React.JSX.Element {
             onClick={() => player.toggleMute()}
           >
             {player.muted || player.volume === 0 ? (
-              <IconVolumeX size={17} />
+              <IconVolumeX size={ICON_MD} />
             ) : (
-              <IconVolume level={player.volume > 0.55 ? 2 : 1} size={17} />
+              <IconVolume level={player.volume > 0.55 ? 2 : 1} size={ICON_MD} />
             )}
           </button>
           <Slider
