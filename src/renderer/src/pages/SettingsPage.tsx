@@ -1010,7 +1010,6 @@ function ServerSettings(): React.JSX.Element {
 /* ───────────────────────────── 账号 ───────────────────────────── */
 
 function AccountSettings(): React.JSX.Element {
-  const { settings, patch } = useSettings()
   const { baseUrl, serverName, username, status, logout, openLogin } = useAuth()
   const [probe, setProbe] = useState<ServerProbeResult | null>(null)
   const [probing, setProbing] = useState(false)
@@ -1102,17 +1101,6 @@ function AccountSettings(): React.JSX.Element {
               退出登录
             </button>
           </div>
-        </Row>
-
-        <Row
-          title="允许自签 / 无效 TLS 证书"
-          desc="打开后本应用的网络栈不再校验证书 —— 只在内网自建、明确知道风险时开启"
-        >
-          <Switch
-            ariaLabel="忽略证书校验"
-            checked={settings.allowInsecureTls}
-            onChange={(checked) => void patch({ allowInsecureTls: checked })}
-          />
         </Row>
       </Card>
     </>

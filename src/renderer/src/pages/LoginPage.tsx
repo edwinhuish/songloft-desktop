@@ -19,7 +19,9 @@ import {
   IconSparkle,
   IconTrash
 } from '@/components/Icons'
+import { Switch } from '@/components/primitives'
 import { useAuth } from '@/state/useAuth'
+import { useSettings } from '@/state/useSettings'
 import { useToasts } from '@/state/useToasts'
 
 const DEFAULT_URL = 'http://localhost:58091'
@@ -33,6 +35,7 @@ const FEATURES = [
 
 export function LoginPage(): React.JSX.Element {
   const { servers, busy, error, probe, login, switchServer, forgetServer } = useAuth()
+  const { settings, patch } = useSettings()
   const push = useToasts((s) => s.push)
 
   const [url, setUrl] = useState(servers[0]?.url ?? DEFAULT_URL)
@@ -166,9 +169,24 @@ export function LoginPage(): React.JSX.Element {
               </div>
             ) : (
               <div className="field-hint">
-                后端默认监听 58091 端口。若是自签证书的 HTTPS，登录后可在「设置 → 服务器」放行。
+                后端默认监听 58091 端口。自签证书的 HTTPS 要先打开下面的证书放行开关，
+                否则探测与登录都会失败。
               </div>
             )}
+          </div>
+
+          <div className="row-between">
+            <div>
+              <div className="field-label">允许自签 / 无效 TLS 证书</div>
+              <div className="field-hint">
+                只在内网自建、明确知道风险时打开；打开后本机不再校验证书
+              </div>
+            </div>
+            <Switch
+              ariaLabel="忽略证书校验"
+              checked={settings.allowInsecureTls}
+              onChange={(checked) => void patch({ allowInsecureTls: checked })}
+            />
           </div>
 
           <div className="row" style={{ gap: 10 }}>
