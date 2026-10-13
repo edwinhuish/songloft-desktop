@@ -211,6 +211,8 @@ export function Sidebar(): React.JSX.Element {
                 width={48}
                 size={26}
                 radius={6}
+                kind="playlist"
+                seed={playlist.name}
                 className="nav-cover"
               />
               <span className="nav-text truncate grow">{playlist.name}</span>

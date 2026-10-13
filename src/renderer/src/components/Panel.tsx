@@ -89,7 +89,14 @@ function NowPlaying(): React.JSX.Element {
     <div className="now-playing">
       <div className="now-playing-art-wrap">
         <div className="now-playing-art">
-          <Cover coverUrl={song.cover_url} width={640} size="100%" radius={0} />
+          <Cover
+            coverUrl={song.cover_url}
+            width={640}
+            size="100%"
+            radius={0}
+            kind="song"
+            seed={song.title}
+          />
         </div>
       </div>
       <div className="now-playing-meta">
@@ -191,7 +198,14 @@ function Queue(): React.JSX.Element {
           <span className="queue-drag" data-tip="拖动调整顺序">
             <IconMusic size={14} />
           </span>
-          <Cover coverUrl={song.cover_url} width={72} size={38} radius={8} />
+          <Cover
+            coverUrl={song.cover_url}
+            width={72}
+            size={38}
+            radius={8}
+            kind="song"
+            seed={song.title}
+          />
           <div style={{ minWidth: 0 }}>
             <div className="queue-title truncate">{song.title}</div>
             <div className="queue-artist truncate">{displayArtist(song.artist)}</div>

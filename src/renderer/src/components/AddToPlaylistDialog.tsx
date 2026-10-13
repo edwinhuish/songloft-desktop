@@ -170,7 +170,14 @@ export function AddToPlaylistDialog(): React.JSX.Element | null {
               style={{ height: 52, padding: '0 6px' }}
               onClick={() => void handleAdd(playlist.id, playlist.name)}
             >
-              <Cover coverUrl={playlist.cover_url} width={64} size={36} radius={8} />
+              <Cover
+                coverUrl={playlist.cover_url}
+                width={64}
+                size={36}
+                radius={8}
+                kind="playlist"
+                seed={playlist.name}
+              />
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div className="truncate" style={{ fontSize: 13.5 }}>
                   {playlist.name}

@@ -110,7 +110,16 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
         ? myPlaylists.map((playlist) => ({
             key: `playlist-${playlist.id}`,
             label: playlist.name,
-            icon: <Cover coverUrl={playlist.cover_url} width={48} size={20} radius={4} />,
+            icon: (
+              <Cover
+                coverUrl={playlist.cover_url}
+                width={48}
+                size={20}
+                radius={4}
+                kind="playlist"
+                seed={playlist.name}
+              />
+            ),
             onClick: () => navigate({ name: 'playlist', id: playlist.id })
           }))
         : [{ key: 'playlists-empty', label: '还没有歌单', disabled: true }]

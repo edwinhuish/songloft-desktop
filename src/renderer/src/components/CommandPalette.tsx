@@ -362,7 +362,14 @@ export function CommandPalette(): React.JSX.Element | null {
                     }}
                   >
                     {entry.coverUrl !== undefined ? (
-                      <Cover coverUrl={entry.coverUrl} width={48} size={26} radius={6} />
+                      <Cover
+                        coverUrl={entry.coverUrl}
+                        width={48}
+                        size={26}
+                        radius={6}
+                        kind="song"
+                        seed={entry.label}
+                      />
                     ) : (
                       entry.icon
                     )}

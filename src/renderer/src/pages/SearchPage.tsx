@@ -120,7 +120,14 @@ export function SearchPage({ keyword }: { keyword: string }): React.JSX.Element 
                     style={{ height: 40, paddingRight: 14 }}
                     onClick={() => navigate({ name: 'playlist', id: playlist.id })}
                   >
-                    <Cover coverUrl={playlist.cover_url} width={48} size={26} radius={6} />
+                    <Cover
+                      coverUrl={playlist.cover_url}
+                      width={48}
+                      size={26}
+                      radius={6}
+                      kind="playlist"
+                      seed={playlist.name}
+                    />
                     {playlist.name}
                     <span style={{ color: 'var(--text-4)', fontSize: 11.5 }}>
                       {playlist.song_count} 首
@@ -148,7 +155,14 @@ export function SearchPage({ keyword }: { keyword: string }): React.JSX.Element 
                     style={{ height: 40, paddingRight: 14 }}
                     onClick={() => navigate({ name: 'search', keyword: facet.value })}
                   >
-                    <Cover coverUrl={facet.cover_url} width={48} size={26} radius={13} />
+                    <Cover
+                      coverUrl={facet.cover_url}
+                      width={48}
+                      size={26}
+                      radius={13}
+                      kind="artist"
+                      seed={facet.value}
+                    />
                     {facet.value}
                     <span style={{ color: 'var(--text-4)', fontSize: 11.5 }}>{facet.count} 首</span>
                   </button>
@@ -174,7 +188,14 @@ export function SearchPage({ keyword }: { keyword: string }): React.JSX.Element 
                     style={{ height: 40, paddingRight: 14 }}
                     onClick={() => navigate({ name: 'search', keyword: facet.value })}
                   >
-                    <Cover coverUrl={facet.cover_url} width={48} size={26} radius={6} />
+                    <Cover
+                      coverUrl={facet.cover_url}
+                      width={48}
+                      size={26}
+                      radius={6}
+                      kind="playlist"
+                      seed={facet.value}
+                    />
                     {facet.value}
                     <span style={{ color: 'var(--text-4)', fontSize: 11.5 }}>{facet.count} 首</span>
                   </button>
