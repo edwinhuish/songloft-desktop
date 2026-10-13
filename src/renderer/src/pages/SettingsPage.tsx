@@ -2977,10 +2977,10 @@ function UpdateCard(): React.JSX.Element {
         </button>
       </Row>
 
+      {/* 不再挂在「客户端更新」下面：它管的是上面**两行**（服务端与客户端各查一次） */}
       <Row
-        nested
         title="启动时自动检查更新"
-        desc="每次启动悄悄问一次 GitHub：有新版本才提示，连不上就不出声"
+        desc="每次启动各查一次服务端与客户端：有新版本才提示，连不上就不出声"
       >
         <Switch
           checked={settings.autoCheckUpdate}

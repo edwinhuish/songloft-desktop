@@ -178,9 +178,10 @@ export interface AppSettings {
    */
   localCacheMaxSize: number
   /**
-   * 启动时自动检查客户端更新。
+   * 启动时自动检查更新（服务端与客户端各查一次）。
    *
-   * 一次 GitHub 的 HTTP GET；关掉就完全不因为这件事联网（后端可达与否都不影响它）。
+   * 两次都是普通读取：客户端那次由主进程直连 GitHub，服务端那次是问后端 `/upgrade/check`。
+   * 关掉就完全不因为这件事联网（两边都不查）。
    */
   autoCheckUpdate: boolean
   /** 侧栏是否折叠 */
