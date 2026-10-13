@@ -37,6 +37,18 @@ export interface ExtensionRuntime {
 
 const IDLE_RUNTIME: ExtensionRuntime = { playing: false, muted: false }
 
+/**
+ * 每个插件**最近一次**启停意图的序号。
+ *
+ * 停用要走 scheduler 注销，最坏能拖到 10 秒（服务端 UnloadPlugin 里 UnregisterService
+ * 的超时），期间用户完全可能改主意再点一次 —— 两次请求的响应于是可能**乱序**回来：
+ * 后发的先到、先发的后到，界面就会被那份过期的响应翻回去 (而开关明明是手刚点过的样子)。
+ * 只认「仍是最新那次」的响应，这条时序问题就挡在 store 里了。
+ *
+ * 放模块作用域而不是 state：它是实现细节，界面不该读到它。
+ */
+const toggleSeq = new Map<number, number>()
+
 interface PluginsState {
   plugins: JSPlugin[]
   /** 用户排出来的 entryPath 序列（可能包含已卸载的残留，排序时会被跳过） */
@@ -49,6 +61,10 @@ interface PluginsState {
   load: () => Promise<void>
   /** 用一份完整顺序覆盖（插件管理页拖拽排序走它） */
   setOrder: (order: string[]) => Promise<void>
+  /**
+   * 启用 / 停用。**乐观**：界面立刻跟着意图翻，不成功后端往返；失败则整条回退成操作前
+   * 那一个并把错误**抛给调用方**（提示是界面的事，store 不弹 toast）。
+   */
   setEnabled: (id: number, enabled: boolean) => Promise<void>
   remove: (id: number) => Promise<void>
   /** webview 事件回写 */
@@ -97,32 +113,58 @@ export const usePlugins = create<PluginsState>((set, get) => ({
 
   setEnabled: async (id, enabled) => {
     const client = requireClient()
-    const updated = await setPluginEnabled(client, id, enabled)
+    // 操作前那一条整份快照：失败时回退成它（而不是「把 status 翻回去」—— 只有快照
+    // 才知道当时的 icon / 版本号 / 运行异常标签长什么样）
+    const before = get().plugins.find((plugin) => plugin.id === id)
+    const seq = (toggleSeq.get(id) ?? 0) + 1
+    toggleSeq.set(id, seq)
+
+    // 乐观：界面立刻跟着意图翻，不等后端（开关是即时的，等一次往返会让人觉得点空了）
     set((state) => ({
       plugins: state.plugins.map((plugin) =>
-        plugin.id === id
-          ? {
-              ...updated,
-              /*
-               * ★ icon **保留本机那一份**，不采信响应里的。
-               *
-               * 这个端点（服务端 handleEnable / handleDisable）回的是数据库里
-               * manifest 声明的**原始**文件名，漏了像 GET /jsplugins 那样把它解析成
-               * 磁盘上真实存在的那一个。于是草率替换会让图标当场退回首字母方块，
-               * 而且只有重拉一次列表（或重启）才恢复：
-               *   - manifest 声明 "icon.svg" 而磁盘上是 "icon.abc123.svg"（构建加了
-               *     content hash）→ 拼出的 URL 404；
-               *   - manifest 压根没声明 icon、只往 static/ 放了个 icon.svg（由后端
-               *     兜底探测出来）→ 响应里是空串，直接走兜底图。
-               * 启用 / 停用并不动插件文件，所以本机这份（来自列表响应，已解析过）
-               * 永远不比它差。（上游 Flutter 端不吃这个字段：它 toggle 后重拉整份列表。）
-               */
-              icon: plugin.icon || updated.icon
-            }
-          : plugin
-      ),
-      error: null
+        plugin.id === id ? { ...plugin, status: enabled ? 'active' : 'inactive' } : plugin
+      )
     }))
+
+    try {
+      const updated = await setPluginEnabled(client, id, enabled)
+      // 过期响应（用户在这期间又点了一次）直接丢掉：界面归最新那次意图管
+      if (toggleSeq.get(id) !== seq) return
+      set((state) => ({
+        plugins: state.plugins.map((plugin) =>
+          plugin.id === id
+            ? {
+                ...updated,
+                /*
+                 * ★ icon **保留本机那一份**，不采信响应里的。
+                 *
+                 * 这个端点（服务端 handleEnable / handleDisable）回的是数据库里
+                 * manifest 声明的**原始**文件名，漏了像 GET /jsplugins 那样把它解析成
+                 * 磁盘上真实存在的那一个。于是草率替换会让图标当场退回首字母方块，
+                 * 而且只有重拉一次列表（或重启）才恢复：
+                 *   - manifest 声明 "icon.svg" 而磁盘上是 "icon.abc123.svg"（构建加了
+                 *     content hash）→ 拼出的 URL 404；
+                 *   - manifest 压根没声明 icon、只往 static/ 放了个 icon.svg（由后端
+                 *     兜底探测出来）→ 响应里是空串，直接走兜底图。
+                 * 启用 / 停用并不动插件文件，所以本机这份（来自列表响应，已解析过）
+                 * 永远不比它差。（上游 Flutter 端不吃这个字段：它 toggle 后重拉整份列表。）
+                 */
+                icon: plugin.icon || updated.icon
+              }
+            : plugin
+        ),
+        error: null
+      }))
+    } catch (error) {
+      // 回退：把界面还原成用户操作前的样子（后端那一步没成，本地也不该留着新状态）。
+      // 已经有过更新的意图时不动 —— 那份意图有自己的回退要负责。
+      if (toggleSeq.get(id) === seq && before) {
+        set((state) => ({
+          plugins: state.plugins.map((plugin) => (plugin.id === id ? before : plugin))
+        }))
+      }
+      throw error
+    }
   },
 
   remove: async (id) => {

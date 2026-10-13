@@ -24,17 +24,20 @@ function reasonText(reason: unknown): string | undefined {
 /**
  * 启用 / 停用。
  *
- * 不乐观更新 UI：这是后端改配置、返回新对象的一步，失败要如实回滚到原来的开关位置 ——
- * 界面先跳、失败了再跳回来，比等一下更让人心里没底。
+ * 乐观：那颗开关**立刻**跟着意图翻（见 state/usePlugins.setEnabled），所以这一层只管反馈 ——
+ * 成功**不出声**（开关已经翻到位，再弹一句「已启用」纯属噪音，还把视线从列表上引开），
+ * 失败才弹一条 **error** 提示（回退由 store 做：只有它拿着操作前那一份快照）。
+ *
+ * ★ 错误必须走 `'error'` 这个 tone：默认的 info 是中性白底样式，与「一切正常」分不开，
+ *   用户会以为操作成功了。
  */
 export function togglePlugin(plugin: JSPlugin, next: boolean): void {
   const name = pluginDisplayName(plugin)
   void usePlugins
     .getState()
     .setEnabled(plugin.id, next)
-    .then(
-      () => toast(next ? `已启用「${name}」` : `已停用「${name}」`, 'success'),
-      (reason: unknown) => toast('操作失败', 'error', reasonText(reason))
+    .catch((reason: unknown) =>
+      toast(`${next ? '启用' : '停用'}「${name}」失败`, 'error', reasonText(reason))
     )
 }
 
