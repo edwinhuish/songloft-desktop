@@ -24,6 +24,7 @@ import { checkClientUpdate } from './release'
 import { openTextFile, saveTextFile } from './files'
 import { registerMediaKeys } from './media-keys'
 import { fetchCoverBytes, probeServer } from './probe'
+import { PLUGIN_PARTITION } from '@shared/plugin'
 import { ConfigStore } from './store'
 import { createTray, destroyTray, render as renderTray } from './tray'
 import { createMainWindow } from './windows'
@@ -116,6 +117,45 @@ function applyCsp(): void {
           ].join('; ')
         ]
       }
+    })
+  })
+}
+
+/**
+ * ★ 扩展页（webview guest）的 session 隔离与围栏。
+ *
+ * 两条与主窗口不同的地方：
+ *   1. **独立 session**（见 shared/plugin.ts 的 PLUGIN_PARTITION）。上面那个 applyCsp()
+ *      是 `session.defaultSession.webRequest.onHeadersReceived`，它改写的是整个会话的
+ *      响应头 —— 插件页那份 HTML 也在同一个来源上，不隔离就会被套上宿主的 CSP，
+ *      表现为插件莫名其妙地坏掉、且没有任何报错。代价是权限、证书校验这些要给
+ *      这份 session 单独配一遍。
+ *   2. guest 是**第三方代码**：开新窗口一律拒绝并改用系统浏览器，非 http(s) 的导航
+ *      直接拦掉。与主窗口同一条围栏，只是对象不同。
+ */
+function hardenPluginSession(): void {
+  const pluginSession = session.fromPartition(PLUGIN_PARTITION)
+
+  // 麦克风/摄像头/通知/地理位置：候选页要的一个都不给，与主窗口一致
+  pluginSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false))
+
+  // 「忽略自签证书」这项要跟着走，否则会出现「接口连得上、插件页打不开」的怪状态。
+  // 读的是当前设置而不是启动时那份：这一项在设置页随时可改。
+  pluginSession.setCertificateVerifyProc((_request, callback) => {
+    callback(store.getSettings().allowInsecureTls ? 0 : -3)
+  })
+
+  app.on('web-contents-created', (_event, contents) => {
+    if (contents.getType() !== 'webview') return
+
+    contents.setWindowOpenHandler(({ url }) => {
+      if (/^https?:/i.test(url)) void shell.openExternal(url)
+      return { action: 'deny' }
+    })
+    contents.on('will-navigate', (event, url) => {
+      // 插件页内部跳路由是正常的，只挡非 http(s)
+      if (/^https?:/i.test(url)) return
+      event.preventDefault()
     })
   })
 }
@@ -301,6 +341,8 @@ if (gotTheLock) {
   app.whenReady().then(() => {
     applyTlsPolicy(store.getSettings().allowInsecureTls)
     applyCsp()
+    // 必须早于任何 webview 挂载：它注册的 web-contents-created 只在创建时生效一次
+    hardenPluginSession()
     registerIpcHandlers()
     installAppMenu(() => mainWindow)
 

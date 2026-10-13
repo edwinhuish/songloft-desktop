@@ -34,6 +34,15 @@ interface AuthState {
   backendVersion: string | null
   error: string | null
   busy: boolean
+  /**
+   * 当前 access token 的镜像。
+   *
+   * 真身在 ApiClient 里（那是唯一会刷新它的地方），这里只是把它挂到 store 上，
+   * 好让**需要 token 拼 URL 的地方**（扩展页 webview）能在刷新后自动重建地址 ——
+   * 只读 client.getAccessToken() 不会触发重渲染，扩展页会一直用着过期的 token。
+   * 只在内存里，不落任何持久化存储。
+   */
+  accessToken: string
 
   bootstrap: () => Promise<void>
   refreshServers: () => Promise<void>
@@ -50,6 +59,8 @@ function createClient(baseUrl: string): ApiClient {
   return new ApiClient(baseUrl, {
     onTokens: (tokens) => {
       const url = useAuth.getState().baseUrl
+      // 镜像给 store：扩展页 URL 里带 token，刷新后得让它重建一次
+      useAuth.setState({ accessToken: tokens?.accessToken ?? '' })
       if (url && tokens) {
         void window.songloft.credentials.set(url, {
           accessToken: tokens.accessToken,
@@ -60,7 +71,11 @@ function createClient(baseUrl: string): ApiClient {
     },
     onAuthLost: () => {
       void window.songloft.credentials.clear(useAuth.getState().baseUrl ?? '')
-      useAuth.setState({ status: 'unauthenticated', error: '登录状态已失效，请重新登录' })
+      useAuth.setState({
+        status: 'unauthenticated',
+        error: '登录状态已失效，请重新登录',
+        accessToken: ''
+      })
     },
     onBaseResolved: (origin) => {
       // 302 后的真实地址变了。ApiClient 内部已经把媒体 URL 基准切到这个 origin
@@ -93,6 +108,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   backendVersion: null,
   error: null,
   busy: false,
+  accessToken: '',
 
   bootstrap: async () => {
     const servers = await window.songloft.servers.list()
@@ -124,11 +140,12 @@ export const useAuth = create<AuthState>((set, get) => ({
       refreshToken: stored.refreshToken,
       expiresIn: stored.expiresIn
     })
+    set({ accessToken: stored.accessToken })
 
     // 本地推算已过期就先刷新，省掉一次注定 401 的请求
     const expired = stored.savedAt + stored.expiresIn * 1000 < Date.now() + 30_000
     if (expired && !(await client.refreshTokens())) {
-      set({ status: 'unauthenticated', error: '登录状态已过期，请重新登录' })
+      set({ status: 'unauthenticated', error: '登录状态已过期，请重新登录', accessToken: '' })
       return
     }
 
@@ -182,7 +199,8 @@ export const useAuth = create<AuthState>((set, get) => ({
         servers,
         status: 'authenticated',
         busy: false,
-        error: null
+        error: null,
+        accessToken: tokens.accessToken
       })
 
       void client
@@ -212,7 +230,7 @@ export const useAuth = create<AuthState>((set, get) => ({
     }
     if (baseUrl) await window.songloft.credentials.clear(baseUrl)
     client?.setTokens(null)
-    set({ status: 'unauthenticated', error: null, username: null })
+    set({ status: 'unauthenticated', error: null, username: null, accessToken: '' })
   },
 
   openLogin: () => {
@@ -230,7 +248,7 @@ export const useAuth = create<AuthState>((set, get) => ({
 
     const stored = await window.songloft.credentials.get(url)
     if (!stored) {
-      set({ status: 'unauthenticated', username: null })
+      set({ status: 'unauthenticated', username: null, accessToken: '' })
       return
     }
     client.setTokens({
@@ -238,13 +256,14 @@ export const useAuth = create<AuthState>((set, get) => ({
       refreshToken: stored.refreshToken,
       expiresIn: stored.expiresIn
     })
+    set({ accessToken: stored.accessToken })
     const expired = stored.savedAt + stored.expiresIn * 1000 < Date.now() + 30_000
     if (expired && !(await client.refreshTokens())) {
-      set({ status: 'unauthenticated', error: '该服务器的登录已过期，请重新登录' })
+      set({ status: 'unauthenticated', error: '该服务器的登录已过期，请重新登录', accessToken: '' })
       return
     }
     if (!(await verifySession(client))) {
-      set({ status: 'unauthenticated', error: '该服务器的登录已过期，请重新登录' })
+      set({ status: 'unauthenticated', error: '该服务器的登录已过期，请重新登录', accessToken: '' })
       return
     }
     await useSettings.getState().patch({ activeServerUrl: url })
@@ -253,7 +272,12 @@ export const useAuth = create<AuthState>((set, get) => ({
       name: servers.find((s) => s.url === url)?.name ?? new URL(url).host,
       lastUsedAt: Date.now()
     })
-    set({ status: 'authenticated', servers: fresh, username: stored.username ?? null })
+    set({
+      status: 'authenticated',
+      servers: fresh,
+      username: stored.username ?? null,
+      accessToken: client.getAccessToken()
+    })
   },
 
   forgetServer: async (url) => {
@@ -270,7 +294,8 @@ export const useAuth = create<AuthState>((set, get) => ({
           client: null,
           baseUrl: null,
           serverName: null,
-          username: null
+          username: null,
+          accessToken: ''
         })
       return
     }

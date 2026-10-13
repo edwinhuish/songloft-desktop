@@ -28,6 +28,12 @@ export type Route =
   | { name: 'playlist'; id: number }
   | { name: 'folders'; path: string }
   | { name: 'settings'; section: SettingsSection }
+  /**
+   * 扩展页。它**不是**主内容区里的一个页签，而是把标题栏以下整块换成一个 webview ——
+   * 见 App 里 `.shell[data-surface='plugin']` 的分支。所以它在 Route 里，但不在
+   * renderRoute 的 switch 里。
+   */
+  | { name: 'plugin'; entryPath: string }
 
 export type PanelTab = 'now-playing' | 'queue'
 
@@ -52,8 +58,24 @@ interface UiState {
   selection: number[]
   /** 播放列表选中态锚点（Shift 连选用） */
   selectionAnchor: number | null
+  /**
+   * 最近一次停留过的**原生**页。
+   *
+   * 为什么单存一份：扩展之间互跳时，history 里夹着的是另一个插件，`back()` 会回到
+   * 那个插件而不是播放页。「再点一次已激活的扩展按钮 = 收起扩展」要的正是回到原生页，
+   * 所以必须记住它是哪一个。
+   */
+  lastNativeRoute: Route
+  /**
+   * 标题栏扩展入口条的视窗起点（有序列表上的下标）。
+   *
+   * 刻意**不写设置**：它只是一次视图滚动的位置，与用户拖出来的插件顺序是两码事。
+   * 存进设置的话，用户在管理页排好的顺序会被「上次滚到哪」污染。
+   */
+  extensionOffset: number
 
   navigate: (route: Route) => void
+  setExtensionOffset: (offset: number) => void
   back: () => void
   setPanelOpen: (open: boolean) => void
   togglePanel: (tab?: PanelTab) => void
@@ -82,6 +104,8 @@ export const useUi = create<UiState>((set, get) => ({
   addToPlaylistTarget: null,
   selection: [],
   selectionAnchor: null,
+  lastNativeRoute: { name: 'home' },
+  extensionOffset: 0,
 
   navigate: (route) => {
     const current = get().route
@@ -91,9 +115,13 @@ export const useUi = create<UiState>((set, get) => ({
       route,
       history: [current, ...state.history].slice(0, MAX_HISTORY),
       selection: [],
-      selectionAnchor: null
+      selectionAnchor: null,
+      // 只记原生页：插件路由记进来，「收起扩展」就会回到另一个插件
+      lastNativeRoute: route.name === 'plugin' ? state.lastNativeRoute : route
     }))
   },
+
+  setExtensionOffset: (offset) => set({ extensionOffset: Math.max(0, offset) }),
 
   back: () => {
     const [prev, ...rest] = get().history

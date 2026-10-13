@@ -134,6 +134,69 @@ a {
   --sidebar-current: var(--sidebar-w-collapsed);
 }
 
+/* ───────────────────────── 扩展承载面 ───────────────────────── */
+
+/* 插件态只剩两行：标题栏 + 内容面。播放条此时被整块内容面取代 —— 播放不会因此
+   中断，音频是模块级对象、不挂在 DOM 上（见 state/usePlayer 的 audio）。 */
+.shell[data-surface='plugin'] {
+  grid-template-rows: var(--titlebar-h) minmax(0, 1fr);
+}
+
+.plugin-surface {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-0);
+}
+
+/* 一个扩展一层。非激活的那层是**保活**中的（正在后台出声），不是残留 —— 用
+   display:none 藏起来不会停掉 guest 的播放，这正是「播放中」角标能成立的前提。 */
+.plugin-view {
+  position: absolute;
+  inset: 0;
+  display: none;
+}
+
+.plugin-view[data-active='true'] {
+  display: block;
+}
+
+.plugin-view-host {
+  width: 100%;
+  height: 100%;
+}
+
+/* ★ webview 必须显式给 display 与尺寸：它默认是 inline，高度会塌成 0，
+   表现为「扩展页明明加载了却看不见」 */
+.plugin-view-host webview {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.plugin-view-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-2);
+  background: var(--bg-0);
+}
+
+/* 加载中只是个掩护，不该拦住点击 */
+.plugin-view-overlay[data-state='loading'] {
+  pointer-events: none;
+}
+
+.plugin-view-hint {
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
 .main-column {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);

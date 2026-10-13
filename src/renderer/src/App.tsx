@@ -24,6 +24,7 @@ import { ContextMenuHost } from './components/ContextMenu'
 import { IconClose, IconLoader, IconSearch } from './components/Icons'
 import { Panel } from './components/Panel'
 import { PlayerBar } from './components/PlayerBar'
+import { PluginSurface } from './components/PluginSurface'
 import { Sidebar } from './components/Sidebar'
 import { TitleBar } from './components/TitleBar'
 import { Toasts } from './components/Toasts'
@@ -278,33 +279,45 @@ function Shell(): React.JSX.Element {
   const panelOpen = useUi((s) => s.panelOpen)
   const sidebarCollapsed = useUi((s) => s.sidebarCollapsed)
 
-  const content = useMemo(() => renderRoute(route), [route])
+  const isPlugin = route.name === 'plugin'
+  const content = useMemo(() => (isPlugin ? null : renderRoute(route)), [route, isPlugin])
 
   return (
-    <div className="shell">
+    <div className="shell" data-surface={isPlugin ? 'plugin' : 'native'}>
       <TitleBar />
 
-      <div
-        className="shell-body"
-        data-panel={panelOpen ? 'open' : 'closed'}
-        data-sidebar={sidebarCollapsed ? 'collapsed' : 'expanded'}
-      >
-        <Sidebar />
+      {/*
+        扩展页把标题栏以下整块换成 webview —— 播放器主体与扩展是**两个面**，不是同一屏
+        的两半。原生侧整体不挂载（而不是藏起来）：扩展页要拿到完整的窗口高度，留着
+        侧栏/播放条的 DOM 没有意义。播放不会因此中断，音频是模块级对象、不挂在 DOM 上。
+      */}
+      {isPlugin ? (
+        <PluginSurface entryPath={route.entryPath} />
+      ) : (
+        <>
+          <div
+            className="shell-body"
+            data-panel={panelOpen ? 'open' : 'closed'}
+            data-sidebar={sidebarCollapsed ? 'collapsed' : 'expanded'}
+          >
+            <Sidebar />
 
-        <div className="main-column">
-          <Toolbar />
-          {/* key 只跟路由走。页签切换只影响右边抽屉，把 panelTab 也算进来的话，
-              切一次页签主内容区就整体卸载重建一次 —— 列表和封面全被冲掉，
-              看上去就是「左边闪一下」 */}
-          <div className="main-scroll" key={route.name}>
-            {content}
+            <div className="main-column">
+              <Toolbar />
+              {/* key 只跟路由走。页签切换只影响右边抽屉，把 panelTab 也算进来的话，
+                  切一次页签主内容区就整体卸载重建一次 —— 列表和封面全被冲掉，
+                  看上去就是「左边闪一下」 */}
+              <div className="main-scroll" key={route.name}>
+                {content}
+              </div>
+            </div>
+
+            <Panel />
           </div>
-        </div>
 
-        <Panel />
-      </div>
-
-      <PlayerBar />
+          <PlayerBar />
+        </>
+      )}
 
       <CommandPalette />
       <AddToPlaylistDialog />

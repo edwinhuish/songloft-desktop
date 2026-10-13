@@ -42,7 +42,11 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
-      webviewTag: false,
+      // ★ 扩展页用 <webview> 装载。为什么不是 <iframe>：iframe 跨源，宿主没有任何 API
+      //   能单独静音它、也不知道它在不在出声（那是「静音」右键项与「播放中」角标的
+      //   全部依据）。webview 的 guest 有 setAudioMuted 与 media-started-playing。
+      //   代价是必须配套加固 —— 见下面的 will-attach-webview 与 main/index.ts。
+      webviewTag: true,
       spellcheck: false
     }
   })
@@ -57,6 +61,29 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) void shell.openExternal(url)
     return { action: 'deny' }
+  })
+
+  /**
+   * ★ 扩展页（webview guest）的附加加固。
+   *
+   * webviewTag 一开，guest 的 webPreferences 就可以由**页面自己**在元素上声明
+   * （`webpreferences="nodeIntegration=yes"` 这类）—— 等于把「要不要 Node、
+   * 要不要 preload」交给了渲染层。所以这里一律覆写成我们认可的那一套：
+   * 不要 preload、不要 Node、开沙箱与上下文隔离。这是 Electron 官方对 webview 的
+   * 硬性要求，少做一步就等于把系统能力交给第三方插件页。
+   *
+   * 顺带把非 http(s) 的挂载挡掉：插件页永远是后端上的 http(s) 资源。
+   */
+  window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    if (!/^https?:/i.test(params.src)) {
+      event.preventDefault()
+      return
+    }
+    delete webPreferences.preload
+    webPreferences.nodeIntegration = false
+    webPreferences.contextIsolation = true
+    webPreferences.sandbox = true
+    webPreferences.webSecurity = true
   })
 
   window.webContents.on('will-navigate', (event, url) => {

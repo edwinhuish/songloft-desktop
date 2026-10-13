@@ -18,6 +18,19 @@
 export type PluginStatus = 'active' | 'inactive' | 'error'
 
 /**
+ * 扩展页专用的 session partition。
+ *
+ * ★ 必须**独立于 defaultSession**。主进程会给 defaultSession 挂
+ *   `webRequest.onHeadersReceived` 注入应用自己的 CSP（那是**改写整个会话**的），
+ *   而扩展页的 HTML 也是从这台服务器上取回来的 —— 不隔离的话，插件页会被套上
+ *   `script-src 'self'` 这类宿主限制，表现是插件莫名其妙地坏掉，且没有任何报错。
+ *
+ * `persist:` 前缀让它落盘：插件页靠 localStorage 记住后端注入的 access_token，
+ * 内存会话会在窗口重开时把它丢掉。
+ */
+export const PLUGIN_PARTITION = 'persist:songloft-extensions'
+
+/**
  * 后端 `GET /api/v1/jsplugins` 里单条插件的原始形状。
  *
  * 字段名是 snake_case，与 models.JSPlugin 的 json tag 一一对应。刻意留着这份「线格式」
