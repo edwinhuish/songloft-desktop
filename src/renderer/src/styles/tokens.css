@@ -76,12 +76,15 @@
   --row-h: 46px;
 
   /* ── 默认封面（没有封面图时显示的那张）───────────────────────────────
-     色相与饱和度按类型定（见 components.css 的 .cover-art[data-kind]），
-     明度与墨色在这里按主题定：深色主题是一块**压得很暗**的底 + 一枚浅色记号。 */
-  --cover-art-l1: 25%;
-  --cover-art-l2: 16%;
-  --cover-art-ink: 80%;
-  --cover-art-ink-a: 40%;
+     三类共用同一块底，色相一律取自**主题色** `--accent`（它本身会跟着当前播放的封面
+     取色变，见 state/useTheme.ts），这里只按主题定明度与墨色：
+     深色主题是一块**压暗的主题色**底 + 一枚**提亮的主题色**记号。
+     类型不由颜色区分 —— 交给图案（单音符 / 双音符 / 麦克风，见 components/CoverArt.tsx）。 */
+  --cover-art-bg-1: color-mix(in srgb, var(--accent) 34%, var(--bg-2));
+  --cover-art-bg-2: color-mix(in srgb, var(--accent) 16%, var(--bg-1));
+  --cover-art-ink: color-mix(in srgb, var(--accent) 45%, #ffffff);
+  --cover-art-ink-a: 72%;
+  --cover-art-edge-a: 14%;
 }
 
 /* 浅色主题：只换中性色阶与阴影强度，其余令牌沿用 */
@@ -113,12 +116,13 @@
   --shadow-2: 0 8px 24px -10px rgba(15, 18, 32, 0.18);
   --shadow-3: 0 24px 64px -20px rgba(15, 18, 32, 0.28);
 
-  /* 默认封面：浅色主题下是一块很淡的灰底 + 一枚深色记号。
+  /* 默认封面：浅色主题下是一块很淡的主题色底 + 一枚压深的主题色记号。
      透明度比深色主题高一点：浅底上的记号本就吃亏，20~34px 那几个小尺寸会淡到看不见 */
-  --cover-art-l1: 94%;
-  --cover-art-l2: 87%;
-  --cover-art-ink: 32%;
-  --cover-art-ink-a: 48%;
+  --cover-art-bg-1: color-mix(in srgb, var(--accent) 26%, #ffffff);
+  --cover-art-bg-2: color-mix(in srgb, var(--accent) 14%, #ffffff);
+  --cover-art-ink: color-mix(in srgb, var(--accent) 62%, #0c0e18);
+  --cover-art-ink-a: 78%;
+  --cover-art-edge-a: 20%;
 }
 
 /* 紧凑密度 */
