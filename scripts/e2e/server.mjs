@@ -474,6 +474,8 @@ const server = createServer((req, res) => {
   }
   if (path === '/api/v1/auth/logout') return noContent(res)
   if (path === '/api/v1/auth/tokens') {
+    // 真实后端既发 access 也发 refresh（access 短命、一次登录可能刷出好几个）。
+    // 登录设备列表只认 refresh，所以这里两种都给，否则那个列表永远是空的。
     return json(res, 200, {
       tokens: [
         {
@@ -484,9 +486,18 @@ const server = createServer((req, res) => {
           expires_at: '2026-10-13T10:00:00Z',
           revoked_at: null,
           created_at: '2026-10-12T10:00:00Z'
+        },
+        {
+          id: 2,
+          token_id: 'mock-token-2',
+          token_type: 'refresh',
+          client_info: 'Songloft Desktop (Linux)',
+          expires_at: '2026-11-12T10:00:00Z',
+          revoked_at: null,
+          created_at: '2026-10-12T10:00:00Z'
         }
       ],
-      total: 1
+      total: 2
     })
   }
 
