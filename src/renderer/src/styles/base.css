@@ -107,7 +107,7 @@ a {
 
 /*
  * 迷你模式：整个界面换成一条小播放条（见 components/MiniPlayer.tsx），窗口本身也被主进程
- * 缩到 280×64（见 main/windows.ts）。
+ * 缩到 350×64（见 main/windows.ts）。
  *
  * ★ 正常的那两块**不卸载、也不重排**，只是不画：
  *   · 卸载会把两面的滚动位置与扩展的 webview 一起丢掉（理由见下面 .surface 那段）；
