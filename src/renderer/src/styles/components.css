@@ -430,7 +430,7 @@
   /* 悬停时卡片会抬升 3px，而 overflow-x: auto 会按规范把纵轴一并算成 auto ——
      上下不留出这点量的话，卡片顶边会被那条"隐形"的纵轴裁掉。 */
   padding: 4px 0;
-  /* 整行可拖（见 hooks/useDragScroll.ts）：光标要说得出这件事；
+  /* 整行可拖（见 hooks/useHorizontalScroll.ts）：光标要说得出这件事；
      拖动过程会划选文字、也会碰到原生图片拖拽，所以一并禁掉选中 */
   cursor: grab;
   user-select: none;

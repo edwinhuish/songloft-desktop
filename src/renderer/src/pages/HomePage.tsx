@@ -30,7 +30,7 @@ import { CardGridSkeleton, Cover, EmptyState } from '@/components/primitives'
 import { buildSongMenuItems } from '@/components/songMenu'
 import { getFacets, getLibraryStats, getSongs } from '@/api/endpoints'
 import { useAsync } from '@/hooks/useAsync'
-import { useDragScroll } from '@/hooks/useDragScroll'
+import { useHorizontalScroll } from '@/hooks/useHorizontalScroll'
 import {
   displayArtist,
   formatBytes,
@@ -152,7 +152,8 @@ export function HomePage(): React.JSX.Element {
     return () => observer.disconnect()
   }, [hasPlaylistGrid])
 
-  const recentRow = useDragScroll()
+  // 滚轮转横向 + 按住拖动（见 hooks/useHorizontalScroll.ts）
+  const recentRow = useHorizontalScroll()
 
   return (
     <div className="page">
@@ -357,7 +358,7 @@ function Stat({ value, label }: { value: string; label: string }): React.JSX.Ele
 /**
  * 「最近加入」的大图卡。
  *
- * ★ 卡片本体**不是**可点区域：这一行要能按住横向拖动（见 useDragScroll），
+ * ★ 卡片本体**不是**可点区域：这一行要能横向拖动（见 useHorizontalScroll），
  * 而拖动松手时浏览器仍会补一个 click —— 卡片若响应点击，拖一下就会顺带播放。
  * 所以只有封面右下角那颗播放键会开播，点封面、点歌名都什么都不做。
  * 右键菜单照旧复用曲库那套（见 songMenu.tsx），免得大图卡变成功能孤岛。

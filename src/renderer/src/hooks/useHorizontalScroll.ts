@@ -1,7 +1,17 @@
 /**
- * 按住横向拖动来滚动（鼠标左键）。
+ * 让一行内容横向滚动得顺手：**滚轮转横向** + **按住拖动**（鼠标左键）。
  *
- * 三件事必须一起做，少一件「拖」就会变成「点」：
+ * 为什么这两件事只能写在这里、交给 CSS 不行：
+ *   * 光有横向滚动条等于没有 —— 它细、还是横的，而鼠标滚轮默认只滚纵向；
+ *   * React 的 onWheel 挂在根节点上且是 **passive** 的，在里面 preventDefault 不生效，
+ *     要拦下页面滚动只能用原生监听 + `{ passive: false }`。
+ *
+ * 滚轮部分的两个取舍：
+ *   * **已经贴边就放行**：鼠标停在这一行上时若把滚轮全吃掉，页面就哪儿都滚不动了；
+ *   * 但**先夹到端点再判断**：还剩一点就把它滚完，免得最后一段永远滚不到（放行得留给
+ *     「确实一点都滚不动」那一刻）。
+ *
+ * 拖动部分的三条约束，少一件「拖」就会变成「点」：
  *   * **超阈值才算拖动**：按下不动就是普通点击，行内按钮（如封面上的播放键）照常工作。
  *     阈值内也刻意**不** capture 指针 —— 一 capture，后续指针事件连配套的 click
  *     都会被重定向，普通点击没必要冒这个险。
@@ -14,7 +24,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-export function useDragScroll(threshold = 5): {
+/** 小于这个位移不算拖动（像素） */
+const DRAG_THRESHOLD = 5
+
+export function useHorizontalScroll(): {
   ref: React.RefObject<HTMLDivElement | null>
   dragging: boolean
 } {
@@ -24,6 +37,18 @@ export function useDragScroll(threshold = 5): {
   useEffect(() => {
     const el = ref.current
     if (!el) return
+
+    const onWheel = (event: WheelEvent): void => {
+      // 本身就是横向的手势（触控板双指左右、Shift+滚轮）让浏览器自己滚，不两头抢
+      if (Math.abs(event.deltaX) >= Math.abs(event.deltaY)) return
+      const max = el.scrollWidth - el.clientWidth
+      if (max <= 0) return
+      const next = Math.min(Math.max(el.scrollLeft + event.deltaY, 0), max)
+      // 只剩不到半像素可滚：说明到端点了，这一下交给页面
+      if (Math.abs(next - el.scrollLeft) < 0.5) return
+      event.preventDefault()
+      el.scrollLeft = next
+    }
 
     let pointerId: number | null = null
     let startX = 0
@@ -43,7 +68,7 @@ export function useDragScroll(threshold = 5): {
       if (event.pointerId !== pointerId) return
       const delta = event.clientX - startX
       if (!moved) {
-        if (Math.abs(delta) < threshold) return
+        if (Math.abs(delta) < DRAG_THRESHOLD) return
         moved = true
         setDragging(true)
         // 到这一步已经确定是拖动：捕获指针，拖出行外也继续跟手
@@ -65,6 +90,7 @@ export function useDragScroll(threshold = 5): {
       event.stopPropagation()
     }
 
+    el.addEventListener('wheel', onWheel, { passive: false })
     el.addEventListener('pointerdown', onDown)
     el.addEventListener('pointermove', onMove)
     el.addEventListener('pointerup', onUp)
@@ -72,13 +98,14 @@ export function useDragScroll(threshold = 5): {
     // 捕获阶段拦：不能让这次 click 落到卡片或按钮上
     el.addEventListener('click', onClick, true)
     return () => {
+      el.removeEventListener('wheel', onWheel)
       el.removeEventListener('pointerdown', onDown)
       el.removeEventListener('pointermove', onMove)
       el.removeEventListener('pointerup', onUp)
       el.removeEventListener('pointercancel', onUp)
       el.removeEventListener('click', onClick, true)
     }
-  }, [threshold])
+  }, [])
 
   return { ref, dragging }
 }
