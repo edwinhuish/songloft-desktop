@@ -392,6 +392,11 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
 
 * **两个 `aria-expanded` 要各自判断** `anchor === 自己的 ref`：只看 `open` 的话，打开一颗
   会让两颗都报「已展开」（`anchor` 的语义见 `ContextMenu.tsx`）。
+* **菜单开着时，标题栏的拖拽区与扩展页的 webview 要暂时让开**（`html[data-menu='open']`
+  那两条规则）：这两处的「点一下」都冒不到宿主的 window（前者被浏览器拿去拖窗口，后者
+  在独立进程里），不让开就会「点标题栏 / 点扩展页都关不掉菜单」。标记由 `ContextMenuHost`
+  打在 `documentElement` 上 —— 别改成让 Shell 渲染一个属性，那会让每次开关菜单都整页
+  重渲染一次。
 * **「停用 / 卸载」必须走 `lib/plugin-actions`**，不要在下拉里另写一份 —— 卸载的确认文案里
   那句「数据会一并删除」漏一次就是真的丢数据，而它现在有两个入口。
 

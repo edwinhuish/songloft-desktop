@@ -313,6 +313,32 @@ function MenuPanel({
 export function ContextMenuHost(): React.JSX.Element | null {
   const { open, x, y, items, anchor, align, anchorRect, hide } = useContextMenu()
 
+  /**
+   * 把「有菜单开着」这件事发布给 CSS。
+   *
+   * 有两处「点一下」根本冒不到宿主的 window，全靠这条标记先把它们让开：
+   *   * 标题栏的拖拽区 —— 那一下按下会被浏览器拿去拖窗口，页面收不到 pointerdown；
+   *   * 扩展页的 webview —— guest 是独立进程，点在它上面的那一下也不会冒上来。
+   * 不让开的话，「点别处关掉菜单」在这两处各自断掉，菜单只能靠再点一次触发器才关得掉。
+   *
+   * 为什么写进 `documentElement.dataset` 而不是让某个组件渲染一个属性：这条规则要管到
+   * 整棵文档，能同时覆盖这两处的 React 组件是 Shell —— 让它订阅菜单状态意味着**每开关
+   * 一次菜单就整页重渲染一次**（列表可能有几千行）。用 dataset 发布一个全局 UI 模式，
+   * 零重渲染。规则本体在 base.css 里（`html[data-menu='open'] …`）。
+   */
+  useEffect(() => {
+    const root = document.documentElement
+    if (!open) {
+      delete root.dataset.menu
+      return
+    }
+    root.dataset.menu = 'open'
+    // 卸载（例如退出登录）时也要撤掉：留着的话标题栏会一直丢掉拖拽区
+    return () => {
+      delete root.dataset.menu
+    }
+  }, [open])
+
   useEffect(() => {
     if (!open) return
     const close = (): void => hide()
