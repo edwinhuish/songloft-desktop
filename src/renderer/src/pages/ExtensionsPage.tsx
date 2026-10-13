@@ -23,12 +23,10 @@ import {
   uploadPlugin,
   type PluginBatchUpdate
 } from '@/api/plugins'
-import { useContextMenu, type MenuItem } from '@/components/ContextMenu'
 import {
   IconDownload,
   IconGrip,
   IconLoader,
-  IconMore,
   IconPin,
   IconPuzzle,
   IconRefresh,
@@ -74,7 +72,7 @@ export function ExtensionsPage(): React.JSX.Element {
   const [updating, setUpdating] = useState(false)
   const [updateFailure, setUpdateFailure] = useState<PluginBatchUpdate | null>(null)
   const [cleaning, setCleaning] = useState(false)
-  /* 单行那颗「⋯」里正在跑的动作（检查更新 / 下载更新）—— 按下标住，同一时刻只跑一个 */
+  /* 单行那几颗动作按钮里正在跑的动作（检查更新 / 下载更新）—— 按下标住，同一时刻只跑一个 */
   const [busyId, setBusyId] = useState<number | null>(null)
   /**
    * 常驻白名单（entryPath 列表）。读一次只为把勾选显示出来；
@@ -473,7 +471,7 @@ interface ExtensionRowProps {
   over: boolean
   /** 这个插件在常驻白名单里（行内菜单里那一项的勾） */
   pinned: boolean
-  /** 这一行有动作在跑（检查 / 下载更新）：菜单入口换成转圈并按住 */
+  /** 这一行有动作在跑（检查 / 下载更新）：三颗按钮一起按住，正在跑的那颗换成转圈 */
   busy: boolean
   onDragStart: () => void
   onDragOver: () => void
@@ -504,59 +502,6 @@ function ExtensionRow({
   const enabled = plugin.status === 'active'
   // 版本号不在这里（它挪到名字右边当标签了），所以这一行只剩作者与说明，可能整个是空的
   const meta = [plugin.author, plugin.description].filter(Boolean).join(' · ')
-  const menuRef = useRef<HTMLButtonElement>(null)
-  // 只为把 aria-expanded 说准：读宿主的真实状态，不另存一份「我开着」（与标题栏那两颗一致）
-  const menuOpen = useContextMenu((state) => state.open && state.anchor === menuRef.current)
-
-  /**
-   * 行尾那颗「⋯」。
-   *
-   * 三条与上游 Flutter 端的行内菜单（PopupMenuButton）对齐：常驻运行（push_pin，选中打勾）、
-   * 更新、删除。那边把更新拆成「检查更新」与「强制更新」两条，这里合成一条「先查后更」；
-   * 删除放在分割线之下、走 danger 色 —— 它是这一行里唯一不可逆的动作。
-   */
-  const toggleMenu = (event: React.MouseEvent<HTMLButtonElement>): void => {
-    const menu = useContextMenu.getState()
-    // 宿主对「点触发器」刻意不关（anchor 放行），所以这里读到的仍是开着 → 收起
-    if (menu.open) {
-      menu.hide()
-      return
-    }
-    const items: MenuItem[] = [
-      {
-        key: 'keep-alive',
-        label: '常驻运行',
-        icon: <IconPin size={16} />,
-        // 给出 checked 会让整层面板切成「带勾位列」的排版 —— 正合适
-        checked: pinned,
-        disabled: busy,
-        onClick: onToggleKeepAlive
-      },
-      {
-        key: 'update',
-        label: '更新',
-        icon: <IconDownload size={16} />,
-        disabled: busy,
-        onClick: onUpdate
-      },
-      { key: 'menu-sep', label: '', separator: true },
-      {
-        key: 'delete',
-        label: '删除',
-        icon: <IconTrash size={16} />,
-        variant: 'danger',
-        disabled: busy,
-        onClick: onUninstall
-      }
-    ]
-    const rect = event.currentTarget.getBoundingClientRect()
-    // 右对齐：这颗按钮长在行尾，左对齐会让面板越出行外
-    menu.show(rect.left, rect.bottom + 6, items, {
-      anchor: event.currentTarget,
-      align: 'right',
-      anchorRect: rect
-    })
-  }
 
   return (
     <li
@@ -610,19 +555,56 @@ function ExtensionRow({
 
       <Switch checked={enabled} onChange={onToggle} ariaLabel={`启用 ${name}`} />
 
-      <button
-        ref={menuRef}
-        type="button"
-        className="icon-btn"
-        data-tip="更多操作"
-        aria-label={`${name} 的更多操作`}
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        disabled={busy}
-        onClick={toggleMenu}
-      >
-        {busy ? <IconLoader size={16} /> : <IconMore size={16} />}
-      </button>
+      {/*
+        行尾的动作组：原先收在一颗「⋯」的下拉菜单里，现在三颗图标按钮横向平铺。
+        内容与顺序照旧（常驻运行 → 更新 → 删除）——那三条是与上游 Flutter 端的行内菜单
+        （PopupMenuButton）对齐过的，那边把更新拆成「检查更新 / 强制更新」两条，这里仍合成
+        一条「先查后更」。
+
+        ★ 常驻运行是个**开关**不是一次性动作，所以用 aria-pressed + data-active 表达选中态
+          （与曲库那颗收藏钮同一套），而不是靠换图标 —— 换图标会让「开着的那个」在扫列表时
+          认不出来。
+        ★ 删除仍是这一行唯一不可逆的动作：走 data-variant="danger"（与 .btn 的 danger 变体
+          同一口径），并在样式里与前面两颗多留一点缝 —— 那是原先菜单里那条分割线的位置。
+      */}
+      <div className="extension-actions">
+        <button
+          type="button"
+          className="icon-btn"
+          data-tip={pinned ? '取消常驻运行' : '常驻运行'}
+          aria-label={pinned ? `取消常驻运行 ${name}` : `常驻运行 ${name}`}
+          aria-pressed={pinned}
+          data-active={pinned}
+          disabled={busy}
+          onClick={onToggleKeepAlive}
+        >
+          <IconPin size={16} />
+        </button>
+
+        <button
+          type="button"
+          className="icon-btn"
+          data-tip="更新"
+          aria-label={`更新 ${name}`}
+          disabled={busy}
+          onClick={onUpdate}
+        >
+          {/* 转圈就长在正在跑的那一颗上：不必另找一处交代「这行在忙什么」 */}
+          {busy ? <IconLoader size={16} /> : <IconDownload size={16} />}
+        </button>
+
+        <button
+          type="button"
+          className="icon-btn"
+          data-variant="danger"
+          data-tip="删除"
+          aria-label={`删除 ${name}`}
+          disabled={busy}
+          onClick={onUninstall}
+        >
+          <IconTrash size={16} />
+        </button>
+      </div>
     </li>
   )
 }

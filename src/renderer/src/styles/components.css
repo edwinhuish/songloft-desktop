@@ -138,6 +138,20 @@
   color: var(--accent);
 }
 
+/* 危险动作的图标钮（删除）：图标本身走 --danger —— 与 .btn 的 danger 变体、上下文菜单里
+   那条 danger 项同一个口径，让「这一下不可逆」在按下之前就看得出来。
+   底色只在悬浮时才泛红：这类钮常横排成一组，常驻一块红会把整页喊满。
+   hover 那条要把 color 再写一遍 —— 基础那条 .icon-btn:hover 的特异性比这里的非悬浮规则高，
+   不写就会被它改回 --text-1。 */
+.icon-btn[data-variant='danger'] {
+  color: var(--danger);
+}
+
+.icon-btn[data-variant='danger']:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger);
+}
+
 /* 主播放键：比普通圆钮更大、带主题光晕 */
 .play-btn {
   display: grid;
@@ -2675,6 +2689,22 @@ select.input option {
 .extension-meta {
   font-size: 11.5px;
   color: var(--text-2);
+}
+
+/* 行尾的动作组：常驻运行 / 更新 / 删除 三颗图标按钮横向平铺（原先收在一颗「⋯」里，
+   见 ExtensionsPage 的 ExtensionRow）。
+   ★ gap 取 4px 而不是 .song-actions 那种 2px：这三颗**没有文字**，全靠留白才分得清是三个
+     各自独立的目标；2px 那套是给「收藏 + 更多」两颗用的，三颗排下来就糊成一片了。
+   ★ 删除前再多让 4px：它原来是菜单里分割线之下的那一项，也是这一行唯一不可逆的动作。 */
+.extension-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.extension-actions .icon-btn[data-variant='danger'] {
+  margin-left: 4px;
 }
 
 /* 订阅源的一行：开关 │ 三个输入竖排 │ 删除。
