@@ -67,10 +67,21 @@ const hasSong = Object.assign(
   (v) => typeof v === 'string' && v.trim() !== '' && v.trim() !== '未在播放',
   { label: '有当前曲目' }
 )
-/** 断言数组里每一项都包含某个子串（用于区分"哪个分面"） */
+/**
+ * 「每一项都在里面」：每一项都必须作为**子串**出现在值里。
+ *
+ * ★ 两种值都要接住：数组（分面卡片文字、菜单项…）与**整段字符串**
+ *   （`.setting-card` / `.modal-body` 那种「把一整块文字拼起来」的口径）。
+ *   早先这里只处理数组、字符串一律返回假 —— 于是 8 条 `settingText` / `modalText`
+ *   断言**永远是红的**，而红的原因又长得像「界面上了错的内容」。
+ *   这正是本文件开头警告的那类漂移：断言不是代码，写错了不会编译报错。
+ */
 const containsAll = (...names) =>
   Object.assign(
-    (v) => names.every((n) => (Array.isArray(v) ? v : []).some((x) => String(x).includes(n))),
+    (v) => {
+      const haystack = Array.isArray(v) ? v.map(String) : [String(v ?? '')]
+      return names.every((n) => haystack.some((x) => x.includes(n)))
+    },
     {
       label: `含[${names.join('+')}]`
     }
@@ -154,6 +165,97 @@ window.__t = {
     window.dispatchEvent(new KeyboardEvent('keydown', Object.assign({ key, bubbles: true }, mods || {})));
     return 'OK';
   },
+  /**
+   * 往输入框里打字。
+   *
+   * ⚠️ 必须走**原型上的 setter**，不能直接给 el.value 赋值：React 把上一次的值记在
+   *    元素自己的 tracker 上，直接赋值会让它认为「值没变」，于是这次 input 事件被丢掉 ——
+   *    表现为「字打进去了，界面毫无反应」（搜索/登录这些受控输入都会这样）。
+   */
+  type: (sel, value) => {
+    const el = vis(sel)[0];
+    if (!el) return 'NOT_FOUND:' + sel;
+    const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return 'OK';
+  },
+  /** 提交表单。requestSubmit 会真的派发 submit 事件，React 的 onSubmit 才收得到 */
+  submit: (sel) => {
+    const form = vis(sel)[0];
+    if (!form) return 'NOT_FOUND:' + sel;
+    form.requestSubmit();
+    return 'OK';
+  },
+  /**
+   * 带修饰键点第 n 个匹配 —— 曲库的多选就是「Ctrl / Cmd 加选」，没有行首复选框。
+   * 单靠 click 派发（无修饰键）在那边是「单选」，多选那几条断言根本走不到。
+   */
+  modClick: (sel, index, mods) => {
+    const el = vis(sel)[index];
+    if (!el) return 'NOT_FOUND:' + sel + '#' + index;
+    el.dispatchEvent(
+      new MouseEvent('click', Object.assign({ bubbles: true, cancelable: true, view: window }, mods || {}))
+    );
+    return 'OK';
+  },
+  /**
+   * 在元素上派发 contextmenu（歌曲行的右键菜单）。
+   *
+   * 坐标取该元素的中心：菜单是按 clientX / clientY 摆的，用默认的 0,0 会贴在左上角，
+   * 截图里看不出「这个菜单是这一行弹出来的」。
+   */
+  ctx: (sel, index) => {
+    const el = vis(sel)[index ?? 0];
+    if (!el) return 'NOT_FOUND:' + sel;
+    const r = el.getBoundingClientRect();
+    el.dispatchEvent(
+      new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: r.left + Math.min(160, r.width / 2),
+        clientY: r.top + r.height / 2
+      })
+    );
+    return 'OK';
+  },
+  /**
+   * 在指定元素上派发按键。
+   *
+   * 命令面板的 Esc 绑在它**自己那个输入框**的 onKeyDown 上（不是 window），
+   * 从 window 派发根本到不了 —— 那条断言会「看着点了、其实没关」。
+   */
+  keyOn: (sel, key) => {
+    const el = vis(sel)[0];
+    if (!el) return 'NOT_FOUND:' + sel;
+    el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    return 'OK';
+  },
+  /** 点空白处（菜单/浮层「点别处就关」走的是 window 捕获阶段的 pointerdown） */
+  clickAway: () => {
+    document.body.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, cancelable: true, view: window, pointerType: 'mouse' })
+    );
+    return 'OK';
+  },
+  /**
+   * 把 window.confirm 换成「一律答应 + 记一笔」。
+   *
+   * ★ Electron 里的 confirm 是**原生阻塞对话框**：不接管的话，CDP 驱动器会卡在那儿等一个
+   *   永远不会有人点的按钮（而窗口在 Xvfb 里，用户也点不到）。
+   * ★ 记下来的那一段本身是断言对象：它能证明「这个动作真的先问了一句」，
+   *   比「点了就过了」多一层。
+   */
+  stubConfirm: () => {
+    window.__confirmCalls = [];
+    window.confirm = (message) => {
+      window.__confirmCalls.push(String(message || ''));
+      return true;
+    };
+    return 'OK';
+  },
+  confirmCalls: () => window.__confirmCalls || [],
   /**
    * 折叠侧栏里图标/封面中心相对「侧栏内容区中心」的最大偏移（px），越小越居中。
    *
@@ -309,8 +411,90 @@ window.__t = {
     usageBars: vis('.progress-fill').length,
     // 开着的开关数。断言开关"真的翻了"要用它 —— 只断言开关存在，onChange 没接上也照样绿
     switchesOn: vis('[role="switch"][aria-checked="true"]').length,
+    /*
+     * 页头标题下面那句副标题。搜索页（「「摇滚」命中 12 首歌曲」）与插件管理
+     * （「3 个已安装 · 1 个启用中 · …」）都靠它交代**数据读回来了没有** ——
+     * 只断言标题在的话，「接口没通、标题照画」是看不出来的。
+     */
+    pageSubtitle: vis('.page-subtitle').map((e) => (e.textContent || '').trim()).join(''),
+    /** 首页的三个分区块标题（最近加入 / 我的歌单 / 常听歌手） */
+    sectionTitles: vis('.section-title').map((e) => (e.textContent || '').trim()),
+    /** 首页统计条上那六项的名目 —— 数量随数据走，名目是固定的 */
+    statLabels: vis('.stat-label').map((e) => (e.textContent || '').trim()),
+    /** 文件夹模式的目录行文字（清单上写着几首，点进去就该是几首） */
+    folderNames: vis('.folder-row').map((e) => (e.textContent || '').trim()),
+    /** 面包屑（文件夹模式逐级进入 / 跳回），取按钮文字 */
+    crumbs: vis('.crumbs button').map((e) => (e.textContent || '').trim()),
+    /*
+     * 多选操作条。**没有行首复选框** —— 多选靠 Ctrl / Shift 点行，选完这一条才出现，
+     * 所以「它在不在」与「上面写着已选几首」就是多选这条链路的全部判据。
+     */
+    selectionBars: vis('.selection-bar').length,
+    selectionText: vis('.selection-bar').map((e) => (e.textContent || '').trim()).join(' '),
+    /** 命令面板的分组标题（歌曲 / 歌单 / 命令）—— 只数条目个数看不出分组有没有接上 */
+    paletteGroups: vis('.palette-group').map((e) => (e.textContent || '').trim()),
+    /** 空态文案（搜索无结果、「没有匹配的扩展」…） */
+    emptyText: vis('.empty').map((e) => (e.textContent || '').trim()).join(' '),
+    /**
+     * 菜单里的小字（.menu-sub）。歌曲菜单对本地曲会多写一句
+     * 「本地歌曲受保护，不会被曲库删除」—— 那是菜单自己的**说明**，不是条目，
+     * 只断言条目文字的话看不见它。
+     */
+    menuNotes: vis('.context-menu .menu-sub').map((e) => (e.textContent || '').trim()),
+    /** 当前在哪一面（native / extensions）。标题栏两颗拆分按钮的走位全靠它 */
+    surface: (document.querySelector('.shell') || {}).dataset?.surface ?? '',
+    /** 扩展侧栏的入口（前两条固定是插件商店 / 插件管理，之后是已开启的扩展） */
+    extNavs: vis('.ext-sidebar .nav-item').map((e) => (e.textContent || '').trim()),
+    /** 插件管理列表：只取名字那一段（版本号是紧跟其后的 .badge，不属于名字） */
+    extNames: vis('.extension-row .extension-name .truncate').map((e) =>
+      (e.textContent || '').trim()
+    ),
+    /** 名字右侧的角标：「v1.2.0」/「运行异常」 */
+    extBadges: vis('.extension-row .extension-name .badge').map((e) => (e.textContent || '').trim()),
+    /** 行尾那颗「常驻运行」处于按下态的数量 */
+    extPinned: vis('.extension-actions [data-active="true"]').length,
+    /** 商店卡片：名字 / 动作按钮文字 / entryPath */
+    storeNames: vis('.store-card .store-card-name').map((e) => (e.textContent || '').trim()),
+    storeActions: vis('.store-card-action').map((e) => (e.textContent || '').trim()),
+    storeCodes: vis('.store-card .store-card-code').map((e) => (e.textContent || '').trim()),
+    /** 订阅源对话框里的源行数（每行一颗开关 + 两个输入框） */
+    sourceRows: vis('.source-row').length,
+    /*
+     * 订阅源的名字。
+     * ★ 必须取 input 的 value，不能读 textContent：那一列是**输入框**，
+     *   而 textContent 里没有输入框的值 —— 于是断言会看着「源是空的」而失败，
+     *   实际界面上写得好好的。
+     */
+    sourceNames: vis('.source-row input[aria-label="订阅源名称"]').map((e) => e.value),
+    /** 侧栏是不是折叠成图标条了（折叠态才会露出的那颗按钮决定它） */
+    sidebarCollapsed:
+      vis('.surface-native .sidebar')[0]?.dataset.collapsed ?? '',
+    /**
+     * 插件页的装载结果。
+     * webview 是**独立进程的 guest**：宿主这边数的是「挂上了几个」，
+     * 蒙层还留着就说明它没加载出来（.plugin-view-overlay[data-state=…]）。
+     */
+    pluginWebviews: vis('webview').length,
+    pluginOverlays: vis('.plugin-view-overlay').map((e) => e.dataset.state ?? ''),
+    // 迷你模式（整窗换成一条小播放条，DOM 在 .shell 直下、不在任何 .surface 里）
+    miniPlayer: document.querySelectorAll('.mini-player').length,
+    miniPanel: document.querySelectorAll('.mini-panel').length,
+    miniQueue: document.querySelectorAll('.mini-queue').length,
+    shellMini: (document.querySelector('.shell') || {}).dataset?.mini ?? '',
+    // 登录页：形状 + 出错时那条提示（探不通服务器与账号密码错是两句不同的话）
+    login: document.querySelectorAll('.login').length,
+    probeText: [...document.querySelectorAll('.probe-result')]
+      .map((e) => (e.textContent || '').trim())
+      .join(' '),
+    probeErrors: document.querySelectorAll('.probe-result[data-state="error"]').length,
+    /** 走 window.confirm 的风险动作点了哪些（stubConfirm 记的，见那个助手） */
+    confirmCalls: (window.__confirmCalls || []).slice(),
+    // 播放队列面板上的「清空」——队列条目的数量会因为之前几步而变化，这条动作键是固定的
+    queueClears: vis('.panel .btn').filter((e) => (e.textContent || '').includes('清空')).length,
     // 弹窗（.modal 才是那个面板；.overlay 是一直挂在 DOM 里的遮罩容器，数它没有意义）
     modals: vis('.modal').length,
+    /** 弹窗标题。它在 .modal-head 里，body / foot 两段都取不到 —— 所以单独取一份 */
+    modalTitle: vis('.modal .modal-title').map((e) => (e.textContent || '').trim()).join(''),
     /*
      * 弹窗的文字（正文 + 底部按钮）。与服务端来的值逐一对照（版本号、发布说明、通道名），
      * 底部那排也一起取：这一版弹窗给的**动作**（上传升级 / 立即升级 / 关闭）本身就是断言对象 ——
@@ -455,27 +639,136 @@ const STEPS = [
     2200,
     { folderRows: exactly(5), pageTitle: exactly('曲库') }
   ],
+  /*
+   * 逐级进入目录。断言的是**行数**而不是「有内容」：目录行上写着「N 首」，
+   * 点进去就该是 N 行 —— mock 那两个数字以前对不上（清单 8 首、实际 10 行），
+   * 只数「非空」的话这种自相矛盾会一直躺着。
+   *
+   * ★ 这两步必须紧跟在上一步（文件夹标签刚打开）之后：先把标签切回「曲库」再点
+   *   .folder-row，会拿到一个 NOT_FOUND —— 而 NOT_FOUND 那一步的截图看着还挺正常。
+   */
+  [
+    '10-folder-open',
+    "window.__t.click('.folder-row', '陈屿')",
+    2200,
+    { rows: exactly(10), crumbs: containsAll('音乐根目录', '陈屿'), pageTitle: exactly('曲库') }
+  ],
+  // 面包屑跳回根：退回后面包屑只剩根那一节，子目录清单重新出现
+  [
+    '11-folder-back-root',
+    "window.__t.click('.crumbs button', '音乐根目录')",
+    2000,
+    { folderRows: exactly(5), crumbs: equals('音乐根目录') }
+  ],
   // 换回「曲库」标签：模式要能来回切，且切回来不能是空页
   [
-    '10-library-tab-back',
+    '12-library-tab-back',
     "window.__t.click('.segmented button', '曲库')",
     2400,
     { rows: atLeast(1), folderRows: exactly(0), pageTitle: exactly('曲库') }
   ],
 
   // ── 歌单 / 最近 / 收藏 ─────────────────────────────────────────────────
-  ['11-playlists', "window.__t.click('.nav-item', '歌单')", 1800, { cards: atLeast(3) }],
-  ['12-playlist-detail', "window.__t.click('.nav-item', '深夜写码')", 2200, { rows: atLeast(1) }],
-  ['13-recent', "window.__t.click('.nav-item', '最近播放')", 2400, { rows: exactly(10) }],
-  ['14-favorites', "window.__t.click('.nav-item', '我喜欢')", 2400, { rows: exactly(6) }],
+  ['13-playlists', "window.__t.click('.nav-item', '歌单')", 1800, { cards: atLeast(3) }],
+  ['14-playlist-detail', "window.__t.click('.nav-item', '深夜写码')", 2200, { rows: atLeast(1) }],
+  ['15-recent', "window.__t.click('.nav-item', '最近播放')", 2400, { rows: exactly(10) }],
+  ['16-favorites', "window.__t.click('.nav-item', '我喜欢')", 2400, { rows: exactly(6) }],
 
-  // ── 导航菜单 → 二级菜单 → 设置十个分区 ───────────────────────────────────
+  /*
+   * ── 搜索：工具条那个搜索框 → 搜索页 ────────────────────────────────────
+   * ★ 选择器必须写 `.toolbar .search-field`：搜索页**自己**也有一个同名的
+   *   `form.search-field`（页内再搜一次）。不限定就会点到那一份上，而它的 onChange
+   *   只在搜索页里生效 —— 于是「打字」这一步看着成功、其实什么都没发生。
+   */
+  ['17-search-type', "window.__t.type('.toolbar .search-field input', '摇滚')", 1200],
+  [
+    '18-search-results',
+    "window.__t.submit('.toolbar .search-field')",
+    2600,
+    {
+      pageTitle: exactly('搜索'),
+      rows: exactly(12),
+      // 「「摇滚」命中 12 首歌曲」：命中数只可能来自后端，写死在前端就会对不上
+      pageSubtitle: containsAll('摇滚', '命中', '12'),
+      // 相关歌单 / 歌手 / 专辑是搜索页的另一半，只断言歌曲列表的话它们整块丢了也看不见
+      sectionTitles: containsAll('相关歌单', '相关歌手', '相关专辑')
+    }
+  ],
+  // 搜不到东西时的空态：不能只把列表清成一片白（那与「还在加载」长得一模一样）
+  [
+    '19-search-empty',
+    "window.__t.type('.toolbar .search-field input', '无此歌名')",
+    2200,
+    { rows: exactly(0), emptyText: containsAll('没有找到') }
+  ],
+  // 离开搜索页回曲库：曲库自己那份筛选还在（搜索关键词只活在工具条与搜索页）
+  ['20-search-leave', "window.__t.click('.nav-item', '曲库')", 2000, { rows: exactly(12) }],
+
+  /*
+   * ── 右键歌曲行 ─────────────────────────────────────────────────────────
+   * 断言条目**文字**而不是个数：这些项来自 buildSongMenuItems，少一条
+   * （比如「下一首播放」掉了）只数个数是看不出来的。
+   * 另外两条分割线（`<hr>`）与那句「本地歌曲受保护…」在条目列表里都没有对应文字，
+   * 得单独数 / 单独取 —— 后者也顺带说明这一首确实被识别成了本地曲。
+   */
+  [
+    '21-song-menu',
+    "window.__t.ctx('.song-row', 0)",
+    1200,
+    {
+      menuItems: containsAll(
+        '播放',
+        '下一首播放',
+        '加入播放队列',
+        '加入歌单…',
+        '收藏',
+        '查看歌手',
+        '查看专辑',
+        '打开源地址',
+        '从曲库删除'
+      ),
+      menuDividers: exactly(2),
+      menuNotes: containsAll('本地歌曲受保护')
+    }
+  ],
+  // Esc 关掉右键菜单（「Esc 关闭」那条监听挂在 window 的 keydown 上，从 window 派发就够）
+  ['22-song-menu-closed', "window.__t.key('Escape')", 900, { menuItems: equals() }],
+
+  /*
+   * ── 多选与批量操作 ─────────────────────────────────────────────────────
+   * 曲库**没有行首复选框**：多选是 Ctrl / Cmd 点行（Shift 连选）。
+   * 断言分两步：先确认点一行后操作条出现，再确认第二行是**加**进去的 ——
+   * 只断言操作条存在的话，「点两行只选出 1 行」也照样绿。
+   */
+  [
+    '23-select-one',
+    "window.__t.modClick('.song-row', 0, { ctrlKey: true })",
+    1200,
+    { selectionBars: exactly(1), selectionText: containsAll('已选 1 首') }
+  ],
+  [
+    '24-select-two',
+    "window.__t.modClick('.song-row', 1, { ctrlKey: true })",
+    1200,
+    {
+      selectionText: containsAll('已选 2 首', '播放', '加入队列', '加入歌单', '收藏', '从曲库删除')
+    }
+  ],
+  // 「取消选择」把整条操作条收回去（它是这一页唯一的出口，收起后不该留一块空壳）
+  [
+    '25-selection-clear',
+    "window.__t.click('.selection-bar button', '取消选择')",
+    1000,
+    { selectionBars: exactly(0) }
+  ],
+
+  // ── 导航菜单 → 二级菜单 → 设置九个分区 ───────────────────────────────────
   // 标题栏「Songloft」右侧那颗下拉三角（标题栏现在是两颗拆分按钮：Songloft 管导航、
   // 扩展管扩展，原来那颗独立的折叠菜单按钮已经拆掉了）。断言用 equals 而不是
   // containsAll：菜单项的**顺序**也是需求的一部分，集合比会把「顺序错了」放过。
   // 「文件夹」不在菜单里 —— 它是曲库页的标签；「扩展」也不在 —— 它有自己的按钮与下拉。
   [
-    '15-nav-menu',
+    '26-nav-menu',
     "window.__t.clickLabel('导航菜单')",
     900,
     {
@@ -492,7 +785,7 @@ const STEPS = [
   // ★ 二级菜单靠 onPointerEnter 展开，所以这一步是**悬浮**而不是点击
   //   （点它是「进歌单页」，菜单会整份关掉，二级菜单根本没机会出现）。
   [
-    '16-nav-my-playlists',
+    '27-nav-my-playlists',
     "window.__t.hover('.context-menu button', '歌单')",
     900,
     // 顺序 = store 的顺序（置顶的「深夜写码」在最前，其余按后端给的次序）
@@ -500,10 +793,14 @@ const STEPS = [
   ],
   // 二级菜单开着也不影响接着点上一层的项（设置入口就在那儿）
   [
-    '17-settings-appearance',
+    '28-settings-appearance',
     "window.__t.click('.context-menu button', '设置')",
     1600,
-    // 分区名与顺序都算需求（对标原播放器定的）：少一个分区、或换次序，这条立刻红
+    /*
+     * 分区名与顺序都算需求（对标原播放器定的）：少一个分区、或换次序，这条立刻红。
+     * 「服务器」曾是独立一栏，后来并进了「账号」（那两栏讲的都是「连的哪台、谁的凭据」），
+     * 所以这里现在是**九**栏 —— 这一条正是那次合并的回归断言。
+     */
     {
       settingsNav: equals(
         '外观',
@@ -512,7 +809,6 @@ const STEPS = [
         '缓存管理',
         '网络设置',
         '数据管理',
-        '服务器',
         '账号',
         '快捷键',
         '关于与更新'
@@ -520,13 +816,13 @@ const STEPS = [
     }
   ],
   [
-    '18-settings-playback',
+    '29-settings-playback',
     "window.__t.click('.settings-nav button', '播放')",
     1800,
     { switches: atLeast(1) }
   ],
   [
-    '19-settings-library',
+    '30-settings-library',
     "window.__t.click('.settings-nav button', '曲库')",
     2200,
     { switches: atLeast(2) }
@@ -542,7 +838,7 @@ const STEPS = [
    * usageBars=2：两张卡的「占用」都得带进度条，缺一条立刻红。
    */
   [
-    '20-settings-cache',
+    '31-settings-cache',
     "window.__t.click('.settings-nav button', '缓存管理')",
     2400,
     {
@@ -562,7 +858,7 @@ const STEPS = [
   // 网络设置：三条代理各挂一个端点，mock 里取的都**不是**默认值（空串 / 空数组才是默认），
   // 于是「字段读错」会显示成「未设置」，跟读对了区分得开
   [
-    '21-settings-network',
+    '32-settings-network',
     "window.__t.click('.settings-nav button', '网络设置')",
     2400,
     {
@@ -571,21 +867,21 @@ const STEPS = [
     }
   ],
   [
-    '22-settings-data',
+    '33-settings-data',
     "window.__t.click('.settings-nav button', '数据管理')",
     1800,
     { settingText: containsAll('导出歌单', '导入歌单') }
   ],
   // 账号：版本号整串比 —— vv2.13.1 这个缺陷只有这么断言才挡得住（见 metaTags 的注释）
   [
-    '24-settings-account',
+    '34-settings-account',
     "window.__t.click('.settings-nav button', '账号')",
     2400,
     { metaTags: equals('v2.13.1'), settingText: containsAll('测试连接', 'ms ·') }
   ],
   // 快捷键页要能对上 App.tsx 里真实存在的绑定；漏一条（如 Ctrl+L）这条就红
   [
-    '25-settings-shortcuts',
+    '35-settings-shortcuts',
     "window.__t.click('.settings-nav button', '快捷键')",
     1400,
     {
@@ -605,7 +901,7 @@ const STEPS = [
    *   退回了兜底值"与"读到了"在界面上长得不一样 —— 只看「日志等级」四个字是区分不出来的）。
    */
   [
-    '26-settings-about',
+    '36-settings-about',
     "window.__t.click('.settings-nav button', '关于与更新')",
     2200,
     {
@@ -628,7 +924,7 @@ const STEPS = [
    * 「当前版本 v1.4.2」还顺带看着版本号只补一个 v。
    */
   [
-    '27-upgrade-modal',
+    '37-upgrade-modal',
     "window.__t.click('.btn', '检查更新')",
     2600,
     {
@@ -645,7 +941,7 @@ const STEPS = [
   ],
   // 关掉：升级是服务端的后台任务，弹窗只是观察窗 —— 后面几步要在没有遮罩的界面上做
   [
-    '28-upgrade-modal-closed',
+    '38-upgrade-modal-closed',
     "window.__t.click('.modal-foot .btn', '关闭')",
     800,
     { modals: exactly(0) }
@@ -657,13 +953,13 @@ const STEPS = [
    * 巡检机可能连不上 GitHub（CI 的共享 IP 还会撞上频率限制），那时弹窗画的是失败提示。
    */
   [
-    '29-client-update-modal',
+    '39-client-update-modal',
     "window.__t.clickNth('.btn', '检查更新', 1)",
     2200,
     { modals: exactly(1), modalText: containsAll('当前版本', '关闭', '打开发布页') }
   ],
   [
-    '30-client-update-modal-closed',
+    '40-client-update-modal-closed',
     "window.__t.click('.modal-foot .btn', '关闭')",
     800,
     { modals: exactly(0) }
@@ -671,45 +967,126 @@ const STEPS = [
   // 自动检查更新开关：关一下再开回来。这两步才叫"验了开关" —— 只断言它存在的话，
   // onChange 根本没接上（点了没反应）也照样绿
   [
-    '31-auto-update-switch-off',
+    '41-auto-update-switch-off',
     'window.__t.click(\'button[aria-label="启动时自动检查更新"]\')',
     1000,
     { switchesOn: exactly(0) }
   ],
   [
-    '32-auto-update-switch-on',
+    '42-auto-update-switch-on',
     'window.__t.click(\'button[aria-label="启动时自动检查更新"]\')',
     1000,
     { switchesOn: exactly(1) }
   ],
 
+  /*
+   * ── 扩展面（原生面之外的另一整面）──────────────────────────────────────
+   * 标题栏那颗「扩展」按钮的主点击是 `showSurface('extensions')`：只换面、不动路由，
+   * 所以它落回**上次在的那一栏** —— 初始那一栏是「插件商店」。
+   *
+   * 三条断言各挡一类静默失败：面有没有真的换过去；商店列表有没有读到
+   * （骨架屏 / 错误态的结构跟正常态不同，但只数卡片个数的话「四张空卡」也过得去）；
+   * 以及四档动作文字（未装 / 可更新 / 已装最新 / 入口撞名是按条目状态推出来的，
+   * 写死成一档就会在这里红）。
+   */
+  [
+    '43-extensions-store',
+    "window.__t.clickLabel('扩展')",
+    2600,
+    {
+      surface: exactly('extensions'),
+      extNavs: containsAll('插件商店', '插件管理'),
+      storeNames: containsAll('封面墙', '歌词补全', '豆瓣标签', '专辑墙'),
+      storeActions: containsAll('安装', '更新至 v1.3.0', 'v0.9.3', '覆盖安装')
+    }
+  ],
+  /*
+   * 订阅源管理弹窗：两个源一开一停。断言的是「行数 + 源名 + 标题」——
+   * 读不到配置时这里会是空的，而空列表与「本来就没配」长得一模一样，
+   * 所以 mock 里那两个源是刻意配上的。
+   */
+  [
+    '44-extensions-registries',
+    "window.__t.click('.btn', '管理订阅源')",
+    2000,
+    {
+      modals: exactly(1),
+      modalTitle: exactly('管理订阅源'),
+      sourceRows: exactly(2),
+      sourceNames: equals('官方源', '私有源')
+    }
+  ],
+  [
+    '45-extensions-registries-closed',
+    "window.__t.click('.modal-foot .btn', '取消')",
+    900,
+    { modals: exactly(0) }
+  ],
+  /*
+   * 插件管理：列表顺序 = 持久化的 `plugin-order`，而 mock 里那一份**故意**与列表接口
+   * 给的顺序不同 —— 所以这里的 equals 是「顺序真的按 entryPath 排过」的唯一判据。
+   * 角标同时验两件事：版本号渲染出来了（不是兜底的「—」），以及 error 状态确实挂上了
+   * 「运行异常」（那是前端按 status 推出来的，不是后端给的文案）。
+   * extPinned=1 是常驻白名单那一份（行尾那块图钉的按下态）。
+   */
+  [
+    '46-extensions-manage',
+    "window.__t.click('.ext-sidebar .nav-item', '插件管理')",
+    2200,
+    {
+      pageTitle: exactly('插件管理'),
+      pageSubtitle: containsAll('3 个已安装', '1 个启用中'),
+      extNames: equals('电台时光机', '歌词补全', '豆瓣标签'),
+      extBadges: containsAll('v2.0.1', 'v1.2.0', 'v0.9.3', '运行异常'),
+      extPinned: exactly(1)
+    }
+  ],
+  /*
+   * 点开某个扩展：宿主把它装进 `<webview>`（guest 是独立进程，与宿主不共享 DOM）。
+   * 断言「挂上了 + 蒙层已经撤掉」表示页面真的加载完成 —— 只断言挂上会漏掉「一直转圈」
+   * 那种坏法（蒙层留着、loader 转到底）。
+   */
+  [
+    '47-extensions-plugin-page',
+    "window.__t.click('.ext-sidebar .nav-item', '歌词补全')",
+    3200,
+    { pluginWebviews: exactly(1), pluginOverlays: equals() }
+  ],
+  // 标题栏左侧那颗 Songloft 的主点击 = 回原生面（不是回首页：离开时在哪一页就回哪一页）
+  [
+    '48-extensions-back',
+    "window.__t.clickLabel('回到上次的页面')",
+    1600,
+    { surface: exactly('native') }
+  ],
+
   // ── 播放 / 面板 ────────────────────────────────────────────────────────
-  ['33-playing', "window.__t.click('.nav-item', '曲库')", 2400],
+  ['49-playing', "window.__t.click('.nav-item', '曲库')", 2400],
   // ⚠️ 双击歌曲行**只**开始播放，不会顺带打开右侧面板 —— 面板是显式的视图开关
   //    （控制栏的「歌词面板 / 播放队列」、左侧封面、Ctrl+L）。原先这里把歌词断言压在
   //    「双击」上，前提就不成立（那种写法跑出来 panel 恒为 0、歌词也恒为 0）。
   //    于是拆成两步：先确认真播上了，再显式打开面板看歌词。
-  ['34-playing-dblclick', "window.__t.dbl('.song-row')", 1800, { playerTitle: hasSong }],
+  ['50-playing-dblclick', "window.__t.dbl('.song-row')", 1800, { playerTitle: hasSong }],
   // 打开歌词面板：面板关着时 togglePanel 会打开并落在「正在播放」——歌词就在这一页。
   // ★ 选择器必须限定 .playerbar：面板自己的页签按钮也叫「播放队列 / 正在播放」，
   //   不限定就会命中面板里那个（DOM 里 .panel 排在 .playerbar 之前），
   //   于是「再点一次收起面板」这类断言会点错元素而假失败。
   [
-    '35-now-playing-panel',
+    '51-now-playing-panel',
     'window.__t.click(\'.playerbar button[aria-label="歌词面板"]\')',
     2600,
     { panel: exactly(1), lyricLines: exactly(10), lyricWords: atLeast(20) }
   ],
   // 面板开着但页签在「正在播放」→ 点队列按钮是**切页签**（不是收起）
   [
-    '36-queue-panel',
+    '52-queue-panel',
     'window.__t.click(\'.playerbar button[aria-label="播放队列"]\')',
     1400,
     { panel: exactly(1), queueItems: atLeast(1) }
   ],
   // 控制栏的页签在「已激活」时再点一次 = 收起面板（不是什么都不做）
   [
-    '37-panel-closed',
+    '53-panel-closed',
     'window.__t.click(\'.playerbar button[aria-label="播放队列"]\')',
     1400,
     { panel: exactly(0) }
@@ -721,7 +1098,7 @@ const STEPS = [
   //   标题栏的底色跟着换了（透明 + 关掉毛玻璃 + 收掉分隔线）。
   // 歌词顺带数一遍 —— 上一步刚把面板收起，所以这 10 行只可能来自满窗这一层。
   [
-    '38-fullplayer-open',
+    '54-fullplayer-open',
     'window.__t.click(\'.playerbar button[aria-label="满窗播放"]\')',
     2600,
     {
@@ -736,17 +1113,50 @@ const STEPS = [
   // 它在 App 的 keydown 里，键盘事件得从 window 派发才到得了。
   // 顺带断言标题栏**回到了原来那一份**：只验「满窗时透明」的话，写死成永远透明也能过。
   [
-    '39-fullplayer-closed',
+    '55-fullplayer-closed',
     "window.__t.key('Escape')",
     1400,
     { fullPlayer: exactly(0), titlebarGlass: exactly(true) }
   ],
+  /*
+   * ── 迷你模式 ───────────────────────────────────────────────────────────
+   * 整窗换成一条小播放条：窗口几何在主进程（main/windows.ts），渲染层只报
+   * 「开没开 + 面板展没展开」。shellMini 就是那个标记 —— 少了它界面会一半迷你一半原样。
+   * ★ 迷你那几个 DOM **不在**任何 `.surface` 里（挂在 .shell 直下），所以不走 vis()。
+   */
+  [
+    '56-mini-enter',
+    'window.__t.click(\'.playerbar button[aria-label="迷你模式"]\')',
+    2000,
+    { shellMini: exactly('true'), miniPlayer: exactly(1) }
+  ],
+  // 条下面能展开歌词 / 队列。歌词这一份与底栏、满窗播放共用同一个 LyricsView，
+  // 所以那 10 行的断言在这里同样成立 —— 丢行的回归只该有一份，但三处都得罩住。
+  [
+    '57-mini-lyrics',
+    'window.__t.click(\'.mini-bar [aria-label="歌词"]\')',
+    2000,
+    { miniPanel: exactly(1), lyricLines: exactly(10) }
+  ],
+  [
+    '58-mini-queue',
+    'window.__t.click(\'.mini-bar [aria-label="播放队列"]\')',
+    1600,
+    { miniPanel: exactly(1), miniQueue: exactly(1) }
+  ],
+  [
+    '59-mini-exit',
+    'window.__t.click(\'.mini-bar [aria-label="退出迷你模式"]\')',
+    2000,
+    { shellMini: exactly(''), miniPlayer: exactly(0) }
+  ],
+
   // 折叠成图标条后，图标与歌单封面必须仍然居中。带计数的项曾因 .nav-count 的
   // auto 外边距吃掉整行自由空间而整体左偏，且**只在折叠态**出现 —— 不断言就会静默复发。
   // 放在命令面板之前：面板的 Escape 绑在它自己的输入框上，从 window 派发关不掉，
   // 先折叠就不会让它盖在侧栏截图上。
   [
-    '40-sidebar-collapsed',
+    '60-sidebar-collapsed',
     // 收起/展开那颗按钮压在侧栏右下角（`.sidebar-toggle`），没有可见文字 ——
     // 是个纯图标钮，只能按 aria-label 点它
     "window.__t.clickLabel('收起侧栏')",
@@ -754,10 +1164,87 @@ const STEPS = [
     { offCenter: atMost(1) }
   ],
   [
-    '41-command-palette',
+    '61-command-palette',
     "window.__t.key('k', { ctrlKey: true })",
     1400,
-    { paletteItems: atLeast(1) }
+    {
+      paletteItems: atLeast(1),
+      // 三组都该在：歌曲（曲库里的）、歌单、命令。只数条目个数的话，
+      // 「命令那一组整块没接上」与「本来条目就更少」分不开。
+      /*
+       * 四组都该在：歌单（本机那几份）、播放 / 导航 / 外观（命令按域分的组）。
+       * ★ 空关键词下**不存在**「歌曲」那一组 —— 歌曲要打了关键词才会去搜，
+       *   所以这里不能想当然地把它写进来（写进来就是一条永远红的断言）。
+       */
+      paletteGroups: containsAll('歌单', '播放', '导航', '外观')
+    }
+  ],
+  // 关掉面板：Esc 绑在它**自己那个输入框**上（从 window 派发到不了那个处理器）
+  [
+    '62-palette-closed',
+    "window.__t.keyOn('.palette-input', 'Escape')",
+    900,
+    { paletteItems: exactly(0) }
+  ],
+  // 把侧栏展开回来（上一步刚折叠）：后面要靠导航菜单走回设置页
+  /*
+   * 展开侧栏。判据是 .sidebar 上的 data-collapsed，**不是** offCenter：
+   * 展开态本来就是「图标在左、文字在右」，图标中心离侧栏中心一百多像素是正常的
+   * （折叠态才要求两者对齐）—— 拿 offCenter 断言展开会得到一条永远红的断言。
+   */
+  [
+    '63-sidebar-expanded',
+    "window.__t.clickLabel('展开侧栏')",
+    1200,
+    { sidebarCollapsed: exactly('false') }
+  ],
+  ['64-nav-menu-again', "window.__t.clickLabel('导航菜单')", 900],
+  ['65-open-settings', "window.__t.click('.context-menu button', '设置')", 1600],
+  [
+    '66-settings-account-again',
+    "window.__t.click('.settings-nav button', '账号')",
+    2200,
+    { settingText: containsAll('退出登录', '测试连接') }
+  ],
+
+  /*
+   * ── 退出登录 → 登录页 → 重新登录 ───────────────────────────────────────
+   * 这一段罩住三件事：
+   *   · 退出前会先问一句（`confirmCalls` 记下了那句话，红的时候能直接看出问没问）；
+   *   · 退出后整个界面换成登录页 —— 原生面的侧栏/播放条一起消失（所以断言 navs=0，
+   *     它们若还留在 DOM 里，说明只是被盖住而不是真的退出了）；
+   *   · 登录页对「连不上」与「登录成功」给出的是**两种不同**的结果 ——
+   *     只断言「点了登录」的话，一个永远停在原地的失败也过得去。
+   *
+   * ★ window.confirm 是**原生阻塞对话框**：在 main() 里已经换成会记录的白洞
+   *   （见 stubConfirm 的说明），否则 CDP 驱动器会一直等一个没人能点的按钮。
+   */
+  [
+    '67-logout',
+    "window.__t.click('.btn', '退出登录')",
+    2200,
+    {
+      login: exactly(1),
+      navs: exactly(0),
+      confirmCalls: containsAll('退出登录')
+    }
+  ],
+  ['68-login-account', "window.__t.type('#login-user', 'admin')", 900],
+  ['69-login-password', "window.__t.type('#login-pass', 'admin')", 900],
+  // 先给一个**连不上**的地址：这时该说的话是「连不上」，与「用户名或密码不正确」不是一句
+  ['70-login-bad-url', "window.__t.type('#server-url', 'http://127.0.0.1:9')", 900],
+  [
+    '71-login-failed',
+    "window.__t.submit('.login-form')",
+    3000,
+    { login: exactly(1), probeErrors: atLeast(1), probeText: containsAll('无法连接') }
+  ],
+  ['72-login-good-url', "window.__t.type('#server-url', 'http://127.0.0.1:58091')", 900],
+  [
+    '73-login-success',
+    "window.__t.submit('.login-form')",
+    4000,
+    { login: exactly(0), navs: atLeast(5), surface: exactly('native') }
   ]
 ]
 
@@ -777,13 +1264,22 @@ async function main() {
   await session.send('Page.enable')
   await session.send('Runtime.enable')
 
-  // 等启动编排跑完（设置 → 会话 → 预载），最多 20 秒
+  /*
+   * 等启动编排跑完（设置 → 会话校验 → 预载），最多 20 秒。
+   *
+   * ★ 判据是**侧栏在不在**，不是 `.shell` 在不在：`.shell` 在启动中就挂着，
+   *   那会儿里面还是登录页 —— 早先只等 `.shell` 的话，第一步「点侧栏首页」会
+   *   撞在还没渲染出侧栏的那一帧上（断言表现成 `NOT_FOUND:.nav-item/首页`，
+   *   而紧接着的截图里侧栏明明在）。这是**偶发**的：跑十次红一次那种。
+   */
   for (let i = 0; i < 40; i += 1) {
-    if (await session.evaluate("!!document.querySelector('.shell')")) break
+    if (await session.evaluate("!!document.querySelector('.nav-item')")) break
     await sleep(500)
   }
 
   await session.evaluate(HELPERS)
+  // 退出登录那一步会弹 window.confirm（原生阻塞对话框），先换成会记录的白洞
+  await session.evaluate('window.__t.stubConfirm()')
   console.log('[drive] 启动时 DOM:', JSON.stringify(await session.evaluate('window.__t.counts()')))
 
   let failures = 0

@@ -256,13 +256,360 @@ const LYRICS = {
   ].join('\n')
 }
 
-const FOLDERS = [
-  { name: '陈屿', path: '陈屿', song_count: 8 },
-  { name: 'Marla Quinn', path: 'Marla Quinn', song_count: 7 },
-  { name: '野岸乐队', path: '野岸乐队', song_count: 7 },
-  { name: 'Kaito Mori', path: 'Kaito Mori', song_count: 5 },
-  { name: 'Sofia Lind', path: 'Sofia Lind', song_count: 4 }
+/**
+ * 音乐根目录下的一层文件夹。
+ *
+ * `song_count` **由 SONGS 现算**，不手写：手写的那一版（8 / 7 / 7 / 5 / 4，合计 31）
+ * 与 `/songs/folders?path=x` 实际返回的行数（10 / 10 / 12 / 6 / 5，合计 43）对不上 ——
+ * 于是「列表上写着 8 首，点进去 10 首」这种自相矛盾的 fixture 会一直躺在巡检里，
+ * 而 e2e 只数目录行数，看不见它。
+ */
+const FOLDER_NAMES = ['陈屿', 'Marla Quinn', '野岸乐队', 'Kaito Mori', 'Sofia Lind']
+const FOLDERS = FOLDER_NAMES.map((name) => ({
+  name,
+  path: name,
+  song_count: SONGS.filter((s) => (s.file_path ?? '').includes(name)).length
+}))
+
+/* ─────────────────────── JS 插件（扩展）─────────────────────── */
+
+/**
+ * 已安装的三个插件，刻意覆盖 `status` 的三种取值：
+ *
+ *   active   —— 出现在扩展入口位（标题栏下拉 / 扩展侧栏各一份）
+ *   inactive —— 停用，只在「插件管理」里看得见
+ *   error    —— 后端正在指数退避自愈。**不是坏了**，但入口位上不出现，
+ *               管理页里挂一枚「运行异常」角标（这条角标是纯前端推出来的，值得断言）
+ *
+ * 列表接口给的顺序（歌词补全 → 豆瓣标签 → 电台时光机）与下面的 `PLUGIN_ORDER`
+ * **故意不同**：这样「侧栏顺序按 entryPath 的持久化顺序走」才是一条有内容的断言 ——
+ * 两边一样的话，照抄列表顺序也能绿。
+ */
+const PLUGIN_WIRE = [
+  {
+    id: 1,
+    name: '歌词补全',
+    version: '1.2.0',
+    entry_path: 'lyric-plus',
+    status: 'active',
+    author: 'Mock Labs',
+    description: '从公开源补全缺失的歌词与翻译',
+    homepage: 'https://example.com/lyric-plus',
+    license: 'MIT',
+    main: 'index.js',
+    min_host_version: '1.0.0',
+    permissions: ['network'],
+    icon: '',
+    update_url: '',
+    download_url: '',
+    render_engine: '',
+    file_path: '/var/lib/songloft/plugins/lyric-plus',
+    created_at: '2026-08-01T02:00:00Z',
+    updated_at: '2026-09-20T02:00:00Z'
+  },
+  {
+    id: 2,
+    name: '豆瓣标签',
+    version: '0.9.3',
+    entry_path: 'douban-tags',
+    status: 'inactive',
+    author: 'Mock Labs',
+    description: '按专辑名回填豆瓣的流派与年份',
+    homepage: '',
+    license: 'MIT',
+    main: 'index.js',
+    min_host_version: '',
+    permissions: [],
+    icon: '',
+    update_url: '',
+    download_url: '',
+    render_engine: '',
+    file_path: '/var/lib/songloft/plugins/douban-tags',
+    created_at: '2026-07-11T02:00:00Z',
+    updated_at: '2026-07-11T02:00:00Z'
+  },
+  {
+    id: 3,
+    name: '电台时光机',
+    version: '2.0.1',
+    entry_path: 'radio-time',
+    status: 'error',
+    author: 'Mock Labs',
+    description: '把电台按年代做成一条时间线',
+    homepage: 'https://example.com/radio-time',
+    license: 'Apache-2.0',
+    main: 'index.js',
+    min_host_version: '1.2.0',
+    permissions: ['network', 'storage'],
+    icon: '',
+    update_url: 'https://example.com/radio-time/update.json',
+    download_url: '',
+    render_engine: '',
+    file_path: '/var/lib/songloft/plugins/radio-time',
+    created_at: '2026-06-02T02:00:00Z',
+    updated_at: '2026-09-01T02:00:00Z'
+  }
 ]
+
+/** 侧栏顺序（键是 entryPath）：故意与列表接口的顺序不同，见 PLUGIN_WIRE 的说明 */
+const pluginOrder = { order: ['radio-time', 'lyric-plus', 'douban-tags'] }
+/** 常驻白名单：只给其中一个，界面上那颗「常驻运行」要处于按下态 */
+const pluginKeepAlive = { plugins: ['lyric-plus'] }
+
+/**
+ * 订阅源。两个刻意一开一停：停用的那个在商店筛选下拉里要带「（已停用）」后缀，
+ * 而商店的**聚合**列表里不该有它的条目 —— 这两个行为靠这一份数据才看得出差别。
+ */
+const pluginRegistries = {
+  registries: [
+    { url: 'https://registry.example/index.json', name: '官方源', enabled: true, token: '' },
+    { url: 'https://private.example/music.json', name: '私有源', enabled: false, token: 'secret' }
+  ]
+}
+
+/**
+ * 商店条目。四条刻意覆盖 `describeAction` 的四档按钮：
+ *   未装「安装」/ 已装且有新版本「更新至 v1.3.0」/ 已装且最新「v0.9.3」/ 撞名「覆盖安装」
+ *
+ * 另有一条 `warnings` —— 私有源连不上时后端就是这么报的，界面得把它显示出来
+ * （否则用户只会看到「少了几条」）。聚合模式下这条警告必然出现。
+ */
+const REGISTRY_ENTRIES = [
+  {
+    name: '封面墙',
+    entry_path: 'cover-wall',
+    version: '3.1.0',
+    description: '把当前专辑的封面铺成一面墙',
+    author: 'Mock Labs',
+    homepage: 'https://example.com/cover-wall',
+    icon: '',
+    download_url: 'https://registry.example/cover-wall-3.1.0.zip',
+    installed: false,
+    installed_version: '',
+    has_update: false,
+    source_url: 'https://registry.example/index.json',
+    source_name: '官方源',
+    identity: 'mock-labs',
+    conflict: false,
+    conflict_with: ''
+  },
+  {
+    name: '歌词补全',
+    entry_path: 'lyric-plus',
+    version: '1.3.0',
+    description: '从公开源补全缺失的歌词与翻译',
+    author: 'Mock Labs',
+    homepage: 'https://example.com/lyric-plus',
+    icon: '',
+    download_url: 'https://registry.example/lyric-plus-1.3.0.zip',
+    installed: true,
+    installed_version: '1.2.0',
+    has_update: true,
+    source_url: 'https://registry.example/index.json',
+    source_name: '官方源',
+    identity: 'mock-labs',
+    conflict: false,
+    conflict_with: ''
+  },
+  {
+    name: '豆瓣标签',
+    entry_path: 'douban-tags',
+    version: '0.9.3',
+    description: '按专辑名回填豆瓣的流派与年份',
+    author: 'Mock Labs',
+    homepage: '',
+    icon: '',
+    download_url: 'https://registry.example/douban-tags-0.9.3.zip',
+    installed: true,
+    installed_version: '0.9.3',
+    has_update: false,
+    source_url: 'https://registry.example/index.json',
+    source_name: '官方源',
+    identity: 'mock-labs',
+    conflict: false,
+    conflict_with: ''
+  },
+  {
+    name: '专辑墙（另一作者）',
+    entry_path: 'radio-time',
+    version: '2.0.1',
+    description: '同名不同作者：装它会覆盖本机那个',
+    author: 'Other Guy',
+    homepage: '',
+    icon: '',
+    download_url: 'https://private.example/radio-time-2.0.1.zip',
+    installed: false,
+    installed_version: '',
+    has_update: false,
+    source_url: 'https://private.example/music.json',
+    source_name: '私有源',
+    identity: 'other-guy',
+    conflict: true,
+    conflict_with: '电台时光机 · 2.0.1'
+  }
+]
+
+/**
+ * 插件页（`<webview>` 的 src 就指向这里）。
+ *
+ * 后端真的会返回一整个 HTML 页面（插件前端由服务端提供），所以这里也给一份**真页面**：
+ * 巡检要验的是「宿主把 guest 装载起来了」——返回 404 会让那个 webview 停在
+ * 「扩展页没能加载出来」的失败态，看起来像宿主坏了。
+ */
+function pluginPageHtml(entryPath) {
+  return `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>${entryPath}</title></head>
+<body style="margin:0;font:14px system-ui;background:#101218;color:#e8e9f0">
+  <h1 style="padding:20px">扩展页 ${entryPath}</h1>
+  <p style="padding:0 20px">mock 后端提供的插件页面（真实后端也这么给）。</p>
+</body></html>`
+}
+
+/** 插件相关路由。返回 true 表示这个请求已处理 */
+function handlePlugins(req, res, path) {
+  const method = req.method ?? 'GET'
+
+  /*
+   * 先认领前缀，再在分支里只管「怎么写响应」。
+   *
+   * 这样每个分支就只剩一件事，用不着在末尾 `return true` 一遍 ——
+   * 混写会变成 `return void json(...), true` 那种逗号表达式，读的人得先解析一遍才敢改。
+   * 认领的路径各自互不重叠（`jsplugins` 是列表与动作、`jsplugin/<entry>` 是插件页）。
+   */
+  const owned =
+    path.startsWith('/api/v1/jsplugins') ||
+    path.startsWith('/api/v1/jsplugin/') ||
+    path.startsWith('/api/v1/settings/plugin-')
+  if (!owned) return false
+
+  const action = /^\/api\/v1\/jsplugins\/(\d+)\/(enable|disable)$/.exec(path)
+  const updateOne = /^\/api\/v1\/jsplugins\/(\d+)\/update$/.exec(path)
+  const checkOne = /^\/api\/v1\/jsplugins\/(\d+)\/check-update$/.exec(path)
+  const deleteOne = /^\/api\/v1\/jsplugins\/(\d+)$/.exec(path)
+  const byId = (id) => PLUGIN_WIRE.find((plugin) => plugin.id === Number(id))
+
+  if (path === '/api/v1/jsplugins' && method === 'GET') {
+    json(res, 200, { plugins: PLUGIN_WIRE })
+  } else if (action && method === 'POST') {
+    const plugin = byId(action[1])
+    if (!plugin) json(res, 404, { error: '插件不存在' })
+    else {
+      plugin.status = action[2] === 'enable' ? 'active' : 'inactive'
+      // 真实后端这里回的是 DB 里那份**原始**记录（icon 未解析），见 api/plugins.ts 的说明
+      json(res, 200, { plugin })
+    }
+  } else if (updateOne && method === 'POST') {
+    const plugin = byId(updateOne[1])
+    if (plugin) json(res, 200, { plugin })
+    else json(res, 404, { error: '插件不存在' })
+  } else if (checkOne && method === 'GET') {
+    // has_update=false 有两种含义（已是最新 / 压根没声明更新源），响应分不出来 ——
+    // 所以这里统一给「没有更新」，调用方只能照这个口径显示。
+    const plugin = byId(checkOne[1])
+    json(res, 200, {
+      has_update: false,
+      current_version: plugin?.version ?? '',
+      remote_version: '',
+      download_url: ''
+    })
+  } else if (deleteOne && method === 'DELETE') {
+    const index = PLUGIN_WIRE.findIndex((plugin) => plugin.id === Number(deleteOne[1]))
+    if (index >= 0) PLUGIN_WIRE.splice(index, 1)
+    json(res, 200, { ok: true })
+  } else if (path === '/api/v1/jsplugins/update-all' && method === 'POST') {
+    json(res, 200, {
+      total: 3,
+      updated: 0,
+      failed: 0,
+      skipped: 3,
+      message: '没有可更新的扩展（都没有声明远程更新源）',
+      results: []
+    })
+  } else if (path === '/api/v1/jsplugins/storage/cleanup' && method === 'POST') {
+    json(res, 200, { message: '已清理 0 个扩展的残留数据', cleaned: 0 })
+  } else if (path === '/api/v1/jsplugins/registry/refresh' && method === 'POST') {
+    void readJsonBody(req).then((body) => {
+      /*
+       * 单源筛选（只给某个源）与聚合模式返回的东西**不一样**：
+       *   · 聚合要跳过连不上的源，于是带一条 warnings —— 界面得把它显示出来，
+       *     否则用户只会看到「少了几条」；
+       *   · 单源模式下那条源是用户点名要看的，不该再混进别源的条目，也不该报别源的错。
+       */
+      const allSources = body?.all_sources !== false
+      const single = String(body?.registry_url ?? '')
+      const entries = allSources
+        ? REGISTRY_ENTRIES
+        : REGISTRY_ENTRIES.filter((entry) => entry.source_url === single)
+      json(res, 200, {
+        plugins: entries,
+        total: entries.length,
+        page: Number(body?.page ?? 1),
+        page_size: Number(body?.page_size ?? 20),
+        warnings: allSources ? ['私有源：连接超时，已跳过'] : []
+      })
+    })
+  } else if (path === '/api/v1/jsplugins/registry/install' && method === 'POST') {
+    void readJsonBody(req).then((body) =>
+      json(res, 200, {
+        total: 1,
+        success: 1,
+        failed: 0,
+        results: [
+          {
+            file_name:
+              String(body?.download_url ?? '')
+                .split('/')
+                .pop() ?? 'plugin.zip',
+            plugin: PLUGIN_WIRE[0],
+            error: '',
+            success: true
+          }
+        ],
+        message: '安装成功'
+      })
+    )
+  } else if (path === '/api/v1/jsplugins/upload' && method === 'POST') {
+    json(res, 200, { total: 1, success: 1, failed: 0, results: [], message: '安装成功' })
+  } else if (path === '/api/v1/settings/plugin-order') {
+    if (method !== 'PUT') json(res, 200, { ...pluginOrder })
+    else
+      void readJsonBody(req).then((body) => {
+        if (Array.isArray(body?.order)) pluginOrder.order = body.order
+        json(res, 200, { ...pluginOrder })
+      })
+  } else if (path === '/api/v1/settings/plugin-keep-alive') {
+    if (method !== 'PUT') json(res, 200, { ...pluginKeepAlive })
+    else
+      void readJsonBody(req).then((body) => {
+        if (Array.isArray(body?.plugins)) pluginKeepAlive.plugins = body.plugins
+        json(res, 200, { ...pluginKeepAlive })
+      })
+  } else if (path === '/api/v1/settings/plugin-registries') {
+    if (method !== 'PUT') json(res, 200, { ...pluginRegistries })
+    else
+      void readJsonBody(req).then((body) => {
+        if (Array.isArray(body?.registries)) pluginRegistries.registries = body.registries
+        json(res, 200, { ...pluginRegistries })
+      })
+  } else if (/^\/api\/v1\/jsplugin\/[^/]+\/static\/.+$/.test(path)) {
+    // 插件自己的静态资源（图标那一条免认证）：用 fixture 里那张真 JPEG 顶上
+    const buf = readFileSync(join(COVER_DIR, 'cover-01.jpg'))
+    res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Content-Length': buf.length })
+    res.end(buf)
+  } else if (/^\/api\/v1\/jsplugin\/[^/]+$/.test(path)) {
+    const body = pluginPageHtml(path.split('/').pop() ?? '')
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Length': Buffer.byteLength(body)
+    })
+    res.end(body)
+  } else {
+    console.warn('[mock] 未命中:', method, path)
+    json(res, 404, { error: `mock 未实现: ${method} ${path}` })
+  }
+
+  return true
+}
 
 /* ─────────────────────────── 工具 ─────────────────────────── */
 
@@ -584,6 +931,9 @@ const server = createServer((req, res) => {
     res.end(buf)
     return
   }
+
+  // 插件（扩展）那一整块自成一路：前缀先认领，内部再分派
+  if (handlePlugins(req, res, path)) return
 
   if (path === '/health') return json(res, 200, { status: 'ok' })
   if (path === '/api/v1/version') {
