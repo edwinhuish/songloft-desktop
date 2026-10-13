@@ -2008,7 +2008,7 @@ select.input option {
 }
 
 .split-btn > .btn:last-child {
-  margin-left: 4px;
+  margin-left: 2px;
   padding: 0 9px;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
