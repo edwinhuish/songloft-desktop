@@ -1681,6 +1681,31 @@ function withCurrentStep(steps: SizeStep[], current: number): SizeStep[] {
     : [...steps, { value: current, label: formatBytes(current) }]
 }
 
+/** 占用比例（0–1）。没设上限就没有分母，返回 0 */
+function usageRatio(used: number, max: number): number {
+  return max > 0 ? Math.min(1, used / max) : 0
+}
+
+/**
+ * 占用进度条（服务端缓存与本机缓存共用一条规则）。
+ *
+ * 不限时没有分母，索性不画 —— 画一条恒接近 0 的条只会让人以为「还剩这么多」。
+ */
+function UsageBar({ used, max }: { used: number; max: number }): React.JSX.Element | null {
+  if (max <= 0) return null
+  const ratio = usageRatio(used, max)
+  return (
+    <div className="progress-track" style={{ marginTop: 10 }}>
+      <div
+        className="progress-fill"
+        // 逼近上限时换警示色：快用满这件事得看得出来
+        data-tone={ratio >= 0.9 ? 'danger' : undefined}
+        style={{ width: `${Math.round(ratio * 100)}%` }}
+      />
+    </div>
+  )
+}
+
 /** 落盘转码目标格式；空值 = 不转码（后端语义） */
 const TRANSCODE_FORMATS: SelectOption<string>[] = [
   { value: '', label: '原始（不转码）' },
@@ -1707,7 +1732,7 @@ function ServerCacheSettings(): React.JSX.Element {
 
   const used = stats.data?.total_size ?? 0
   const max = stats.data?.max_size ?? 0
-  const ratio = max > 0 ? Math.min(1, used / max) : 0
+  const ratio = usageRatio(used, max)
   // 后端可能存着一个不在档位里的上限（被别的客户端设过）
   const sizeOptions = withCurrentStep(CACHE_SIZE_STEPS, max)
 
@@ -1778,16 +1803,7 @@ function ServerCacheSettings(): React.JSX.Element {
               <span className="stat-row-value">{formatCount(stats.data?.file_count ?? 0)}</span>
             </div>
           </div>
-          {/* 不限时没有分母，进度条无从谈起，索性不画 */}
-          {max > 0 ? (
-            <div className="progress-track" style={{ marginTop: 10 }}>
-              <div
-                className="progress-fill"
-                data-tone={ratio >= 0.9 ? 'danger' : undefined}
-                style={{ width: `${Math.round(ratio * 100)}%` }}
-              />
-            </div>
-          ) : null}
+          <UsageBar used={used} max={max} />
         </Row>
 
         <Row
@@ -2060,7 +2076,16 @@ function LocalCacheSettings(): React.JSX.Element {
    */
   const applied = cache.data?.maxSize ?? 0
   const wanted = settings.localCacheMaxSize
+  const ratio = usageRatio(size, applied)
   const sizeOptions = withCurrentStep(LOCAL_CACHE_SIZE_STEPS, wanted)
+
+  const usageDesc = (): string => {
+    if (cache.error) return `读取失败：${cache.error}`
+    if (cache.loading) return '正在统计本机缓存占用…'
+    // 上限为 0 时没有分母，只说「未设上限」而不是编一个百分比出来
+    const head = applied > 0 ? `已用 ${Math.round(ratio * 100)}%` : '未设上限'
+    return `${head} · 封面图与接口响应缓存在本机磁盘上（Chromium 的会话缓存）`
+  }
 
   const limitDesc = (): string => {
     if (wanted !== applied) {
@@ -2102,15 +2127,7 @@ function LocalCacheSettings(): React.JSX.Element {
         </button>
       }
     >
-      <Row
-        block
-        title="占用"
-        desc={
-          cache.error
-            ? `读取失败：${cache.error}`
-            : '客户端把封面图与接口响应缓存在本机磁盘上（Chromium 的会话缓存）'
-        }
-      >
+      <Row block title="占用" desc={usageDesc()}>
         <div className="stat-list">
           <div className="stat-row">
             <span>已用</span>
@@ -2123,6 +2140,7 @@ function LocalCacheSettings(): React.JSX.Element {
             </span>
           </div>
         </div>
+        <UsageBar used={size} max={applied} />
       </Row>
 
       <Row title="最大本地缓存大小" desc={limitDesc()}>

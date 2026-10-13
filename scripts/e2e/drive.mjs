@@ -214,7 +214,13 @@ window.__t = {
      * 必须整串比：断言里写 contains('v2.13.1') 是抓不到 vv2.13.1 的——它本身就包含
      * v2.13.1。这里取出整串，多一个 v 立刻红。
      */
-    metaTags: [...document.querySelectorAll('.setting-row-meta')].map((e) => (e.textContent || '').trim())
+    metaTags: [...document.querySelectorAll('.setting-row-meta')].map((e) => (e.textContent || '').trim()),
+    /*
+     * 占用进度条。放在缓存管理那一步断言 = 2 条：服务端缓存与本机缓存各一条。
+     * 只数个数就够 —— 这里要挡的是"某一侧压根忘了画"，宽度值随实际字节数变，没法钉死。
+     * （控制栏的播放进度是另一个类名 .playerbar-progress-fill，不会混进来。）
+     */
+    usageBars: document.querySelectorAll('.progress-fill').length
   })
 };
 'ready'
@@ -433,6 +439,7 @@ const STEPS = [
    *
    * 本机缓存那张卡走的是 IPC（不经过 mock），断言它能渲染出来就顺带验了「桥接 + 主进程
    * 处理器」这一串接线 —— 少任何一环，那张卡都会停在「读取失败」。
+   * usageBars=2：两张卡的「占用」都得带进度条，缺一条立刻红。
    */
   [
     '20-settings-cache',
@@ -448,7 +455,8 @@ const STEPS = [
         '本地缓存',
         '最大本地缓存大小',
         '清理本地缓存'
-      )
+      ),
+      usageBars: exactly(2)
     }
   ],
   // 网络设置：三条代理各挂一个端点，mock 里取的都**不是**默认值（空串 / 空数组才是默认），
