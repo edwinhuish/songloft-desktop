@@ -192,7 +192,16 @@ export function PluginStore(): React.JSX.Element {
       if (result.success === 0) {
         throw new Error(result.results[0]?.error || result.message || '安装失败')
       }
-      toast(`已安装「${entry.name || entry.entryPath}」`, 'success')
+      // 同一颗按钮现在有四种含义（安装 / 更新 / 重新安装 / 覆盖安装），回执也跟着说清楚，
+      // 否则点了「⟳ v1.2.3」却被告知「已安装」会让人怀疑是不是没生效
+      const done = entry.conflict
+        ? '已覆盖安装'
+        : entry.hasUpdate
+          ? '已更新'
+          : entry.installed
+            ? '已重新安装'
+            : '已安装'
+      toast(`${done}「${entry.name || entry.entryPath}」`, 'success')
       // 插件列表变了 → 扩展侧栏里要跟着多出一项
       await usePlugins.getState().load()
       /**
@@ -393,29 +402,55 @@ interface StoreRowProps {
   onInstall: () => void
 }
 
+/**
+ * 按钮那一档长什么样。
+ *
+ * 四档与上游 Flutter 端 `plugin_registry.dart` 的 `_buildAction` 逐条对应：
+ *   未装        → 「安装」（主色实心）
+ *   入口撞名    → 「覆盖安装」（危险色）
+ *   装了且可更新 → 「更新至 v<商店版本>」
+ *   装了且最新  → 「⟳ v<本机版本>」= 把这一版**重新装一遍**（上游是带「重新安装」tooltip 的
+ *                ActionChip），所以它**可点**，不是一块状态牌
+ *
+ * 顺序不能反：conflict 优先于 installed —— 撞名的那一条 `installed` 是 false
+ * （本地装的根本不是它），只看 installed 会把它显示成「安装」，点下去才发现要覆盖。
+ */
+interface StoreAction {
+  label: string
+  /** 无障碍名。只有「⟳ v1.2.3」这一档看不出动词，才需要另给一句 */
+  ariaLabel?: string
+  variant?: 'primary' | 'danger'
+  /** 名字后面那个角标 */
+  tone?: 'accent' | 'danger'
+  tip?: string
+  /** 用「⟳」而不是「⤓」：它说的是「重新装一遍」，不是「从商店下载」 */
+  refresh?: boolean
+}
+
+function describeAction(entry: RegistryEntry): StoreAction {
+  if (entry.conflict) {
+    return { label: '覆盖安装', variant: 'danger', tone: 'danger' }
+  }
+  if (entry.hasUpdate) {
+    // 说的是**它会变成哪个版本**（商店里那个），不是本机现在那个
+    return { label: `更新至 v${entry.version || '—'}`, tone: 'accent' }
+  }
+  if (entry.installed) {
+    // 显示**本机版本**：这一档要回答的是「我这儿装的是哪一版」
+    const version = entry.installedVersion || entry.version || '—'
+    return {
+      label: `v${version}`,
+      ariaLabel: `重新安装 v${version}`,
+      tip: '重新安装',
+      refresh: true
+    }
+  }
+  return { label: '安装', variant: 'primary' }
+}
+
 function StoreRow({ entry, pending, disabled, onInstall }: StoreRowProps): React.JSX.Element {
   const name = entry.name || entry.entryPath
-
-  /**
-   * 按钮文案与样式的唯一判据是后端那三个字段。
-   *
-   * 顺序不能反：conflict 优先于 installed —— 撞名的那一条 `installed` 是 false
-   * （本地装的根本不是它），只看 installed 会把它显示成「安装」，点下去才发现要覆盖。
-   */
-  let label = '安装'
-  let variant = 'primary'
-  let tone: 'accent' | 'warning' | 'danger' | undefined
-  if (entry.conflict) {
-    label = '覆盖安装'
-    variant = 'danger'
-    tone = 'danger'
-  } else if (entry.hasUpdate) {
-    label = '更新'
-    tone = 'accent'
-  } else if (entry.installed) {
-    label = '已安装'
-    variant = ''
-  }
+  const action = describeAction(entry)
 
   const meta = [
     `v${entry.version || '—'}`,
@@ -436,8 +471,8 @@ function StoreRow({ entry, pending, disabled, onInstall }: StoreRowProps): React
         <div className="extension-name">
           {name}
           {entry.sourceName ? <span className="badge">{entry.sourceName}</span> : null}
-          {tone ? (
-            <span className="badge" data-tone={tone}>
+          {action.tone ? (
+            <span className="badge" data-tone={action.tone}>
               {entry.conflict ? '入口冲突' : '有新版本'}
             </span>
           ) : null}
@@ -452,13 +487,21 @@ function StoreRow({ entry, pending, disabled, onInstall }: StoreRowProps): React
         type="button"
         className="btn"
         data-size="sm"
-        data-variant={variant || undefined}
-        // 已安装且没有新版本时没什么可点；别的行正在装时也先别让人开第二个
-        disabled={pending || disabled || (entry.installed && !entry.hasUpdate && !entry.conflict)}
+        data-variant={action.variant}
+        aria-label={action.ariaLabel}
+        data-tip={action.tip}
+        // 四档都可点（「已装且最新」= 重新装一遍）；只有别的行正在装时才按住，别让人开第二个
+        disabled={pending || disabled}
         onClick={onInstall}
       >
-        {pending ? <IconLoader size={14} /> : <IconDownload size={14} />}
-        {label}
+        {pending ? (
+          <IconLoader size={14} />
+        ) : action.refresh ? (
+          <IconRefresh size={14} />
+        ) : (
+          <IconDownload size={14} />
+        )}
+        {action.label}
       </button>
     </li>
   )
