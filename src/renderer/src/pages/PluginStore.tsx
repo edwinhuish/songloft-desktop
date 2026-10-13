@@ -362,6 +362,16 @@ export function PluginStore(): React.JSX.Element {
         </div>
       ) : null}
 
+      {/*
+        到底的提示。★ 不能省：无限滚动的列表滚到底时「不再长出新行」与「卡住了」
+        在屏幕上长得一模一样，用户只能靠反复上下来回滚来确认。给一句话，滚到底这件事
+        就有了明确的下文。
+        列表为空时走上面那条空态，所以这里要求 entries 非空。
+      */}
+      {!error && !loading && entries.length > 0 && !hasMore ? (
+        <p className="list-end">已经到底了</p>
+      ) : null}
+
       {/* key 跟着页码走：内容不够高时哨兵仍在视口里，观察器不会再来一次 —— 换一个元素
           重新挂观察器，它会立刻以「当前可见」回调一次，列表就能一路续到填满视口为止 */}
       {!error && hasMore ? <InfiniteSentinel key={page} onVisible={loadMore} /> : null}

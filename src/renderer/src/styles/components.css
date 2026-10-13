@@ -1701,6 +1701,22 @@ select.input option {
   line-height: 1.7;
 }
 
+/*
+ * 无限滚动的列表滚到尽头那一行小字。
+ *
+ * 它是「空态」的对应物：空态说「一个都没有」，它说「到这儿就没了」。缺了它，滚到底时
+ * 「不再长出新行」与「请求卡住了」在屏幕上是同一个样子，用户只能靠来回滚几下自己试。
+ *
+ * 用 --text-2 而不是更暗的档：这是**要读的**说明，不是装饰（同 .field-hint 那一处的理由）。
+ */
+.list-end {
+  margin: 0;
+  padding: 18px 0 10px;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
 .skeleton {
   border-radius: var(--r-sm);
   background: linear-gradient(
