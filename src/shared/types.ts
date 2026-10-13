@@ -379,6 +379,24 @@ export interface FingerprintStatus {
   auto_enabled: boolean
 }
 
+/** `/scan/fingerprints/progress`；后端的运行态只有 running，其余都是「已停」 */
+export interface FingerprintProgress {
+  status: 'idle' | 'running' | 'done' | 'cancelled'
+  computed: number
+  total: number
+  failed: number
+}
+
+/** `/scan/fingerprints/failed` 里的一条：算不出指纹的歌，附带失败原因 */
+export interface FailedFingerprint {
+  id: number
+  title: string
+  artist: string
+  file_path: string
+  error: string
+  attempted_at: number
+}
+
 /** 清理无效歌曲的返回体 */
 export interface CleanResult {
   total: number

@@ -13,6 +13,8 @@ import { REPO_URL, UPSTREAM_URL } from '@shared/links'
 import type {
   AutoScanSetting,
   DuplicatesResult,
+  FailedFingerprint,
+  FingerprintProgress,
   MetadataRefreshProgress,
   MetadataRefreshStatus,
   MusicPathSetting,
@@ -44,6 +46,7 @@ import { Modal } from '@/components/Modal'
 import { EmptyState, Switch } from '@/components/primitives'
 import { SettingSelect, type SelectOption } from '@/components/SettingSelect'
 import {
+  cancelFingerprintCompute,
   cancelMetadataRefresh,
   cancelScan,
   cleanMissingSongs,
@@ -51,6 +54,8 @@ import {
   deleteSong,
   findDuplicates,
   getAutoScan,
+  getFailedFingerprints,
+  getFingerprintProgress,
   getFingerprintStatus,
   getHlsProxyEnabled,
   getMetadataRefreshProgress,
@@ -79,7 +84,7 @@ import {
   updateMusicPath
 } from '@/api/endpoints'
 import { useAsync } from '@/hooks/useAsync'
-import { formatBytes, formatDate } from '@/lib/format'
+import { formatBytes, formatDate, formatRelative } from '@/lib/format'
 import { requireClient, useAuth } from '@/state/useAuth'
 import { currentAccentHex, useSettings } from '@/state/useSettings'
 import { useUi, type SettingsSection } from '@/state/useUi'
@@ -593,6 +598,14 @@ const REFRESH_STATUS_LABEL: Record<MetadataRefreshStatus, string> = {
   failed: '执行失败'
 }
 
+/** 指纹任务没有 cancelling / failed 态：中断后就是 cancelled，失败只落在单首歌上 */
+const FP_STATUS_LABEL: Record<FingerprintProgress['status'], string> = {
+  idle: '空闲',
+  running: '进行中',
+  done: '已完成',
+  cancelled: '已中断'
+}
+
 function LibrarySettings(): React.JSX.Element {
   const musicPath = useAsync(() => getMusicPath(requireClient()), [])
   const autoPlaylists = useAsync(() => getScanAutoCreatePlaylists(requireClient()), [])
@@ -604,6 +617,9 @@ function LibrarySettings(): React.JSX.Element {
   // 与「标题来源」是两个设置：这一项只管「刷新元数据」时要不要用标签标题覆盖网络歌曲
   const remoteTitleSource = useAsync(() => getRemoteTitleSource(requireClient()), [])
   const fingerprints = useAsync(() => getFingerprintStatus(requireClient()), [])
+  // useAsync 返回的对象每次渲染都是新的，但 reload 本身是 useCallback 稳定的；
+  // 单独取出来给 effect 当依赖，免得把整只对象塞进去让定时器反复重建
+  const reloadFingerprints = fingerprints.reload
 
   const [progress, setProgress] = useState<ScanProgress | null>(null)
   // 排除目录的三个字段是一次覆盖写，所以整份配置只留一处草稿，三个页签共改它
@@ -613,9 +629,16 @@ function LibrarySettings(): React.JSX.Element {
   const [refresh, setRefresh] = useState<MetadataRefreshProgress | null>(null)
   const [duplicates, setDuplicates] = useState<DuplicatesResult | null>(null)
   const [checkingDuplicates, setCheckingDuplicates] = useState(false)
+  // 指纹任务的运行态；`null` = 还没读到（区别于「读到了但空闲」）
+  const [fpProgress, setFpProgress] = useState<FingerprintProgress | null>(null)
+  // 失败清单只在点开弹窗时拉：它是「偶尔看一眼」的详情，不该跟着页面常驻请求
+  const [fpFailedOpen, setFpFailedOpen] = useState(false)
+  const [fpFailed, setFpFailed] = useState<FailedFingerprint[]>([])
+  const [fpFailedLoading, setFpFailedLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const pollRef = useRef<number | null>(null)
   const refreshPollRef = useRef<number | null>(null)
+  const fpPollRef = useRef<number | null>(null)
 
   // 配置到达后填充草稿（用户已经在编辑就别覆盖）
   useEffect(() => {
@@ -637,6 +660,13 @@ function LibrarySettings(): React.JSX.Element {
     }
   }, [])
 
+  const stopFpPolling = useCallback(() => {
+    if (fpPollRef.current !== null) {
+      window.clearInterval(fpPollRef.current)
+      fpPollRef.current = null
+    }
+  }, [])
+
   const isScanning =
     progress != null &&
     ['scanning', 'importing', 'splitting_cue', 'creating_playlists', 'cancelling'].includes(
@@ -644,6 +674,9 @@ function LibrarySettings(): React.JSX.Element {
     )
 
   const refreshRunning = refresh?.status === 'running' || refresh?.status === 'cancelling'
+
+  // 指纹任务的运行态只有一个值（后端没有单独的 cancelling 态）
+  const fpRunning = fpProgress?.status === 'running'
 
   // 扫描中才轮询；停下就清掉定时器，别让后台一直发请求
   useEffect(() => {
@@ -675,13 +708,36 @@ function LibrarySettings(): React.JSX.Element {
     return stopRefreshPolling
   }, [refreshRunning, stopRefreshPolling])
 
-  // 进页面先各读一次，避免「明明在扫（或在刷元数据）但界面显示空闲」
+  // 指纹计算同一套：它比元数据刷新更慢（每首都要起一次 ffmpeg），轮询间隔放长一点
+  useEffect(() => {
+    if (!fpRunning) {
+      stopFpPolling()
+      return
+    }
+    if (fpPollRef.current !== null) return
+    fpPollRef.current = window.setInterval(() => {
+      void getFingerprintProgress(requireClient())
+        .then((next) => {
+          setFpProgress(next)
+          // 轮询是唯一能知道「跑完了」的地方：看到非 running 就把统计重读一次，
+          // 否则「已算 N」会一直停在任务开始前的旧数字
+          if (next.status !== 'running') reloadFingerprints()
+        })
+        .catch(() => undefined)
+    }, 1500)
+    return stopFpPolling
+  }, [fpRunning, stopFpPolling, reloadFingerprints])
+
+  // 进页面先各读一次，避免「明明在扫（或在刷元数据/算指纹）但界面显示空闲」
   useEffect(() => {
     void getScanProgress(requireClient())
       .then(setProgress)
       .catch(() => undefined)
     void getMetadataRefreshProgress(requireClient())
       .then(setRefresh)
+      .catch(() => undefined)
+    void getFingerprintProgress(requireClient())
+      .then(setFpProgress)
       .catch(() => undefined)
   }, [])
 
@@ -727,6 +783,29 @@ function LibrarySettings(): React.JSX.Element {
 
   const refreshPercent =
     refresh && refresh.total > 0 ? Math.floor((refresh.processed * 100) / refresh.total) : 0
+
+  // 分母优先用任务自己的 total：它一开始就是「本次要算几首」，而统计接口的 total 是曲库总数
+  const fpTotal = fpProgress?.total || fingerprints.data?.total || 0
+  const fpPercent =
+    fpProgress && fpTotal > 0 ? Math.floor((fpProgress.computed * 100) / fpTotal) : 0
+
+  /** 触发一次指纹计算并立刻把进度读回来，好让轮询这一帧就接上（否则要等下一个 tick 才动） */
+  const startFingerprint = (options: {
+    recomputeAll?: boolean
+    retryFailed?: boolean
+  }): Promise<void> =>
+    run(
+      'fingerprint',
+      async () => {
+        await computeFingerprints(requireClient(), options)
+        setFpProgress(await getFingerprintProgress(requireClient()))
+      },
+      options.recomputeAll
+        ? '已开始全量重算指纹（后台进行）'
+        : options.retryFailed
+          ? '已开始重试失败的指纹（后台进行）'
+          : '已开始计算缺失的指纹（后台进行）'
+    )
 
   // 开关也并进这个下拉：关掉就是选了「关闭」这一档
   const playlistChoice: PlaylistChoice = autoPlaylists.data
@@ -1141,56 +1220,207 @@ function LibrarySettings(): React.JSX.Element {
 
         <Row
           server
+          block
           title="重复歌曲检测"
           desc={
-            fingerprints.data
-              ? `音频指纹：已算 ${fingerprints.data.computed}/${fingerprints.data.total}${
-                  fingerprints.data.failed > 0 ? `，失败 ${fingerprints.data.failed}` : ''
-                }${fingerprints.data.chromaprint_available ? '' : '（后端未装 chromaprint，无法算指纹）'}`
-              : '正在读取指纹状态…'
+            fingerprints.data && !fingerprints.data.chromaprint_available
+              ? '后端未安装带 chromaprint 的 ffmpeg，算不出指纹（检测重复要先有指纹）'
+              : fingerprints.loading
+                ? '正在读取指纹状态…'
+                : '同一段音频的不同副本指纹相同，靠它才能认出改过名的重复。指纹没算完时检测结果不完整。'
           }
         >
-          <div className="row" style={{ gap: 8 }}>
-            <button
-              type="button"
-              className="btn"
-              disabled={busy === 'fingerprint' || !fingerprints.data?.chromaprint_available}
-              onClick={() =>
-                void run(
-                  'fingerprint',
-                  async () => {
-                    await computeFingerprints(requireClient(), false)
-                    fingerprints.reload()
-                  },
-                  '已开始计算指纹（后台进行）'
-                )
-              }
-            >
-              计算指纹
-            </button>
-            <button
-              type="button"
-              className="btn"
-              disabled={checkingDuplicates}
-              onClick={() => {
-                setCheckingDuplicates(true)
-                void findDuplicates(requireClient())
-                  .then(setDuplicates)
-                  .catch((error: unknown) =>
-                    toast('检测失败', 'error', error instanceof Error ? error.message : undefined)
+          {/* 与「扫描进度」同一套：跑起来就换成进度条 + 中断，不给「再点一次」留位置 */}
+          {fpRunning ? (
+            <>
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${fpPercent}%` }} />
+              </div>
+              <div className="setting-row-desc" style={{ marginTop: 8 }}>
+                {fpPercent}% · 已算 {fpProgress?.computed ?? 0}/{fpTotal}
+                {fpProgress && fpProgress.failed > 0 ? ` · 失败 ${fpProgress.failed}` : ''}
+              </div>
+              <button
+                type="button"
+                className="btn"
+                data-variant="danger"
+                style={{ width: '100%', marginTop: 10 }}
+                disabled={busy === 'cancel-fp'}
+                onClick={() =>
+                  void run(
+                    'cancel-fp',
+                    () => cancelFingerprintCompute(requireClient()),
+                    '已请求中断指纹计算'
                   )
-                  .finally(() => setCheckingDuplicates(false))
-              }}
-            >
-              {checkingDuplicates ? <IconLoader size={15} /> : <IconSearch size={15} />}
-              检测重复
-            </button>
-          </div>
+                }
+              >
+                中断计算
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="stat-list">
+                {fingerprints.data ? (
+                  <>
+                    <div className="stat-row">
+                      <span>本地歌曲</span>
+                      <span className="stat-value">{fingerprints.data.total}</span>
+                    </div>
+                    <div className="stat-row">
+                      <span>已算指纹</span>
+                      <span className="stat-value">{fingerprints.data.computed}</span>
+                    </div>
+                    <div className="stat-row">
+                      <span>缺失（可补算）</span>
+                      <span className="stat-value">{fingerprints.data.missing}</span>
+                    </div>
+                    <div className="stat-row">
+                      <span>失败</span>
+                      <span
+                        className="stat-value"
+                        style={
+                          fingerprints.data.failed > 0 ? { color: 'var(--danger)' } : undefined
+                        }
+                      >
+                        {fingerprints.data.failed}
+                      </span>
+                    </div>
+                    {/* 上一次任务停在哪，决定下面几个按钮该按哪个 */}
+                    {fpProgress && fpProgress.status !== 'idle' ? (
+                      <div className="stat-row" style={{ marginTop: 4 }}>
+                        <span>上次任务</span>
+                        <span className="stat-value">
+                          {FP_STATUS_LABEL[fpProgress.status]} · {fpProgress.computed}/
+                          {fpProgress.total}
+                        </span>
+                      </div>
+                    ) : null}
+                  </>
+                ) : fingerprints.error ? (
+                  <div className="field-hint">读取指纹状态失败：{fingerprints.error}</div>
+                ) : (
+                  <div className="field-hint">正在读取指纹状态…</div>
+                )}
+              </div>
+
+              <div className="scan-actions" style={{ marginTop: 12 }}>
+                <button
+                  type="button"
+                  className="btn"
+                  data-variant="success"
+                  style={{ flex: 1 }}
+                  disabled={busy === 'fingerprint' || !fingerprints.data?.chromaprint_available}
+                  title="只算还没有指纹的歌曲，已算好的不动"
+                  onClick={() => void startFingerprint({})}
+                >
+                  {busy === 'fingerprint' ? <IconLoader size={15} /> : <IconRefresh size={15} />}
+                  计算缺失
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ flex: 'none' }}
+                  disabled={
+                    busy === 'fingerprint' ||
+                    !fingerprints.data?.chromaprint_available ||
+                    (fingerprints.data?.failed ?? 0) === 0
+                  }
+                  title="只重试失败过的歌曲（已算好的保留）"
+                  onClick={() => void startFingerprint({ retryFailed: true })}
+                >
+                  <IconAlert size={15} />
+                  重试失败
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ flex: 'none' }}
+                  disabled={busy === 'fingerprint' || !fingerprints.data?.chromaprint_available}
+                  title="清空所有已有指纹、从头全算一遍（慢，只在换了算法/后端升级后需要）"
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        `清空并重算全部 ${fingerprints.data?.total ?? 0} 首的指纹？期间检测结果不可用，耗时可能很长。`
+                      )
+                    )
+                      return
+                    void startFingerprint({ recomputeAll: true })
+                  }}
+                >
+                  <IconSparkle size={15} />
+                  全量重算
+                </button>
+              </div>
+
+              <div className="scan-actions" style={{ marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="btn"
+                  data-variant="primary"
+                  style={{ flex: 1 }}
+                  disabled={checkingDuplicates}
+                  onClick={() => {
+                    setCheckingDuplicates(true)
+                    void findDuplicates(requireClient())
+                      .then(setDuplicates)
+                      .catch((error: unknown) =>
+                        toast(
+                          '检测失败',
+                          'error',
+                          error instanceof Error ? error.message : undefined
+                        )
+                      )
+                      .finally(() => setCheckingDuplicates(false))
+                  }}
+                >
+                  {checkingDuplicates ? <IconLoader size={15} /> : <IconSearch size={15} />}
+                  检测重复
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ flex: 'none' }}
+                  disabled={(fingerprints.data?.failed ?? 0) === 0}
+                  title="看是哪些歌曲算不出指纹、为什么"
+                  onClick={() => {
+                    setFpFailedOpen(true)
+                    setFpFailedLoading(true)
+                    void getFailedFingerprints(requireClient())
+                      .then(setFpFailed)
+                      .catch((error: unknown) => {
+                        setFpFailedOpen(false)
+                        toast(
+                          '读取失败清单失败',
+                          'error',
+                          error instanceof Error ? error.message : undefined
+                        )
+                      })
+                      .finally(() => setFpFailedLoading(false))
+                  }}
+                >
+                  <IconAlert size={15} />
+                  失败详情
+                </button>
+              </div>
+            </>
+          )}
         </Row>
       </Card>
 
       {duplicates ? (
         <DuplicatesModal result={duplicates} onClose={() => setDuplicates(null)} />
+      ) : null}
+
+      {fpFailedOpen ? (
+        <FailedFingerprintsModal
+          items={fpFailed}
+          loading={fpFailedLoading}
+          onRetry={() => {
+            setFpFailedOpen(false)
+            void startFingerprint({ retryFailed: true })
+          }}
+          onClose={() => setFpFailedOpen(false)}
+        />
       ) : null}
     </>
   )
@@ -1292,6 +1522,87 @@ function DuplicatesModal({
                     </button>
                   </div>
                 ))}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </Modal>
+  )
+}
+
+/** 后端给的是 unix 秒（0 = 没试过），转成 formatRelative 认的 ISO 串 */
+function unixSecondsToIso(seconds: number): string {
+  return seconds > 0 ? new Date(seconds * 1000).toISOString() : ''
+}
+
+function FailedFingerprintsModal({
+  items,
+  loading,
+  onRetry,
+  onClose
+}: {
+  items: FailedFingerprint[]
+  loading: boolean
+  onRetry: () => void
+  onClose: () => void
+}): React.JSX.Element {
+  return (
+    <Modal
+      title={loading ? '指纹计算失败' : `指纹计算失败：${items.length} 首`}
+      size="wide"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>
+            关闭
+          </button>
+          <button
+            type="button"
+            className="btn"
+            data-variant="primary"
+            disabled={loading || items.length === 0}
+            onClick={onRetry}
+          >
+            <IconRefresh size={15} />
+            重试这些歌曲
+          </button>
+        </>
+      }
+    >
+      {loading ? (
+        <div className="field-hint">正在读取失败清单…</div>
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={<IconCheck size={26} />}
+          title="没有失败的歌曲"
+          description="当前所有本地歌曲都算出了指纹"
+        />
+      ) : (
+        <>
+          <div className="probe-result">
+            <IconAlert size={15} />
+            <span>
+              这些歌曲反复算不出指纹，后端已记下「试过了」—— 不会每轮扫描再把它们捞出来白跑
+              ffmpeg。常见原因：文件损坏、没有音轨、格式不受支持。文件修好后点「重试这些歌曲」。
+            </span>
+          </div>
+          <div className="fail-list">
+            {items.map((item) => (
+              <div key={item.id} className="fail-item">
+                <div className="truncate" style={{ fontSize: 13 }}>
+                  {item.title}
+                  {item.artist ? (
+                    <span style={{ color: 'var(--text-3)' }}> — {item.artist}</span>
+                  ) : null}
+                </div>
+                <div className="truncate" style={{ fontSize: 11.5, color: 'var(--text-4)' }}>
+                  {item.file_path}
+                  {item.attempted_at > 0
+                    ? ` · ${formatRelative(unixSecondsToIso(item.attempted_at))}`
+                    : ''}
+                </div>
+                <div className="fail-item-reason">{item.error || '未知原因'}</div>
               </div>
             ))}
           </div>

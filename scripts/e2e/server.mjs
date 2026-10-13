@@ -714,6 +714,10 @@ const server = createServer((req, res) => {
       auto_enabled: false
     })
   }
+  // 指纹任务没在跑：设置页进页会读一次进度，缺了它只会打一条「未命中」告警
+  if (path === '/api/v1/scan/fingerprints/progress')
+    return json(res, 200, { status: 'idle', computed: 0, total: 0, failed: 0 })
+  if (path === '/api/v1/scan/fingerprints/failed') return json(res, 200, { items: [], total: 0 })
   if (path === '/api/v1/songs/refresh-metadata') return json(res, 202, {})
   if (path === '/api/v1/songs/refresh-metadata/progress')
     return json(res, 200, { status: 'idle', total: 0, processed: 0, failed: 0 })

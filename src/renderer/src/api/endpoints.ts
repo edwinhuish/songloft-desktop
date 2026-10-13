@@ -12,6 +12,8 @@ import type {
   CleanResult,
   DirectoryListResponse,
   DuplicatesResult,
+  FailedFingerprint,
+  FingerprintProgress,
   FingerprintStatus,
   FolderListResponse,
   LibraryStats,
@@ -517,9 +519,48 @@ export function getFingerprintStatus(client: ApiClient): Promise<FingerprintStat
   return client.request<FingerprintStatus>('/scan/fingerprints/status')
 }
 
-/** 触发指纹计算。`all=true` 时连失败过的也重算。 */
-export function computeFingerprints(client: ApiClient, all = false): Promise<void> {
-  return client.request<void>('/scan/fingerprints', { method: 'POST', body: { all } })
+export function getFingerprintProgress(client: ApiClient): Promise<FingerprintProgress> {
+  return client
+    .request<Partial<FingerprintProgress>>('/scan/fingerprints/progress')
+    .then((res) => ({
+      status: res.status ?? 'idle',
+      computed: res.computed ?? 0,
+      total: res.total ?? 0,
+      failed: res.failed ?? 0
+    }))
+}
+
+/**
+ * 触发批量指纹计算（异步，进度走 `getFingerprintProgress`）。
+ *
+ * 两个开关的含义（后端注释原文的口径）：
+ *   * `recomputeAll`：**清空已有指纹**全部重算；
+ *   * `retryFailed`：只重置失败项的「已尝试」标记后重试，已算好的保留。
+ * 两个都传时 `recomputeAll` 优先；都不传 = 只算缺的那部分。
+ */
+export function computeFingerprints(
+  client: ApiClient,
+  options: { recomputeAll?: boolean; retryFailed?: boolean } = {}
+): Promise<void> {
+  return client.request<void>('/scan/fingerprints', {
+    method: 'POST',
+    body: {
+      recompute_all: options.recomputeAll ?? false,
+      retry_failed: options.retryFailed ?? false
+    }
+  })
+}
+
+/** 中断正在跑的指纹计算；已算出的指纹会保留，任务不在跑时后端返回 cancelled=false */
+export function cancelFingerprintCompute(client: ApiClient): Promise<void> {
+  return client.request<void>('/scan/fingerprints/cancel', { method: 'POST' })
+}
+
+/** 算不出指纹的歌曲 + 失败原因，给「查看失败详情」用 */
+export function getFailedFingerprints(client: ApiClient): Promise<FailedFingerprint[]> {
+  return client
+    .request<{ items?: FailedFingerprint[] }>('/scan/fingerprints/failed')
+    .then((res) => res.items ?? [])
 }
 
 /* ───────────────────────── 服务端设置（/settings/*）───────────────────────── */

@@ -1864,6 +1864,57 @@ select.input option {
   transition: width var(--dur-3) var(--ease);
 }
 
+/* ── 指纹统计 / 失败清单（重复歌曲检测面板） ───────────────────────────── */
+
+.stat-list {
+  padding: 12px 14px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-sm);
+  background: var(--surface-1);
+}
+
+.stat-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 3px 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.stat-row > .stat-value {
+  font-weight: 600;
+  color: var(--text-1);
+  /* 数字要能竖着对齐，否则四行读数参差不齐 */
+  font-variant-numeric: tabular-nums;
+}
+
+.fail-list {
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-sm);
+}
+
+.fail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-1);
+}
+
+.fail-item:last-child {
+  border-bottom: none;
+}
+
+.fail-item-reason {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--danger);
+}
+
 /* ── 设置项里的下拉选框（SettingSelect） ───────────────────────────────── */
 
 /*
