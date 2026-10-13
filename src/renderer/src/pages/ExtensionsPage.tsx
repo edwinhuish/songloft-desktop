@@ -500,6 +500,8 @@ function ExtensionRow({
 }: ExtensionRowProps): React.JSX.Element {
   const name = pluginDisplayName(plugin)
   const enabled = plugin.status === 'active'
+  // 版本号不在这里（它挪到名字右边当标签了），所以这一行只剩作者与说明，可能整个是空的
+  const meta = [plugin.author, plugin.description].filter(Boolean).join(' · ')
   const menuRef = useRef<HTMLButtonElement>(null)
   // 只为把 aria-expanded 说准：读宿主的真实状态，不另存一份「我开着」（与标题栏那两颗一致）
   const menuOpen = useContextMenu((state) => state.open && state.anchor === menuRef.current)
@@ -583,7 +585,15 @@ function ExtensionRow({
 
       <div className="extension-info">
         <div className="extension-name">
-          {name}
+          {/* 名字长了出省略号，右侧那几枚标签一律不许被挤扁（见 .extension-name 那两条规则） */}
+          <span className="truncate">{name}</span>
+          {/*
+            版本号是一枚**灰底标签**，紧挨着名字。
+            它原先混在下面那行「作者 · 说明」里 —— 一串说明文字中间的一个版本号根本认不出来，
+            而「这一页里哪个扩展是哪个版本」正是扫列表时最要比的东西。
+            没有版本号时兜一枚「—」：凭空少一枚标签，看着像没加载出来。
+          */}
+          <span className="badge">v{plugin.version || '—'}</span>
           {plugin.status === 'error' ? (
             // 「运行异常」不是坏了：后端在指数退避重试，入口位上暂时不出现
             <span className="badge" data-tone="warning">
@@ -591,11 +601,9 @@ function ExtensionRow({
             </span>
           ) : null}
         </div>
-        <div className="extension-meta truncate">
-          {[`v${plugin.version || '—'}`, plugin.author, plugin.description]
-            .filter(Boolean)
-            .join(' · ')}
-        </div>
+        {/* 版本号搬去了名字那一行，这里只剩作者与说明；两者都没有时整行不渲染 ——
+            否则会留一道空行，把行高撑得比有说明的那些还高 */}
+        {meta ? <div className="extension-meta truncate">{meta}</div> : null}
       </div>
 
       <Switch checked={enabled} onChange={onToggle} ariaLabel={`启用 ${name}`} />

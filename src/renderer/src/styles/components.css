@@ -2386,9 +2386,21 @@ select.input option {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   font-size: 13.5px;
   font-weight: 580;
   color: var(--text-1);
+}
+
+/* 「名字 + 版本标签（可能有「运行异常」）」这一行的两条配套规则。
+   名字长了要出省略号（否则它会把右边的标签顶出去 —— 标签是这一行最要比的东西），
+   而标签一律不许被挤扁（同一行有样式与 .saved-server-title 那处）。 */
+.extension-name .truncate {
+  min-width: 0;
+}
+
+.extension-name .badge {
+  flex: none;
 }
 
 .extension-meta {
