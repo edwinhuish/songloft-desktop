@@ -28,7 +28,9 @@ import { Cover } from './primitives'
 import { TIP_ATTR, TIP_PLACE_ATTR } from './Tooltip'
 
 export function Sidebar(): React.JSX.Element {
-  const { route, navigate, sidebarCollapsed, toggleSidebar } = useUi()
+  // 读原生面的路由（不是「当前显示的那一面」）：这一栏只服务原生面，
+  // 切到扩展面时它停在哪一页不该影响这里的高亮
+  const { nativeRoute: route, navigate, sidebarCollapsed, toggleSidebar } = useUi()
   /**
    * 折叠态只剩图标，名字改由全局浮层交代（见 Tooltip.tsx：浮层必须渲染到滚动容器之外，
    * 否则会被歌单列表的 overflow 剪掉）；展开态文字就摆在那儿，**什么都不挂**。

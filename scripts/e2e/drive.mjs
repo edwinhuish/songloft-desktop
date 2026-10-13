@@ -149,17 +149,22 @@ window.__t = {
    * 会**先于** justify-content 分配自由空间 —— 哪怕它的宽度已经缩到 0，也能把整行
    * 余量吃光，让 justify-content:center 形同虚设，歌单封面于是贴到左边缘。
    * 这种偏差在截图里几乎看不出来（所见即"它就在那儿"），只有量出来才知道。
+   *
+   * ⚠️ 选择器一律限定在 .surface-native 里：标题栏以下的那一块有两种形态
+   *    （原生面 / 扩展面），两面**都在 DOM 里**（只有一面可见），而扩展面里也有一个
+   *    用同一套 class 的侧栏。不限定的话这里会拿原生面那个侧栏的中心去量扩展面的图标，
+   *    得到一个恒定的几十 px —— 断言看着"红了"，其实什么都没测到。
    */
   offCenter: () => {
-    const side = document.querySelector('.sidebar');
+    const side = document.querySelector('.surface-native .sidebar');
     if (!side) return -1;
     const sr = side.getBoundingClientRect();
     const cs = getComputedStyle(side);
     const left = sr.left + parseFloat(cs.paddingLeft);
     const right = sr.right - parseFloat(cs.paddingRight);
     const mid = (left + right) / 2;
-    const covers = [...document.querySelectorAll('.nav-cover')];
-    const icons = [...document.querySelectorAll('.nav-item svg')];
+    const covers = [...document.querySelectorAll('.surface-native .nav-cover')];
+    const icons = [...document.querySelectorAll('.surface-native .nav-item svg')];
     return covers.concat(icons).reduce((max, el) => {
       const r = el.getBoundingClientRect();
       return Math.max(max, Math.abs((r.left + r.right) / 2 - mid));

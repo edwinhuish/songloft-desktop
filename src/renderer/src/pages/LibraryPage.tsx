@@ -49,7 +49,8 @@ const TYPE_OPTIONS: { value: SongType | 'all'; label: string }[] = [
 const BROWSE_FIELDS: FacetField[] = ['artist', 'album', 'genre', 'language', 'style']
 
 export function LibraryPage(): React.JSX.Element {
-  const route = useUi((s) => s.route)
+  // 「曲库 / 文件夹」这两个标签的选中态看的是**原生面**的路由（本页只长在原生面上）
+  const route = useUi((s) => s.nativeRoute)
   const navigate = useUi((s) => s.navigate)
 
   return (

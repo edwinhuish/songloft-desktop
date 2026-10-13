@@ -6,9 +6,13 @@
  *   ├ 侧栏 │ 工具条 + 主滚动区 │ 右侧抽屉
  *   └ 播放条
  *
- * ★ 标题栏以下是**一个可替换的内容面**：原生页（上面那三层）或者扩展主框架（左右分栏，
- *   左是扩展侧栏、右是插件商店/插件管理/某个扩展）。切换靠 `.shell[data-surface]`，
- *   见下面 Shell 里的分支 —— 扩展不是一个页签，而是一整块去处。
+ * ★ 标题栏以下是**一个可替换的内容面**，两种形态：原生页（上面那三层）或者扩展主框架
+ *   （左右分栏，左是扩展侧栏、右是插件商店/插件管理/某个扩展）。扩展不是一个页签，
+ *   而是一整块去处 —— 所以它不是主内容区里的一页。
+ *
+ *   两面**都挂着，只藏不走**（`.surface[data-hidden]`）：切过去再切回来，每一面都还是
+ *   离开时的样子（滚动位置、已加载的列表、商店筛到第几页、正在出声的扩展）。
+ *   各面停在哪儿由 `useUi` 的两份路由分别记着，见那里的说明。
  *
  * 三件「只该发生一次」的接线也放在这里：
  *   1. 全局快捷键（空格/方向键/Ctrl+K…）
@@ -17,7 +21,7 @@
  * 用模块级的 started 标志兜住，避免 HMR 或多次挂载把它们接两遍。
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { MediaCommand } from '@shared/ipc'
 import { isNewerVersion } from '@shared/version'
@@ -55,7 +59,7 @@ import { usePlaylists } from './state/usePlaylists'
 import { usePlugins } from './state/usePlugins'
 import { useSettings, watchSystemTheme } from './state/useSettings'
 import { toast } from './state/useToasts'
-import { routeFromPath, useUi, type Route } from './state/useUi'
+import { routeFromPath, useUi, type NativeRoute } from './state/useUi'
 
 let bootstrapped = false
 
@@ -279,16 +283,29 @@ function Shell(): React.JSX.Element {
   // 窄窗口自动收成图标条。只动界面状态，不覆盖用户保存的偏好。
   useResponsiveSidebar()
 
-  const route = useUi((s) => s.route)
+  const surface = useUi((s) => s.surface)
+  const route = useUi((s) => s.nativeRoute)
   const panelOpen = useUi((s) => s.panelOpen)
   const sidebarCollapsed = useUi((s) => s.sidebarCollapsed)
 
-  // 扩展的三条路由（插件商店 / 插件管理 / 某个扩展）都走同一个框架，所以只看「在不在扩展里」。
-  // 它要占满标题栏以下整块：左侧是扩展自己的侧栏，右侧那一栏再被主侧栏与播放条挤掉一大截就
-  // 什么都不剩了。
-  const inExtensions = route.name === 'extensions' || route.name === 'plugin'
-  const surface = inExtensions ? 'extensions' : 'native'
-  const content = useMemo(() => (surfacedInShell(route) ? renderRoute(route) : null), [route])
+  /**
+   * 扩展面**第一次**被打开过没有（之后就一直挂着，见下面那段说明）。
+   *
+   * 为什么要这一道：没人打开过它的时候，挂上它只会在开机时白发几个请求（拉订阅源、
+   * 刷新商店 —— 后者还可能要服务端去访问远端源）。所以等第一次真要用它再挂，
+   * 从第一次之后就不再卸载了。
+   */
+  const [extensionsVisited, setExtensionsVisited] = useState(surface === 'extensions')
+  useEffect(() => {
+    if (surface === 'extensions') setExtensionsVisited(true)
+  }, [surface])
+  /**
+   * 这一帧要不要挂上扩展面。
+   *
+   * 不能只看 `extensionsVisited`：它在 effect 里才置位，直接用它会让「第一次切过去」的
+   * 那一帧**整块内容区是空的**。把当前这一面也算进来，第一次就是当场挂上。
+   */
+  const mountExtensions = extensionsVisited || surface === 'extensions'
 
   return (
     <div className="shell" data-surface={surface}>
@@ -296,39 +313,48 @@ function Shell(): React.JSX.Element {
 
       {/*
         标题栏以下是**一个可替换的内容面**，两种形态：
-          * extensions —— 扩展主框架（左扩展侧栏 + 右内容面）；
-          * native     —— 侧栏 + 工具条 + 主区 + 抽屉 + 播放条。
-        前者整体不挂载原生那一套（而不是藏起来）：它要拿到完整的窗口高度，留着侧栏/
-        播放条的 DOM 只是白占布局。宿主播放不会因此中断 —— 音频是模块级对象、不挂在
-        DOM 上（见 state/usePlayer 的 audio）；扩展自己的 webview 则在框架内常驻。
+          * native     —— 侧栏 + 工具条 + 主区 + 抽屉 + 播放条；
+          * extensions —— 扩展主框架（左扩展侧栏 + 右内容面）。
+
+        ★ 两面**都挂在 DOM 里**，只把不走的那一面藏起来（`.surface[data-hidden]`，用
+          visibility 而不是 display —— 见 base.css 那段说明）。这样来回切时每一面都还是
+          离开时的样子：原生面的滚动位置与已加载的列表、扩展面在商店的第几页、正在出声的
+          那个扩展。反过来（谁走就卸载谁）会把这些全丢掉，而它们正是「记住状态」的全部内容。
+          扩展面是**第一次打开之后**才挂上的（`extensionsVisited`），免得没人用它也白跑请求。
+
+        两面各有一套自己的栅格：原生面是「上半 shell-body / 下半播放条」，扩展面整块交给
+        框架（它自己再分左右两栏）。所以下面这两块的布局互不相干。
       */}
-      {inExtensions ? (
-        <ExtensionFrame />
-      ) : (
-        <>
-          <div
-            className="shell-body"
-            data-panel={panelOpen ? 'open' : 'closed'}
-            data-sidebar={sidebarCollapsed ? 'collapsed' : 'expanded'}
-          >
-            <Sidebar />
+      <div className="surface surface-native" data-hidden={surface !== 'native'}>
+        <div
+          className="shell-body"
+          data-panel={panelOpen ? 'open' : 'closed'}
+          data-sidebar={sidebarCollapsed ? 'collapsed' : 'expanded'}
+        >
+          <Sidebar />
 
-            <div className="main-column">
-              <Toolbar />
-              {/* key 只跟路由走。页签切换只影响右边抽屉，把 panelTab 也算进来的话，
-                  切一次页签主内容区就整体卸载重建一次 —— 列表和封面全被冲掉，
-                  看上去就是「左边闪一下」 */}
-              <div className="main-scroll" key={route.name}>
-                {content}
-              </div>
+          <div className="main-column">
+            <Toolbar />
+            {/* key 只跟路由走。页签切换只影响右边抽屉，把 panelTab 也算进来的话，
+                切一次页签主内容区就整体卸载重建一次 —— 列表和封面全被冲掉，
+                看上去就是「左边闪一下」 */}
+            <div className="main-scroll" key={route.name}>
+              {renderRoute(route)}
             </div>
-
-            <Panel />
           </div>
 
-          <PlayerBar />
-        </>
-      )}
+          <Panel />
+        </div>
+
+        <PlayerBar />
+      </div>
+
+      {/* 第一次打开过之后就一直挂着（见上面 mountExtensions 的说明） */}
+      {mountExtensions ? (
+        <div className="surface surface-extensions" data-hidden={surface !== 'extensions'}>
+          <ExtensionFrame />
+        </div>
+      ) : null}
 
       <CommandPalette />
       <AddToPlaylistDialog />
@@ -339,13 +365,8 @@ function Shell(): React.JSX.Element {
   )
 }
 
-/** 这个路由是不是走常规外壳（侧栏/工具条/播放条那一套）的那一档 */
-function surfacedInShell(route: Route): boolean {
-  return route.name !== 'plugin' && route.name !== 'extensions'
-}
-
 function Toolbar(): React.JSX.Element {
-  const route = useUi((s) => s.route)
+  const route = useUi((s) => s.nativeRoute)
   const navigate = useUi((s) => s.navigate)
   const setPaletteOpen = useUi((s) => s.setPaletteOpen)
   const [draft, setDraft] = useState('')
@@ -399,7 +420,14 @@ function Toolbar(): React.JSX.Element {
   )
 }
 
-function renderRoute(route: Route): React.JSX.Element {
+/**
+ * 原生面的页面。
+ *
+ * 扩展那两条路由（`extensions` / `plugin`）**刻意不在这里** —— 它们不走主内容区，而是把
+ * 标题栏以下整块换成扩展主框架（见 Shell 里那两块 `.surface`）。所以入参是 `NativeRoute`：
+ * 哪天有人把扩展路由塞进来，类型检查会先拦住，而不是渲染出一块空白。
+ */
+function renderRoute(route: NativeRoute): React.JSX.Element {
   switch (route.name) {
     case 'home':
       return <HomePage />
@@ -419,8 +447,7 @@ function renderRoute(route: Route): React.JSX.Element {
       return <PlaylistDetailPage playlistId={route.id} />
     case 'settings':
       return <SettingsPage section={route.section} />
-    // 'plugin' 与 'extensions' 刻意没有分支：它们不走主内容区，而是把标题栏以下整块
-    // 换成自己的内容面（见上面 Shell 里的 data-surface 分支与 surfacedInShell）
+    // NativeRoute 在上面已经穷举完了，这一条只是让「将来漏了一条」不会变成白屏
     default:
       return <HomePage />
   }

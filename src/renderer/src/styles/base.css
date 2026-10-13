@@ -90,7 +90,8 @@ a {
 
 .shell {
   display: grid;
-  grid-template-rows: var(--titlebar-h) minmax(0, 1fr) auto;
+  /* 标题栏 + 内容面。内容面下面还有什么（播放条）由**面自己**决定 —— 两面是两套布局 */
+  grid-template-rows: var(--titlebar-h) minmax(0, 1fr);
   height: 100%;
   /* 主题光晕：随封面主色变化的极淡背景，让界面不呆板 */
   background:
@@ -134,12 +135,41 @@ a {
   --sidebar-current: var(--sidebar-w-collapsed);
 }
 
-/* ───────────────────────── 扩展承载面 ───────────────────────── */
+/* ───────────────────────── 两个内容面 ───────────────────────── */
 
-/* 扩展主框架只剩两行：标题栏 + 内容面。播放条此时被整块框架取代 —— 宿主播放不会因此
-   中断，音频是模块级对象、不挂在 DOM 上（见 state/usePlayer 的 audio）。 */
-.shell[data-surface='extensions'] {
-  grid-template-rows: var(--titlebar-h) minmax(0, 1fr);
+/* 标题栏以下的那一整块，两种形态：
+     * .surface-native     —— 侧栏 + 工具条 + 主区 + 抽屉，底下一行播放条；
+     * .surface-extensions —— 扩展主框架（它自己再分左右两栏）。
+
+   ★ 两面**同时挂在 DOM 里**（叠在同一个格子里），不走的那一面只是被藏起来。这样在两面
+     之间来回切时，每一面都还是离开时的样子：滚动位置、已加载的列表、商店筛到第几页、
+     正在出声的那个扩展。反过来（谁走就卸载谁）会把这些全部丢掉 —— 而「记住状态」
+     要保的正是这些。
+
+   ★ 藏法用 `visibility: hidden` 而**不是** `display: none`：后者会让那一面失去布局，
+     滚动位置与 guest 的渲染都不再有保证；前者只让它不画、不收事件，布局照旧。
+     代价是两面一起参与布局（各算一次），换来的是「切回原处」这件事变得毫无机关。 */
+.surface {
+  grid-area: 2 / 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.surface[data-hidden='true'] {
+  visibility: hidden;
+  /* 不可见的那一面不许再收事件：它虽然不画，但布局还在 */
+  pointer-events: none;
+}
+
+/* 原生面：上半是「侧栏 + 主区 + 抽屉」，下半是播放条 */
+.surface-native {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+/* 扩展面：整块交给框架 */
+.surface-extensions {
+  display: grid;
 }
 
 /* 扩展主框架：左扩展侧栏、右内容面。

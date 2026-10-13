@@ -3,6 +3,12 @@
  *
  * 只有十来条路由，用不着引 react-router：一个受 discriminated union 约束的
  * `Route` 比字符串路径更难写错（拼错的 path 在编译期就挂，而不是运行时白屏）。
+ *
+ * ★ **两面各有各的路由**（`nativeRoute` / `extensionRoute`），不是共用一份。
+ *   标题栏以下那一整块有两种形态（见 App 的 Shell）：原生面（侧栏 + 主区 + 抽屉 + 播放条）
+ *   与扩展面（扩展主框架）。用户在两面之间来回切时，每一面都该还是他离开时的样子 ——
+ *   原生面停在哪个页面、扩展面是在商店还是在某个扩展里。共用一份路由必然二选一：
+ *   切过去就等于把另一份覆盖掉，「记住之前的状态」从根上做不到。
  */
 
 import { create } from 'zustand'
@@ -18,10 +24,25 @@ export type SettingsSection =
   | 'shortcuts'
   | 'about'
 
+/** 标题栏以下那一整块显示哪一面 */
+export type Surface = 'native' | 'extensions'
+
 /** 扩展主框架里的两条固定入口 */
 export type ExtensionPane = 'store' | 'manage'
 
-export type Route =
+/** 扩展那一面的路由：框架右侧内容面显示什么 */
+export type ExtensionRoute =
+  | { name: 'extensions'; pane: ExtensionPane }
+  /**
+   * 「某个扩展」那一页：框架不变，只是右侧内容面换成一个 webview。
+   *
+   * 与上面那条分开而不是合成一条 `{name:'extensions', view: …}`：两者的侧边栏高亮与
+   * 语义都不一样，合成一条会让那一堆判断挤在同一个 switch 里。
+   */
+  | { name: 'plugin'; entryPath: string }
+
+/** 原生那一面（侧栏 + 工具条 + 主区 + 抽屉 + 播放条）的路由 */
+export type NativeRoute =
   | { name: 'home' }
   | { name: 'library' }
   | { name: 'favorites' }
@@ -31,27 +52,25 @@ export type Route =
   | { name: 'playlist'; id: number }
   | { name: 'folders'; path: string }
   | { name: 'settings'; section: SettingsSection }
-  /**
-   * 扩展主框架的「固定入口」那一页（插件商店 / 插件管理）。
-   *
-   * 它不是主内容区里的一个页签，而是把标题栏以下整块换成 ExtensionFrame ——
-   * 见 App 里 `.shell[data-surface='extensions']` 的分支。所以它在 Route 里，
-   * 但不在 renderRoute 的 switch 里。
-   */
-  | { name: 'extensions'; pane: ExtensionPane }
-  /**
-   * 扩展主框架的「某个扩展」那一页：框架不变，只是右侧内容面换成一个 webview。
-   *
-   * 与上面那条分开而不是合成一条 `{name:'extensions', view: …}`：两者的侧边栏高亮、
-   * 历史语义都不一样，合成一条会让那一堆判断挤在同一个 switch 里。
-   */
-  | { name: 'plugin'; entryPath: string }
+
+/** 跳转目标的并集：写进哪一份由它的 `name` 决定（见 navigate） */
+export type Route = NativeRoute | ExtensionRoute
+
+/** 这个目标属于扩展那一面吗（navigate 靠它决定写哪份路由、切哪一面） */
+export function isExtensionRoute(route: Route): route is ExtensionRoute {
+  return route.name === 'extensions' || route.name === 'plugin'
+}
 
 export type PanelTab = 'now-playing' | 'queue'
 
 interface UiState {
-  route: Route
-  history: Route[]
+  surface: Surface
+  /** 原生那一面停在哪儿。切去扩展面时**不动它** —— 切回来就是离开时的样子 */
+  nativeRoute: NativeRoute
+  /** 扩展那一面停在哪儿（含「上次在看哪个扩展」）。同一份理由 */
+  extensionRoute: ExtensionRoute
+  /** 只记原生面的足迹：Alt+← 是「上一页」，不该退回扩展面里去 */
+  history: NativeRoute[]
   /** 右侧抽屉是否展开 */
   panelOpen: boolean
   panelTab: PanelTab
@@ -70,15 +89,15 @@ interface UiState {
   selection: number[]
   /** 播放列表选中态锚点（Shift 连选用） */
   selectionAnchor: number | null
-  /**
-   * 上一次停留在扩展主框架的哪一栏（插件商店 / 插件管理）。
-   *
-   * 标题栏那个「扩展」入口靠它决定进去落哪一栏 —— 每次都踢回商店的话，用户在管理页
-   * 改到一半去播放页看一眼再回来，就得重新点一次。
-   */
-  extensionPane: ExtensionPane
 
   navigate: (route: Route) => void
+  /**
+   * 只换面，两份路由都不动。
+   *
+   * 标题栏那两个入口的主点击用它（Songloft / 扩展）——「回到那一面」而不是「回到某一页」，
+   * 所以那里必须是这一条而不是 `navigate`。
+   */
+  showSurface: (surface: Surface) => void
   back: () => void
   setPanelOpen: (open: boolean) => void
   togglePanel: (tab?: PanelTab) => void
@@ -96,8 +115,12 @@ interface UiState {
 
 const MAX_HISTORY = 40
 
+const sameRoute = (a: Route, b: Route): boolean => JSON.stringify(a) === JSON.stringify(b)
+
 export const useUi = create<UiState>((set, get) => ({
-  route: { name: 'home' },
+  surface: 'native',
+  nativeRoute: { name: 'home' },
+  extensionRoute: { name: 'extensions', pane: 'store' },
   history: [],
   panelOpen: false,
   panelTab: 'now-playing',
@@ -107,26 +130,52 @@ export const useUi = create<UiState>((set, get) => ({
   addToPlaylistTarget: null,
   selection: [],
   selectionAnchor: null,
-  extensionPane: 'store',
 
   navigate: (route) => {
-    const current = get().route
-    // 同一条路由重复点（比如连点侧栏「曲库」）不该往历史里堆垃圾
-    if (JSON.stringify(current) === JSON.stringify(route)) return
-    set((state) => ({
-      route,
-      history: [current, ...state.history].slice(0, MAX_HISTORY),
+    const state = get()
+
+    if (isExtensionRoute(route)) {
+      // 同一条路由重复点（比如连点侧栏的「插件商店」）不该白跑一趟
+      if (state.surface === 'extensions' && sameRoute(state.extensionRoute, route)) return
+      set({ surface: 'extensions', extensionRoute: route, selection: [], selectionAnchor: null })
+      return
+    }
+
+    const unchanged = sameRoute(state.nativeRoute, route)
+    if (state.surface === 'native' && unchanged) return
+    set({
+      surface: 'native',
+      nativeRoute: route,
+      /**
+       * 从扩展面点回原生页**不算新的一步**：Alt+← 该退回「原生面自己的上一页」，
+       * 而不是被来回切换的两面塞满历史。
+       */
+      history:
+        state.surface === 'native' && !unchanged
+          ? [state.nativeRoute, ...state.history].slice(0, MAX_HISTORY)
+          : state.history,
       selection: [],
-      selectionAnchor: null,
-      // 只在这一栏真的被打开时才更新，别让「去某个扩展」把它顺手改了
-      extensionPane: route.name === 'extensions' ? route.pane : state.extensionPane
-    }))
+      selectionAnchor: null
+    })
+  },
+
+  // 只换脸。这就是「切回来还是离开时的样子」的全部实现 —— 没有别的机关
+  showSurface: (surface) => {
+    if (get().surface === surface) return
+    set({ surface })
   },
 
   back: () => {
     const [prev, ...rest] = get().history
     if (!prev) return
-    set({ route: prev, history: rest, selection: [], selectionAnchor: null })
+    // 后退只发生在原生面内部，所以顺带切回原生面
+    set({
+      surface: 'native',
+      nativeRoute: prev,
+      history: rest,
+      selection: [],
+      selectionAnchor: null
+    })
   },
 
   setPanelOpen: (open) => set({ panelOpen: open }),
@@ -151,8 +200,8 @@ export const useUi = create<UiState>((set, get) => ({
   clearSelection: () => set({ selection: [], selectionAnchor: null })
 }))
 
-/** 把主进程菜单发来的路径字符串映射为 Route */
-export function routeFromPath(path: string): Route | null {
+/** 把主进程菜单发来的路径字符串映射为 Route（只会是原生面那几条） */
+export function routeFromPath(path: string): NativeRoute | null {
   if (path === '/settings' || path.startsWith('/settings/')) {
     const section = path.split('/')[2]
     return {

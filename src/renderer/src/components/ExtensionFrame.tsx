@@ -13,6 +13,10 @@
  *   「活着的 = 当前显示的那个 ∪ 正在播放的那些」，框架把它整块卸掉等于把那条不变量作废。
  *   代价是它必须容忍 entryPath 为空（= 没有要看的那一个，只保活），见那个组件的说明。
  *
+ * ★ 整块框架也**从不卸载**：切到原生面（Songloft）只是把它藏起来（见 App 的 Shell 与
+ *   base.css 里 `.surface[data-hidden]`）。所以「上次在看哪个扩展」不必单独记 ——
+ *   `useUi.extensionRoute` 在切走时根本没人动它，切回来就是那一页。
+ *
  * 侧栏刻意**复用主导航那一套 class**（.sidebar / .nav-item / .sidebar-playlists /
  * .sidebar-foot）：折叠时的居中、文字淡出、强调条、滚动区让位这些行为都已经在那边调好了，
  * 这里再写一份必然与那边慢慢漂开 —— 两个侧栏宽度相同、折叠动效相同，本来就是一回事。
@@ -31,7 +35,9 @@ import { useSettings } from '@/state/useSettings'
 import { useUi, type ExtensionPane } from '@/state/useUi'
 
 export function ExtensionFrame(): React.JSX.Element {
-  const route = useUi((state) => state.route)
+  // 读扩展面的路由：它是这一面自己的记忆，切到原生面去的时候**不动它**，
+  // 所以切回来还是这一页（正是「记住上一页」的全部来源）
+  const route = useUi((state) => state.extensionRoute)
   const collapsed = useSettings((state) => state.settings.extensionSidebarCollapsed)
 
   // 「某个扩展」那一页与「固定入口」那一页共用这个框架，只有右侧内容面不同

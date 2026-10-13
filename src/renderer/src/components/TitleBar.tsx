@@ -14,8 +14,11 @@
  *
  * 布局：`[Songloft ▾][🧩 扩展 ▾] ⟪拖拽区⟫ [搜索][窗口控制]`。
  * 左起是两处**去处**，各自是一颗**拆分按钮**（左半执行主操作、右半那颗小三角开下拉）：
- *   * Songloft —— 左半回播放页，右半是原来的「折叠菜单」（导航项，去掉扩展）；
- *   * 扩展     —— 左半进扩展主框架，右半列出所有已开启的扩展（每项挂着对它的操作）。
+ *   * Songloft —— 左半回到原生面（**停在离开时那一页**，不是回首页；回首页请看右半那份菜单），
+ *                 右半是原来的「折叠菜单」（导航项，去掉扩展）；
+ *   * 扩展     —— 左半回到扩展面（上次在商店就在商店、上次在某个扩展里就还是它），
+ *                 右半列出所有已开启的扩展（每项挂着对它的操作）。
+ * 两半都是 `showSurface` 而不是 `navigate`：只换面、不动两份路由 —— 这正是「切回原处」。
  * 为什么拆成两颗而不是留一颗「折叠菜单」：菜单里原来那两项（扩展 / 设置）本来就不是一类 ——
  * 前者是**一整个工作台**（装了还得管），后者是去改配置；把它们并排放在标题栏上，
  * 「去哪儿」就不必先展开一层菜单了。
@@ -62,8 +65,8 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   const [state, setState] = useState({ maximized: false, fullscreen: false, focused: true })
   const setPaletteOpen = useUi((s) => s.setPaletteOpen)
   const navigate = useUi((s) => s.navigate)
-  const route = useUi((s) => s.route)
-  const extensionPane = useUi((s) => s.extensionPane)
+  const showSurface = useUi((s) => s.showSurface)
+  const surface = useUi((s) => s.surface)
   const playlists = usePlaylists((s) => s.playlists)
   // 与侧栏「我的歌单」用同一个过滤器，两处名单不会各自漂移
   const myPlaylists = regularPlaylists(playlists)
@@ -83,8 +86,9 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   const songloftOpen = useContextMenu((s) => s.open && s.anchor === songloftMenuRef.current)
   const extensionOpen = useContextMenu((s) => s.open && s.anchor === extensionMenuRef.current)
 
-  // 插件商店 / 插件管理 / 某个扩展——三者都算「在扩展里」，入口据此高亮
-  const inExtensions = route.name === 'extensions' || route.name === 'plugin'
+  // 「扩展」入口据此高亮。看的是**面**而不是路由：插件商店 / 插件管理 / 某个扩展三者
+  // 都落在扩展面上，而它们各自的最后位置由那一面自己的路由记着
+  const inExtensions = surface === 'extensions'
 
   useEffect(() => {
     void window.songloft.window.getState().then(setState)
@@ -259,12 +263,14 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
             它落在拖拽区里，靠 base.css 的 `.titlebar button { -webkit-app-region: no-drag }`
             才点得动。 */}
         <div className="titlebar-split" data-open={songloftOpen ? 'true' : undefined}>
+          {/* 左半是「回到 Songloft 那一面」而不是「回首页」：那一面停在哪儿就回哪儿，
+              否则从扩展面点回来会把用户正在看的那一页冲掉（回首页请走右边那份菜单） */}
           <button
             type="button"
             className="titlebar-home"
-            data-tip="回到播放页"
-            aria-label="回到播放页"
-            onClick={() => navigate({ name: 'home' })}
+            data-tip="回到上次的页面"
+            aria-label="回到上次的页面"
+            onClick={() => showSurface('native')}
           >
             <img
               src="./icon.png"
@@ -304,12 +310,13 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
           data-active={inExtensions ? 'true' : undefined}
           data-open={extensionOpen ? 'true' : undefined}
         >
+          {/* 左半同理：回到扩展那一面（上次在商店就在商店、上次在某个扩展里就还是它） */}
           <button
             type="button"
             className="titlebar-entry"
             aria-label="扩展"
             aria-current={inExtensions ? 'page' : undefined}
-            onClick={() => navigate({ name: 'extensions', pane: extensionPane })}
+            onClick={() => showSurface('extensions')}
           >
             <IconPuzzle size={16} />
             <span className="titlebar-entry-text">扩展</span>
