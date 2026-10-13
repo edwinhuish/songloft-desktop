@@ -932,14 +932,15 @@
  * 与标题栏（.titlebar 的 -webkit-app-region）同一套做法。
  */
 .mini-bar {
-  /* 这一行上控件的高度。不只是它们自己的尺寸 —— 上、下两条角上的缝各有多高也由它推出
-     （见 .mini-window-actions 与 .mini-time），所以提成变量，避免三处各写一份。 */
+  /* 这一行上控件的高度。不只是它们自己的尺寸 —— 右上角那组窗口钮的**高度上限**也由它推出
+     （见 .mini-window-actions），所以提成变量，避免两处各写一份。 */
   --mini-ctl-h: 30px;
   position: relative;
   display: flex;
   align-items: center;
-  /* 6px / 右边 10px 而不是常规那 10 与 12：这一条横排要放下 7 件东西（封面 / 歌名 /
-     三颗传输键 / 歌词 / 队列），而窗口只有 400px 宽 —— 间距与内边距是唯一不牺牲可读性的余量。
+  /* 6px / 右边 10px 而不是常规那 10 与 12：这一条横排要放下 8 件东西（封面 / 歌名含时长 /
+     三颗传输键 / 分隔线 / 歌词 / 队列），而窗口只有 400px 宽 —— 间距与内边距是唯一不牺牲
+     可读性的余量。
      ★ 左内边距是 0：左边那一格是**贴到窗口左缘**的全高封面（见下），它自己就是边缘；
        有内边距反而要从它身上再抠掉一层。 */
   gap: 6px;
@@ -1039,9 +1040,12 @@
   border-radius: 4px;
 }
 
-/* 歌名/歌手两行。★ 行距压到 1.3：继承 body 那 1.5 时这两行加起来 38px，比条里那行控件
-   （30px）还高，多出来的半行正好探进下方时长那条缝里 —— 字与字之间只剩零点几 px。
-   压一档（33px）后两头各留出几 px，条里也顺带紧凑些。 */
+/*
+ * 封面右边那两行：第一行「歌名 - 歌手」，第二行「播放时间/总时长」。
+ *
+ * ★ 行距压到 1.3：两行加起来继承 body 那 1.5 是 38px，比条里那行控件（30px）还高，
+ *   两头就没余量了。压一档（约 32px）后上下各留十几 px，条里也顺带紧凑些。
+ */
 .mini-info {
   min-width: 0;
   flex: 1;
@@ -1049,31 +1053,46 @@
 }
 
 /*
- * 时长落在**控件行下方那条缝的正中**（横向居中）。
- * ★ 绝对定位、不参与那一行的排布：它原来夹在歌名与传输键之间，一占就是 70 多 px
- *   （「1:23 / 4:56」这种窄体字也不短），那一截现在整个归歌名 —— 这一条本来就只有 400px，
- *   这点差别就是「歌名看得见」与「只剩省略号」的差别。
- * ★ 放它的地方是控件行**下方**那条本来就空着的缝 —— 控件在 64px 高的条里垂直居中，
- *   下方空出的高度与上方一样，只是最底下还压着 3px 的进度线，所以从那条算式里再减 3px。
- *   写成算式而不是写死像素，理由与右上角那组同：改条高或改控件尺寸时它会自己跟上，
- *   写死就会悄悄叠到进度线或按钮上。
- * ★ 横向用 left/right: 0 + flex 居中，而不是「右对齐再算边距」：居中不依赖任何边距，
- *   条的两侧内边距怎么改它都还在中间。垂直靠 align-items 居中，字不必自己数行高。
+ * 第一行：放不下就来回滚动。滚不滚由 ScrollingLine 量出来后挂 data-scroll（见 MiniPlayer.tsx），
+ * 位移与时长也由它算成两个 CSS 变量 —— 动画本身留在这里，别把 keyframes 搬进 JS。
+ *
+ * ★ 外层 overflow: hidden 是那扇「窗」；内层必须 width: max-content，否则它会被这扇窗剪窄，
+ *   量出来的溢出永远是 0，滚动也就永远不触发（这一行就变成静默失效了）。
+ * ★ keyframes 两头各留 14% 的停顿：来回都停一下，读起来才不慌；不写停顿就是一直匀速晃。
+ */
+.mini-line {
+  overflow: hidden;
+}
+
+.mini-line-track {
+  display: inline-block;
+  white-space: nowrap;
+  width: max-content;
+}
+
+.mini-line-track[data-scroll='true'] {
+  animation: mini-line-scroll var(--mini-line-dur, 8s) linear infinite alternate;
+}
+
+@keyframes mini-line-scroll {
+  0%,
+  14% {
+    transform: translateX(0);
+  }
+  86%,
+  100% {
+    transform: translateX(var(--mini-line-shift, 0));
+  }
+}
+
+/*
+ * 第二行：播放时间/总时长。
+ * ★ 它原来绝对定位在控件行下方那条缝的正中；现在歌名与歌手合成一行、时间顺势上到这里
+ *   （见 MiniPlayer.tsx），那块缝就空着了 —— 少一处算式，也少一处会漂的地方。
+ * tabular-nums：秒数跳动时整行宽度不抖。
  */
 .mini-time {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 3px;
-  height: calc((100% - var(--mini-ctl-h)) / 2 - 3px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
   font-size: 11px;
-  /* 行高压到 1：这条缝只有 13.5px，继承 body 的 1.5（= 16.5px）会让行盒比它还高，
-     虽然居中的字形本身看不出来，但行盒一溢出就说不清「到底有没有占别处的地方」 */
-  line-height: 1;
-  white-space: nowrap;
   font-variant-numeric: tabular-nums;
   color: var(--text-4);
 }

@@ -9,11 +9,11 @@
  *   关闭）都得自己给，少一颗就是「这个窗挪不动 / 回不去 / 关不掉」。三颗照标题栏右端那一组
  *   的样子来（同用 .win-btn，只是各小一档），并排落在条的**右上角** —— 那是这个动作在桌面
  *   应用里的固定位置，两种形态下长相一致，用户不必重新找。
- * ★ 条上那一行只放播放必需的东西（封面 / 歌名 / 上一首 / 播放 / 下一首 / 歌词 / 队列）：
+ * ★ 条上那一行只放播放必需的东西（封面 / 歌名与时长 / 上一首 / 播放 / 下一首 / 歌词 / 队列）：
  *   迷你模式的意思就是把它挂在屏幕一角，不该再摆音量条、播放模式、收藏那一整套。
- *   窗口钮（右上角）与时长（右下角）因此都**不进那一行**，各自绝对定位，落在这 64px
- *   里本来就空着的两条缝里 —— 控件行垂直居中，上下各空出一条来（见 .mini-window-actions
- *   与 .mini-time）：条里那点横向余量只有歌名在吃，让谁去占一行就是把歌名挤窄。
+ *   右上角那三颗窗口钮**不进那一行**（绝对定位，落在这 64px 上方本来就空着的那条缝里，
+ *   见 .mini-window-actions）：条里那点横向余量只有歌名在吃，让三颗去占一行就是把歌名挤窄。
+ * ★ 封面右边那两行见下面 ScrollingLine 与 .mini-info：第一行「歌名 - 歌手」放不下就滚动。
  * ★ 歌词与队列**共用下方那一块面板**（见 MiniPanel）：两颗钮互斥，尺寸只跟「开没开」有关，
  *   所以换内容不闪不跳。
  * ★ 栅格的顺序是「播放条在**上**、面板在下」（DOM 顺序同此），不是反过来：窗口加高时长的是
@@ -22,7 +22,7 @@
  *   于是收起时它正好落在窗口下边缘，展开时它又正好是「播放条 / 面板」的分界线。
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   IconClose,
@@ -89,15 +89,17 @@ export function MiniPlayer(): React.JSX.Element {
         />
 
         <div className="mini-info">
-          <div className="playerbar-title truncate">{song?.title ?? '未在播放'}</div>
-          <div className="playerbar-artist truncate">
-            {song ? displayArtist(song.artist) : '从曲库选一首开始播放'}
+          {/* key 取歌曲 id：换歌要**从头**滚起（重挂一次 DOM = 动画重来），
+              不然新歌一上来就接在上一首滚到一半的位置上 */}
+          <ScrollingLine
+            key={song?.id ?? 0}
+            title={song?.title ?? '未在播放'}
+            artist={song ? displayArtist(song.artist) : ''}
+          />
+          <div className="mini-time">
+            {formatDuration(position)}/{formatDuration(duration)}
           </div>
         </div>
-
-        <span className="mini-time">
-          {formatDuration(position)} / {formatDuration(duration)}
-        </span>
 
         <button
           type="button"
@@ -215,6 +217,67 @@ export function MiniPlayer(): React.JSX.Element {
           )}
         </div>
       ) : null}
+    </div>
+  )
+}
+
+/**
+ * 「歌名 - 歌手」那一行：**放不下就来回滚动**。
+ *
+ * ★ 位移与时长由 JS 量、动画交给 CSS：滚动速度得跟着**溢出距离**走 —— 长歌名该滚得久一点、
+ *   短的三两下就该到头；写死一个 animation-duration 的结果是「短的慢得发慌、长的还没走完
+ *   就回头」。量出来的两个值写成 CSS 变量，动画本身仍在样式表里（见 .mini-line-track）。
+ * ★ 不溢出时一个 data 属性都不挂：绝大多数时候这行是静态的，常挂着 animation 只是白烧电。
+ *   prefers-reduced-motion 由 base.css 那条全局规则兜住（动画时长会被压到 0.01ms），
+ *   那种情况下它停在行首，效果与「截断显示」等价。
+ * ★ 量的是「内层真实文本宽 - 外层可视宽」：内层特意写成 width: max-content（见样式表），
+ *   所以它不会被外层剪窄，量出来的就是文本自己的宽度。
+ */
+function ScrollingLine({ title, artist }: { title: string; artist: string }): React.JSX.Element {
+  const outerRef = useRef<HTMLDivElement>(null)
+  const innerRef = useRef<HTMLSpanElement>(null)
+  /** 需要往左让出的像素：0 = 这一行放得下，不滚 */
+  const [shift, setShift] = useState(0)
+
+  useEffect(() => {
+    const outer = outerRef.current
+    const inner = innerRef.current
+    if (!outer || !inner) return
+
+    const measure = (): void => {
+      const overflow = inner.offsetWidth - outer.clientWidth
+      // 4px 以内当没溢出：为了几个像素来回蹭，比截断还难看
+      setShift(overflow > 4 ? overflow : 0)
+    }
+    measure()
+    /* 窗口宽度、字号、歌词面板开合都会改这一行的可见宽度 —— 交给 ResizeObserver，
+       不然「拉动窗口之后该滚的不滚、不该滚的一直晃」。
+       文本变了则由下面那个依赖数组负责重测（可见宽度没变，观察器不会响）。 */
+    const observer = new ResizeObserver(measure)
+    observer.observe(outer)
+    return () => observer.disconnect()
+  }, [title, artist])
+
+  return (
+    <div className="mini-line" ref={outerRef}>
+      <span
+        className="mini-line-track"
+        ref={innerRef}
+        data-scroll={shift > 0 ? 'true' : undefined}
+        style={
+          shift > 0
+            ? ({
+                // 40px/s 的观感速度；两头各停 0.8s（停顿是 keyframes 里那两段百分比给的）
+                '--mini-line-shift': `-${shift}px`,
+                '--mini-line-dur': `${(shift / 40 + 1.6).toFixed(2)}s`
+              } as React.CSSProperties)
+            : undefined
+        }
+      >
+        <span className="playerbar-title">{title}</span>
+        {/* 没在播放时没有歌手，那半截连分隔号一起不画 —— 不能留下一个孤零零的「-」 */}
+        {artist ? <span className="playerbar-artist"> - {artist}</span> : null}
+      </span>
     </div>
   )
 }
