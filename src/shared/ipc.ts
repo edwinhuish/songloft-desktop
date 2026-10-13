@@ -179,6 +179,21 @@ export interface AppSettings {
   /** 玻璃质感强度 0–100（标题栏 / 侧栏 / 右侧抽屉共用的那层「统一浓度」） */
   glassIntensity: number
   /**
+   * **整个程序**的不透明度 0–100：100 = 完全实心（默认，观感与改动前一致），0 = 整窗消失。
+   *
+   * ★ 它与上面那几项「浓度」不是一类东西，别混着看：
+   *   glassIntensity / playerOpacity / miniOpacity / lyricPanelOpacity 调的都是
+   *   「某个面**自己那层底色**」有多厚 —— 窗口本身始终是实心的，所以怎么调都**透不出桌面**，
+   *   只能透出同一窗口里它下面的一层。
+   *   要让整个客户端透出后面的桌面 / 别的窗口，只能动窗口这一层，且必须**两件事同时成立**：
+   *     1. 主进程把窗口做成透明窗口（main/windows.ts 的 `transparent`）——
+   *        否则渲染层再淡，也只是与窗口那块不透明底色混在一起，看着像「变暗」而不是「透明」；
+   *     2. 渲染层给整棵界面树一个 opacity（styles/base.css 的 body）。
+   *   ★ 这个值**只在渲染层生效**，主进程不读它：透明窗口是**恒开**的（见 windows.ts 的说明），
+   *     所以调它不需要重建窗口、也不需要重启。
+   */
+  windowOpacity: number
+  /**
    * 主播放器（底部播放条）底色不透明度 0–100：100 = 完全不透明，0 = 完全透明（只剩模糊）。
    *
    * ★ 与 glassIntensity **各管各的**，也刻意不与 miniOpacity 共用一个值：
@@ -275,6 +290,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accentFromCover: true,
   density: 'comfortable',
   glassIntensity: 62,
+  // 整窗默认实心：透明窗口只是提供可能，要不要真透由用户拧这个滑块决定
+  windowOpacity: 100,
   // 57% 正是改动前 glassIntensity=62 时那层底色的浓度 —— 默认观感与原样一致
   playerOpacity: 57,
   miniOpacity: 57,

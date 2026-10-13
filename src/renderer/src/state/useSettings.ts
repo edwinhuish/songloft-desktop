@@ -2,8 +2,8 @@
  * 桌面端偏好设置。
  *
  * 落在主进程的 config.json（经 preload 白名单读写），同时把「影响外观的几项」
- * 同步到 :root 的 CSS 变量上 —— 主题、密度、强调色、玻璃强度，以及三处底色的
- * 不透明度（主播放器 / 迷你播放器 / 歌词区域）与歌词字体颜色都靠这一步生效。
+ * 同步到 :root 的 CSS 变量上 —— 主题、密度、强调色、玻璃强度、**整窗不透明度**，
+ * 以及三处底色的不透明度（主播放器 / 迷你播放器 / 歌词区域）与歌词字体颜色都靠这一步生效。
  *
  * ▶ UI 优化的一个关键点：强调色默认跟随封面取色（accentFromCover）。
  *   播放一首歌时界面光晕与按钮颜色会平滑过渡到封面主色，这是原 Flutter 端
@@ -38,6 +38,14 @@ function applyToDocument(settings: AppSettings, coverAccent: string | null): voi
   root.style.setProperty('--accent', accent)
   root.style.setProperty('--on-accent', readableTextOn(accent))
   root.style.setProperty('--glass', String(settings.glassIntensity))
+
+  /*
+   * 整窗浓度 —— 唯一一个作用于**整个程序**的透明度：它喂给 body 的 opacity
+   * （styles/base.css），配合主进程那个透明窗口，整个客户端一起透出后面的桌面。
+   * ★ 与下面三项「某个面自己的底色」是两回事，见 shared/ipc.ts 的 windowOpacity。
+   * ★ 传 0–1 而不是百分比：它直接作为 opacity 的值使用，而 opacity 吃的是 alpha 值。
+   */
+  root.style.setProperty('--window-opacity', String(settings.windowOpacity / 100))
 
   /*
    * 三处「底色浓度」：主播放器、迷你播放器、歌词区域各一个，全部是绝对值（%）。

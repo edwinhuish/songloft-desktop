@@ -87,8 +87,29 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
     icon: loadAppIcon() ?? undefined,
     // ★ 无边框：标题栏由渲染层自绘，和播放器主题统一
     frame: false,
-    // 深色打底，避免加载期白闪（与默认主题一致）
-    backgroundColor: '#0f1016',
+    /*
+     * ★ 透明窗口。整个程序的「窗口不透明度」（AppSettings.windowOpacity）全靠它 ——
+     *   不透明的窗口里，渲染层把界面调得再淡也只是与窗口底色混在一起（看着像「变暗」），
+     *   桌面永远透不进来（见 shared/ipc.ts 里那条说明）。
+     *
+     * ★ 恒开，不按设置开关：transparent 是**创建窗口时**生效的属性，运行中改不了 ——
+     *   若跟着设置走，用户拧一次滑块就得重启应用才看得到，或者还得再做一个「重启后生效」
+     *   的提示。代价只是「窗口带 alpha 通道」这一件事本身（默认 windowOpacity=100 时
+     *   界面照旧实心，观感与改动前一致）。
+     *
+     * 两句必须成对：transparent 要求窗口底色也是透明的，否则 Chromium 会把透明像素
+     * 合成到下面那块底色上，等于没开。（原先这里是不透明的深色，用来挡加载期的白闪；
+     * 现在首帧由渲染层的 .shell 铺底，一样没有白闪。）
+     *
+     * ⚠ 平台限制（都与「窗口透明度」相关，别在这里顺手改回去）：
+     *   · Linux：要合成器（有 alpha 通道的 surface）。GNOME / KDE 默认都有；裸 WM 下
+     *     表现为不透（退回实心），不会崩。另外 Chromium 的 backdrop-filter **只能模糊
+     *     同一窗口里它下面的内容**，透明窗口不会让它去模糊桌面 —— 别指望毛玻璃看穿。
+     *   · Windows：DWM 关了会失效；老版本还有「透明窗口最大化异常」的毛病。
+     *   · macOS：与 vibrancy 互斥（本项目没用 vibrancy，无碍）。
+     */
+    transparent: true,
+    backgroundColor: '#00000000',
     show: false,
     autoHideMenuBar: true,
     webPreferences: {

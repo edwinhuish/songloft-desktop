@@ -16,18 +16,37 @@ body,
   padding: 0;
 }
 
+/*
+ * 最外面这两层**不许铺底色**。
+ *
+ * 窗口是**透明窗口**（main/windows.ts 的 transparent），整个界面的底色一律由下面 .shell
+ * 那一层画。这里只要还剩一层实心，桌面就永远透不进来 —— 而「整个程序的透明度」正是靠
+ * 这两件事一起成立的（另一半见 body 的 opacity）。
+ */
+html,
+body {
+  background: transparent;
+}
+
 body {
   font-family: var(--font-sans);
   font-size: 13.5px;
   line-height: 1.5;
   color: var(--text-1);
-  background: var(--bg-0);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   /* 桌面应用：整页不可选中（歌词、输入框单独放开） */
   user-select: none;
   cursor: default;
+  /*
+   * 整窗浓度（--window-opacity，见 tokens.css）：1 时与改动前完全一致；调低则**整个界面**
+   * （文字、封面、播放条……一个不落）一起透出后面的桌面 —— 这是「整个程序的不透明度」唯一的
+   * 落点，也正因如此它和那几处「某个面自己的底色」不是一回事（见 shared/ipc.ts）。
+   * ★ 挂在 body 上而不是 #root 上：Modal 是 portal 到 body 的（见 components/Modal.tsx），
+   *   挂在 #root 里的话对话框不跟着透，一开一关是两个浓度。
+   */
+  opacity: var(--window-opacity);
 }
 
 button,

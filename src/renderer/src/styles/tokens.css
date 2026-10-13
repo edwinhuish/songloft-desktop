@@ -93,6 +93,15 @@
   --glass-blur: calc(8px + var(--glass) * 0.28);
   --glass-tint: color-mix(in srgb, var(--bg-1) calc(100% - var(--glass) * 0.7), transparent);
 
+  /*
+   * 整窗浓度（设置里可调）：唯一一个作用于**整个程序**的不透明度 —— 配合主进程那个
+   * 透明窗口（main/windows.ts 的 transparent），整个客户端一起透出后面的桌面 / 别的窗口。
+   * 1 = 实心，也就是改动前的观感。
+   * ★ 与下面那几处「某个面自己的底色」各管各的，别把它们并成一个旋钮（见 shared/ipc.ts）。
+   * ★ 值域 0–1 而不是百分比：它直接作为 body 的 opacity 用（见 base.css）。
+   */
+  --window-opacity: 1;
+
   /* 玻璃底色的**颜色**（不含浓度）：深色取 --bg-1，浅色是纯白（见下面那段覆盖）。
      下面三个面各自定浓度，所以它们要的是颜色而不是上面那份调好的 --glass-tint。 */
   --glass-base: var(--bg-1);

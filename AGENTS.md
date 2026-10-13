@@ -464,6 +464,31 @@ query 回退分支）—— 按「像不像外链」判断会让整店退成首�
 `registry_url`）时后端**不会**去读它存的那份配置，私有源的 token 必须由调用方一起带上 ——
 漏了只会得到一句「拉取注册表失败」，完全看不出是缺 token。
 
+### 8.13 整窗透明度 = 透明窗口 + 整棵树 opacity，缺一半都只是「变暗」
+
+设置里那个「整个界面不透明度」（`AppSettings.windowOpacity`）要真的透出桌面，必须**两件事
+同时成立**：
+
+| 一半 | 在哪 | 少了它会怎样 |
+|---|---|---|
+| 窗口是**透明窗口** | `main/windows.ts` 的 `transparent: true`（恒开） | 界面再淡也只是与窗口那块底色混在一起，看着像「变暗」，桌面透不进来 |
+| 整棵界面树带 opacity | `styles/base.css` 里 `body { opacity: var(--window-opacity) }` | 窗口虽有 alpha 通道，可每一层画上去的都是实心的，全被遮住 |
+
+配套的两条：`html` / `body` **不许铺底色**（底色一律由 `.shell` 画）；这条 opacity 挂在 `body`
+而不是 `#root` 上 —— `Modal` 是 portal 到 `body` 的（见 `components/Modal.tsx`），挂在 `#root`
+里的话对话框不跟着透，一开一关是两个浓度。
+
+★ 它和 `glassIntensity` / `playerOpacity` / `miniOpacity` / `lyricPanelOpacity` **不是一类**：
+那几项调的是「某个面**自己那层底色**」有多厚，而窗口始终是实心的 —— 怎么调都只透出同一窗口
+里它下面的一层，桌面永远进不来。
+
+⚠ 透明窗口是**创建时**属性，运行中改不了 —— 所以它恒开、不跟设置开关（否则拧一次滑块就得
+重启应用）。代价是窗口一直带 alpha 通道；默认 `windowOpacity = 100` 时观感与改动前一致。
+⚠ Linux 下要有合成器（GNOME / KDE 默认都有，裸 WM 下退化成实心，不崩）。另外 Chromium 的
+`backdrop-filter` **只模糊同一窗口里它下面的内容**，别指望透明窗口能「毛玻璃看穿到桌面」
+（那是 macOS vibrancy / Windows backgroundMaterial 那种系统级能力）。扩展页是 `<webview>`，
+guest 自己的背景不透明，那块也永远透不出来。
+
 ---
 
 ## 9. 不要做
@@ -474,6 +499,8 @@ query 回退分支）—— 按「像不像外链」判断会让整店退成首�
 * 不要让应用在启动时自行往 `~/.local/share` 之类的用户目录写桌面条目 / 图标：桌面集成走
   `pnpm run desktop:install`（显式命令，§8.11）。
 * 不要给渲染层开 Node 能力，也不要为了省事把 `contextIsolation` / `sandbox` 关掉。
+* 不要让 `html` / `body` 铺底色，也别以为「给界面加一层 opacity」就够 —— 整窗透明度要
+  透明窗口与整棵树 opacity 一起成立（§8.13）。
 * 不要在渲染层把 token 拼进请求头去取封面/音频 —— 那两处只能走查询参数。
 * 不要在 DOM 元素上写 `title=` 当提示：那是浏览器自带的黑框，配色不跟主题、出现时机也不受控。
   一律写 `data-tip="…"`，由 `components/Tooltip.tsx` 的全局浮层统一显示（图标按钮仍要留
