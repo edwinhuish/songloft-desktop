@@ -202,16 +202,6 @@ export function pluginIconPath(plugin: JSPlugin): string {
 }
 
 /**
- * 是不是 SVG 图标。
- *
- * 必须按**路径**判断而不是按内容嗅探：SVG 要走 `img` 的矢量渲染，位图可以按尺寸取缩略。
- * 后端会给静态资源加 content hash 指纹（`icon.abc123.svg`），所以只能看扩展名。
- */
-export function isSvgPath(path: string): boolean {
-  return /\.svg(?:[?#]|$)/i.test(path)
-}
-
-/**
  * 没有图标时按名字派生的兜底色相（0–359）。
  *
  * 用名字而不是 id：卸载重装、或者两台设备上同一个插件，颜色应当一致。

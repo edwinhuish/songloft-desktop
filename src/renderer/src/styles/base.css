@@ -356,10 +356,78 @@ a {
   color: var(--text-1);
 }
 
-/* 中间只剩弹性空档（当前曲目已挪走，这块留给扩展入口条）。 */
-.titlebar-center {
-  flex: 1;
+/* 扩展入口条占据标题栏中段。
+   ★ `flex: 1 1 auto` 是这套溢出的关键：它吃掉所有余量，于是**它的宽度恰好就是
+     留给入口条的可用宽度**。若改成由内容撑开（flex: none），量到的会是内容宽度而不是
+     可用宽度，结果永远少数一个 —— 明明还有余量，第二个却放不进去。
+   右对齐让按钮紧贴折叠菜单，视觉上「入口 + 它的溢出菜单」是一组。 */
+.titlebar-extensions {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
   min-width: 0;
+  overflow: hidden;
+}
+
+/* 尺寸必须与 ExtensionStrip.tsx 里的 BUTTON_WIDTH / BUTTON_GAP 保持一致 ——
+   溢出个数是按它们算出来的（那一处注释解释了为什么不改成量出来的）。 */
+.titlebar-ext {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+
+.titlebar-ext:hover {
+  background: var(--surface-2);
+}
+
+.titlebar-ext[data-active='true'] {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+/* 「这个扩展正在出声」：半透明白蒙版 + 音符。
+   刻意盖住图标而不是另占一块地 —— 标题栏每一像素都要跟窗口控制钮抢。
+   音符用深色：蒙版是白的，两种主题下它都读得出来。 */
+.ext-playing {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.45);
+  color: #16161a;
+  pointer-events: none;
+}
+
+.plugin-icon {
+  display: block;
+  border-radius: 5px;
+  object-fit: cover;
+}
+
+/* 没有图标（或图标 404）时按名字取色 + 首字母。这些按钮挤在标题栏里，
+   一个破图比一个色块难看得多，也更难看出「它本来就没图标」 */
+.plugin-icon-fallback {
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-weight: 650;
+  line-height: 1;
+  border-radius: 5px;
 }
 
 .titlebar-actions {

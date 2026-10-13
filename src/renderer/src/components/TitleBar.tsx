@@ -12,8 +12,8 @@
  *   也关不掉（只能靠 Alt+F4）。所以 App 在任何状态下都把标题栏放在最外层，
  *   这里只是把「导航菜单 / 搜索」这类需要已登录的元素藏起来。
  *
- * 布局：`[logo] ⟨弹性空档⟩ [导航菜单][搜索][窗口控制]`。
- * 中间刻意**不再显示当前曲目** —— 那块地方要留给扩展入口条（见 ExtensionStrip），
+ * 布局：`[logo] ⟨扩展入口条（吃掉所有余量）⟩ [导航菜单][搜索][窗口控制]`。
+ * 中间刻意**不再显示当前曲目** —— 那块整块让给了扩展入口条（见 ExtensionStrip），
  * 而曲目信息本来在播放条与右侧抽屉里各有一份。
  */
 
@@ -34,6 +34,7 @@ import {
   IconSettings
 } from './Icons'
 import { useContextMenu, type MenuItem } from './ContextMenu'
+import { ExtensionStrip } from './ExtensionStrip'
 import { Cover } from './primitives'
 import { useUi } from '@/state/useUi'
 import { regularPlaylists, usePlaylists } from '@/state/usePlaylists'
@@ -172,8 +173,9 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
         </button>
       </div>
 
-      {/* 纯弹性空档：撑住拖拽区，也让右侧那组始终贴右缘 */}
-      <div className="titlebar-center" />
+      {/* 中段整块交给扩展入口条：它吃掉所有余量，于是既撑住了拖拽区，
+          又把右侧那组（菜单/搜索/窗口控制）顶到右缘 */}
+      <ExtensionStrip />
 
       <div className="titlebar-actions">
         {!solo ? (

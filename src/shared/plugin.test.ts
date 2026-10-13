@@ -4,7 +4,6 @@ import {
   applyPluginOrder,
   entryPathsOf,
   isDisplayable,
-  isSvgPath,
   pluginDisplayName,
   pluginFallbackHue,
   pluginIconPath,
@@ -149,12 +148,6 @@ describe('展示辅助', () => {
     )
     expect(pluginIconPath(plugin('demo'))).toBe('')
     expect(pluginIconPath(plugin('', { icon: 'a.png' }))).toBe('')
-  })
-
-  it('SVG 判定看扩展名（后端会加 content hash 指纹）', () => {
-    expect(isSvgPath('icon.abc123.svg')).toBe(true)
-    expect(isSvgPath('icon.svg')).toBe(true)
-    expect(isSvgPath('icon.png')).toBe(false)
   })
 
   it('兜底色相稳定且落在 0–359', () => {

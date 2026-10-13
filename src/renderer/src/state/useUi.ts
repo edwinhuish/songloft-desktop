@@ -73,9 +73,17 @@ interface UiState {
    * 存进设置的话，用户在管理页排好的顺序会被「上次滚到哪」污染。
    */
   extensionOffset: number
+  /**
+   * 视窗一次装得下几个入口（由入口条量出实际宽度后回写）。
+   *
+   * 之所以要放进 store：折叠菜单的溢出列表也依赖它 —— 菜单得知道「哪些算被挤掉了」。
+   * 两边各自量一遍必然会算出两个不同的答案，于是菜单里列出的和条上藏起来的对不上。
+   */
+  extensionCapacity: number
 
   navigate: (route: Route) => void
   setExtensionOffset: (offset: number) => void
+  setExtensionCapacity: (capacity: number) => void
   back: () => void
   setPanelOpen: (open: boolean) => void
   togglePanel: (tab?: PanelTab) => void
@@ -106,6 +114,8 @@ export const useUi = create<UiState>((set, get) => ({
   selectionAnchor: null,
   lastNativeRoute: { name: 'home' },
   extensionOffset: 0,
+  // 初值只是首帧的占位，真实值由入口条量出来。取 0 会让首帧一条都不显示
+  extensionCapacity: 8,
 
   navigate: (route) => {
     const current = get().route
@@ -122,6 +132,8 @@ export const useUi = create<UiState>((set, get) => ({
   },
 
   setExtensionOffset: (offset) => set({ extensionOffset: Math.max(0, offset) }),
+  // 永不收下 0：那会让「可视范围」塌成空窗，入口条一条都不画，也就再也量不出宽度
+  setExtensionCapacity: (capacity) => set({ extensionCapacity: Math.max(1, capacity) }),
 
   back: () => {
     const [prev, ...rest] = get().history
