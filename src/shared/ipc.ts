@@ -44,6 +44,8 @@ export const IPC = {
   /** 主进程代取封面字节（canvas 取主色需要，绕开跨域画布污染） */
   colorExtract: 'cover:extract',
   appInfo: 'app:info',
+  /** 主进程代查 GitHub 上的最新 release（渲染层不直连第三方，也省掉 CORS 与 UA 的坑） */
+  clientUpdateCheck: 'app:check-client-update',
 
   // ── 主进程 → 渲染层（单向推送）────────────────────────────────────────
   onMediaCommand: 'media:command',
@@ -125,6 +127,21 @@ export interface AppInfo {
   packaged: boolean
 }
 
+/**
+ * 「客户端更新」的检查结果。
+ *
+ * 只报「有没有新版本」与发布页地址，**不含**下载与安装：桌面端的二进制归安装包与包管理器管，
+ * 应用自己去换自己这件事另有代价（见 settings 里那条说明），不在这一步里。
+ */
+export interface ClientUpdateCheck {
+  /** GitHub 上最新 release 的 tag（一般是 v1.2.3） */
+  latestTag: string
+  /** 该 release 的页面地址 —— 「打开发布页」用的就是它 */
+  latestUrl: string
+  /** 发布时间（ISO 字符串；拿不到就是空串） */
+  publishedAt: string
+}
+
 /** 桌面端偏好设置（纯本地，不属于后端 configs） */
 export interface AppSettings {
   /** 上次使用的服务器（按 URL 定位） */
@@ -160,6 +177,12 @@ export interface AppSettings {
    * 存下来、下次启动时交给它，设置页会明说「重启后生效」。
    */
   localCacheMaxSize: number
+  /**
+   * 启动时自动检查客户端更新。
+   *
+   * 一次 GitHub 的 HTTP GET；关掉就完全不因为这件事联网（后端可达与否都不影响它）。
+   */
+  autoCheckUpdate: boolean
   /** 侧栏是否折叠 */
   sidebarCollapsed: boolean
   /** 记住的播放队列（会话恢复） */
@@ -188,6 +211,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   allowInsecureTls: false,
   // 与上游客户端的默认档一致：本机缓存默认给 1 GB，再多就该自己清或调小了
   localCacheMaxSize: 1024 ** 3,
+  // 默认开着：查一次很便宜，而「不知道自己落后了」的代价更大；嫌烦的人可以关掉
+  autoCheckUpdate: true,
   sidebarCollapsed: false,
   lastQueue: [],
   lastQueueIndex: -1,

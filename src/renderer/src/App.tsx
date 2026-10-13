@@ -16,6 +16,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { MediaCommand } from '@shared/ipc'
+import { isNewerVersion } from '@shared/version'
+import { getGithubProxy } from './api/endpoints'
 import { AddToPlaylistDialog } from './components/AddToPlaylistDialog'
 import { CommandPalette } from './components/CommandPalette'
 import { ContextMenuHost } from './components/ContextMenu'
@@ -27,6 +29,7 @@ import { TitleBar } from './components/TitleBar'
 import { Toasts } from './components/Toasts'
 import { TooltipHost } from './components/Tooltip'
 import { useResponsiveSidebar } from './hooks/useResponsiveSidebar'
+import { formatVersion } from './lib/format'
 import { FavoritesPage } from './pages/FavoritesPage'
 import { HomePage } from './pages/HomePage'
 import { LibraryPage } from './pages/LibraryPage'
@@ -42,12 +45,39 @@ import {
   primeAudio,
   usePlayer
 } from './state/usePlayer'
-import { useAuth } from './state/useAuth'
+import { requireClient, useAuth } from './state/useAuth'
 import { usePlaylists } from './state/usePlaylists'
 import { useSettings, watchSystemTheme } from './state/useSettings'
+import { toast } from './state/useToasts'
 import { routeFromPath, useUi, type Route } from './state/useUi'
 
 let bootstrapped = false
+
+/**
+ * 启动时悄悄查一次客户端更新（「关于与更新」里那个开关控制它）。
+ *
+ * 为什么只查一次、只在启动时查：桌面端一个版本能用很久，更密的轮询除了给 GitHub 刷请求
+ * （它还有频率限制）没有别的作用；真想主动看，设置里那个「检查更新」会明说。
+ *
+ * **全程静默**：没有新版本不说话、连不上 GitHub 也不说话 —— 启动时的后台动作不该冒泡成
+ * 人要处理的东西。真有状况，去设置里点一次就知道原因。
+ */
+async function checkClientUpdateInBackground(): Promise<void> {
+  if (!useSettings.getState().settings.autoCheckUpdate) return
+
+  // 代理拿不到（后端不可达）就直连：客户端更新这件事不该被后端的可达性牵连
+  const proxy = await getGithubProxy(requireClient()).catch(() => '')
+  const [check, info] = await Promise.all([
+    window.songloft.app.checkClientUpdate(proxy),
+    window.songloft.app.info()
+  ])
+  if (!isNewerVersion(check.latestTag, info.version)) return
+  toast(
+    '客户端有新版本',
+    'info',
+    `${formatVersion(check.latestTag)} 已发布，可在「设置 → 关于与更新」查看`
+  )
+}
 
 /** 只在输入类元素之外响应空格这类「会打字的键」 */
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -89,6 +119,8 @@ export function App(): React.JSX.Element {
         void usePlaylists.getState().load()
         void usePlaylists.getState().loadFavorites()
         void usePlayer.getState().restoreLastQueue()
+        // 查不到、没新版本都不出声（见函数注释）
+        void checkClientUpdateInBackground().catch(() => undefined)
       }
     })()
 

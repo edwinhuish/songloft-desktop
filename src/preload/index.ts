@@ -13,6 +13,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { IPC } from '@shared/ipc'
 import type {
   AppSettings,
+  ClientUpdateCheck,
   FileOpenResult,
   FileSaveResult,
   LocalCacheStats,
@@ -70,7 +71,9 @@ const bridge: SongloftBridge = {
     clear: () => ipcRenderer.invoke(IPC.localCacheClear) as Promise<LocalCacheStats>
   },
   app: {
-    info: () => ipcRenderer.invoke(IPC.appInfo)
+    info: () => ipcRenderer.invoke(IPC.appInfo),
+    checkClientUpdate: (proxyPrefix) =>
+      ipcRenderer.invoke(IPC.clientUpdateCheck, proxyPrefix) as Promise<ClientUpdateCheck>
   },
   cover: {
     bytes: (url) => ipcRenderer.invoke(IPC.colorExtract, url) as Promise<CoverBytes | null>

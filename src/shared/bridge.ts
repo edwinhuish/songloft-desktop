@@ -8,6 +8,7 @@
 import type {
   AppInfo,
   AppSettings,
+  ClientUpdateCheck,
   FileOpenResult,
   FileSaveResult,
   LocalCacheStats,
@@ -71,6 +72,13 @@ export interface SongloftBridge {
   }
   app: {
     info(): Promise<AppInfo>
+    /**
+     * 查 GitHub 上有没有新的客户端版本（只查不装）。
+     *
+     * 传「GitHub 加速代理」前缀；老后端没有这项设置时传空串即可。主进程代查是因为渲染层
+     * 直连第三方会撞上 CORS 与 `User-Agent` 这两个改不动的限制（见 src/main/release.ts）。
+     */
+    checkClientUpdate(proxyPrefix?: string): Promise<ClientUpdateCheck>
   }
   cover: {
     /** 取封面缩略图字节（base64），供 canvas 取主色 —— 绕开跨域画布污染 */

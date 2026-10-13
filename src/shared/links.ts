@@ -9,8 +9,14 @@
  *   * UPSTREAM_URL —— **上游原项目**（Flutter 客户端 + Go 后端），本仓库是它的桌面重写版
  */
 
+/** 本仓库的 owner/repo：拼 GitHub API 地址要用，地址本身也从它拼，免得两处各写一遍 */
+export const REPO_SLUG = 'edwinhuish/songloft-desktop'
+
 /** 本仓库：github.com/edwinhuish/songloft-desktop */
-export const REPO_URL = 'https://github.com/edwinhuish/songloft-desktop'
+export const REPO_URL = `https://github.com/${REPO_SLUG}`
+
+/** 发布页：桌面端只从这里分发（应用不自己换自己的二进制） */
+export const REPO_RELEASES_URL = `${REPO_URL}/releases`
 
 /** 上游原项目：github.com/songloft-org/songloft-player */
 export const UPSTREAM_URL = 'https://github.com/songloft-org/songloft-player'

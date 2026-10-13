@@ -20,6 +20,7 @@ import {
 } from '@shared/ipc'
 import { installAppMenu } from './app-menu'
 import { applyLocalCacheLimit, clearLocalCache, readLocalCache } from './cache'
+import { checkClientUpdate } from './release'
 import { openTextFile, saveTextFile } from './files'
 import { registerMediaKeys } from './media-keys'
 import { fetchCoverBytes, probeServer } from './probe'
@@ -272,6 +273,9 @@ function registerIpcHandlers(): void {
     appImage: Boolean(process.env.APPIMAGE),
     packaged: app.isPackaged
   }))
+  ipcMain.handle(IPC.clientUpdateCheck, (_event, proxyPrefix?: string) =>
+    checkClientUpdate(proxyPrefix)
+  )
 }
 
 // ───────────────────────────── 托盘依赖（提前声明）─────────────────────────────

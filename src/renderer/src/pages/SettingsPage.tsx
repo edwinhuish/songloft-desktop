@@ -8,8 +8,8 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 
-import type { AppInfo, ServerProbeResult } from '@shared/ipc'
-import { REPO_URL, UPSTREAM_URL } from '@shared/links'
+import type { AppInfo, ClientUpdateCheck, ServerProbeResult } from '@shared/ipc'
+import { REPO_RELEASES_URL, REPO_URL, UPSTREAM_URL } from '@shared/links'
 import type {
   AutoScanSetting,
   CacheConfigInput,
@@ -30,6 +30,7 @@ import type {
   TokenInfo,
   UploadedServerBinary
 } from '@shared/types'
+import { isNewerVersion } from '@shared/version'
 import { useContextMenu, type MenuItem } from '@/components/ContextMenu'
 import { ExcludeDirsEditor } from '@/components/ExcludeDirsEditor'
 import {
@@ -2841,7 +2842,9 @@ function AboutSettings(): React.JSX.Element {
  * 应用不该去换自己的二进制（换到一半失败，用户手上就剩一个跑不起来的东西）。
  */
 function UpdateCard(): React.JSX.Element {
+  const { settings, patch } = useSettings()
   const [upgradeOpen, setUpgradeOpen] = useState(false)
+  const [clientOpen, setClientOpen] = useState(false)
 
   return (
     <Card title="更新">
@@ -2862,21 +2865,129 @@ function UpdateCard(): React.JSX.Element {
 
       <Row
         title="客户端更新"
-        desc="桌面端从 GitHub Releases 分发：有新版本时到发布页下载，或由包管理器升级"
+        desc="桌面端从 GitHub Releases 分发：应用不会自己替换自身的二进制，有新版本时到发布页下载，或由包管理器升级"
       >
-        <button
-          type="button"
-          className="btn"
-          data-size="sm"
-          onClick={() => void window.songloft.shell.openExternal(`${REPO_URL}/releases`)}
-        >
-          <IconExternal size={14} />
-          打开发布页
+        <button type="button" className="btn" onClick={() => setClientOpen(true)}>
+          <IconRefresh size={15} />
+          检查更新
         </button>
       </Row>
 
+      <Row
+        nested
+        title="启动时自动检查更新"
+        desc="每次启动悄悄问一次 GitHub：有新版本才提示，连不上就不出声"
+      >
+        <Switch
+          checked={settings.autoCheckUpdate}
+          onChange={(next) => void patch({ autoCheckUpdate: next })}
+          ariaLabel="启动时自动检查更新"
+        />
+      </Row>
+
       {upgradeOpen ? <UpgradeModal onClose={() => setUpgradeOpen(false)} /> : null}
+      {clientOpen ? <ClientUpdateModal onClose={() => setClientOpen(false)} /> : null}
     </Card>
+  )
+}
+
+/**
+ * 客户端更新（桌面端自己）。
+ *
+ * 只报「有没有新版本」并把发布页交出去 —— 不做下载、不做安装。理由是桌面端的二进制归安装包
+ * 与包管理器管：应用替自己换二进制一旦半路失败（下载中断、目录不可写、替换到一半），用户手上
+ * 就剩一个跑不起来的客户端，而且那一套流程**没有回滚**（见 src/main/release.ts 的注释）。
+ */
+function ClientUpdateModal({ onClose }: { onClose: () => void }): React.JSX.Element {
+  // 本机版本走 app.info：它是本地的、必定拿得到，于是检查失败时这张表也不会空着
+  const info = useAsync(() => window.songloft.app.info(), [])
+  const [check, setCheck] = useState<ClientUpdateCheck | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [checking, setChecking] = useState(true)
+
+  useEffect(() => {
+    // 代理从后端读，但**读不到也照查**：客户端更新不该被后端可达性牵连，直连 GitHub 试一次
+    void getGithubProxy(requireClient())
+      .catch(() => '')
+      .then((proxy) => window.songloft.app.checkClientUpdate(proxy))
+      .then(setCheck)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : '检查更新失败'))
+      .finally(() => setChecking(false))
+  }, [])
+
+  const current = info.data?.version ?? ''
+  const newer = check !== null && isNewerVersion(check.latestTag, current)
+  const released = formatDate(check?.publishedAt)
+
+  return (
+    <Modal
+      title="客户端更新"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>
+            关闭
+          </button>
+          {/* 检查失败时也给这条路：网络能到发布页而查不到 API 是常见情形（代理只挑了 API） */}
+          <button
+            type="button"
+            className="btn"
+            data-variant="primary"
+            onClick={() =>
+              void window.songloft.shell.openExternal(check?.latestUrl || REPO_RELEASES_URL)
+            }
+          >
+            <IconExternal size={15} />
+            打开发布页
+          </button>
+        </>
+      }
+    >
+      {/* 当前版本永远有：它来自本机，不必等网络 */}
+      <div className="stat-list">
+        <div className="stat-row">
+          <span>当前版本</span>
+          <span className="stat-row-value">{formatVersion(current)}</span>
+        </div>
+        {check?.latestTag ? (
+          <div className="stat-row">
+            <span>最新版本</span>
+            <span className="stat-row-value">{formatVersion(check.latestTag)}</span>
+          </div>
+        ) : null}
+        {released ? (
+          <div className="stat-row">
+            <span>发布时间</span>
+            <span className="stat-row-value">{released}</span>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="probe-result" data-state={error ? 'error' : 'ok'} style={{ marginTop: 10 }}>
+        {error ? (
+          <IconAlert size={15} />
+        ) : checking ? (
+          <IconLoader size={15} />
+        ) : newer ? (
+          <IconSparkle size={15} />
+        ) : (
+          <IconCheck size={15} />
+        )}
+        <span>
+          {error ??
+            (checking
+              ? '正在检查 GitHub 上的最新版本…'
+              : newer
+                ? `有新版本 ${formatVersion(check?.latestTag ?? '')}，到发布页下载`
+                : '已经是最新版本')}
+        </span>
+      </div>
+
+      <p className="field-hint" style={{ marginTop: 10 }}>
+        桌面端由安装包 / 包管理器分发，应用不会去替换自身的二进制 ——
+        换到一半失败会留下一个跑不起来的客户端， 而且没有回滚。所以这里只负责告诉你有新版本。
+      </p>
+    </Modal>
   )
 }
 
