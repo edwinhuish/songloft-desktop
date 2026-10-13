@@ -554,6 +554,9 @@ html[data-menu='open'] .plugin-view {
   place-items: center;
   width: 18px;
   height: 18px;
+  /* 与主导航的图标同一条缩放规则（这里装的是插件图，内联尺寸盖不掉，只能整体缩） */
+  transform: scale(var(--nav-icon-scale));
+  transition: transform var(--dur-3) var(--ease);
 }
 
 /* 「这个扩展正在出声」：半透明白蒙版 + 音符，叠在**图标上**。
@@ -633,9 +636,12 @@ html[data-menu='open'] .plugin-view {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sidebar-group-gap);
   min-height: 0;
-  padding: 12px 12px 10px;
+  padding: var(--sidebar-pad-top) var(--sidebar-pad-x) var(--sidebar-pad-bottom);
+  /* 密度换挡时内边距跟着一起走：列宽（.shell-body / .ext-frame）本来就在过渡，
+     这里不接上的话，同一帧里会一半在滑、一半在跳 */
+  transition: padding var(--dur-3) var(--ease);
   background: var(--glass-tint);
   backdrop-filter: blur(var(--glass-blur));
   border-right: 1px solid var(--line-1);
@@ -648,14 +654,15 @@ html[data-menu='open'] .plugin-view {
 .nav-group {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--nav-item-gap);
+  transition: gap var(--dur-3) var(--ease);
   /* 默认不参与伸缩：窗口变矮时该挨压的只有歌单列表，导航项被挤扁、图标行折行
      都比「歌单区出现滚动条」难看得多（下面那条规则再把歌单组改回可伸缩）。 */
   flex: none;
 }
 
 /* 导航区（首页…最近播放）与「我的歌单」区之间的分隔线。
-   展开态也需要：两段的间距只有 .sidebar 的 gap 那 6px，扫一眼分不清「最近播放」
+   展开态也需要：两段的间距只有 .sidebar 的 gap（8px 上下），扫一眼分不清「最近播放」
    和下面那串歌单是同一级、还是两件事。折叠态更是必须 —— 标题淡出、加号退出后
    只剩一列图标，没有这条线就完全看不出分组边界。
 
@@ -685,8 +692,11 @@ html[data-menu='open'] .plugin-view {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  min-height: 32px;
-  padding: 6px 2px 2px 12px;
+  min-height: var(--nav-section-h);
+  padding: 6px 2px 2px var(--sidebar-pad-x);
+  transition:
+    min-height var(--dur-3) var(--ease),
+    padding var(--dur-3) var(--ease);
 }
 
 /* 「+」在折叠态也保留：新增歌单是这一段唯一的动作，藏起来就没地方点了。
@@ -696,8 +706,24 @@ html[data-menu='open'] .plugin-view {
   flex: none;
 }
 
+/* 「+」也是侧栏里的图标，跟着同一档缩放。外面那颗 .icon-btn 盒子（32px）不动 ——
+   放大后的字形（15 × 1.5 = 22.5）在里面仍然舒展，跟着一起放反而会把这行顶高 */
+.nav-section-add svg {
+  transform: scale(var(--nav-icon-scale));
+  transition: transform var(--dur-3) var(--ease);
+}
+
+/* 紧凑：图标条只有 48px 宽，`+` 那颗 32px 的 .icon-btn 减去两侧 9px 内边距就放不下了
+   （只剩 30px），会被侧栏的 overflow: hidden 切掉一条边 —— 跟着收一档。
+   选择器带上密度前缀与 .sidebar：.icon-btn 的尺寸在 components.css（后加载，
+   同特异性它会赢），不带前缀压不过去。 */
+:root[data-density='compact'] .sidebar .nav-section-head .nav-section-add {
+  width: 28px;
+  height: 28px;
+}
+
 .nav-empty {
-  padding: 10px 12px;
+  padding: 10px var(--sidebar-pad-x);
   font-size: 12px;
   line-height: 1.8;
   color: var(--text-4);
@@ -712,9 +738,9 @@ html[data-menu='open'] .plugin-view {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 38px;
-  padding: 0 12px;
+  gap: var(--nav-gap);
+  height: var(--nav-item-h);
+  padding: 0 var(--nav-item-pad-x);
   border: 0;
   background: transparent;
   color: var(--text-2);
@@ -731,6 +757,7 @@ html[data-menu='open'] .plugin-view {
     background var(--dur-1) var(--ease),
     color var(--dur-1) var(--ease),
     transform var(--dur-1) var(--ease),
+    height var(--dur-3) var(--ease),
     padding var(--dur-3) var(--ease),
     gap var(--dur-3) var(--ease);
 }
@@ -751,22 +778,33 @@ html[data-menu='open'] .plugin-view {
   font-weight: 600;
 }
 
-/* 当前项左侧的强调条：贴在侧栏边缘，与圆角背景之间留出呼吸 */
+/* 当前项左侧的强调条：贴在侧栏边缘，与圆角背景之间留出呼吸。
+   left 跟着侧栏内边距走 —— 那个值决定「贴到侧栏左边缘」到底是 -12 还是 -16。 */
 .nav-item[aria-current='true']::before {
   content: '';
   position: absolute;
-  left: -12px;
+  left: calc(-1 * var(--sidebar-pad-x));
   top: 50%;
   width: 3px;
-  height: 18px;
+  height: var(--nav-mark-h);
   border-radius: 0 3px 3px 0;
   background: var(--accent);
   transform: translateY(-50%);
+  transition: height var(--dur-3) var(--ease);
 }
 
 .nav-item svg {
   flex: none;
-  transition: color var(--dur-1) var(--ease);
+  transition:
+    color var(--dur-1) var(--ease),
+    transform var(--dur-3) var(--ease);
+}
+
+/* 侧栏图标随密度缩放（舒适 1.5×、紧凑 1×）。
+   ★ 只匹配**直接子 svg**：.ext-playing 里那颗音符是孙辈，而它所在的 .ext-nav-icon
+     已经缩过一次了，再缩一次就成了 2.25×。 */
+.nav-item > svg {
+  transform: scale(var(--nav-icon-scale));
 }
 
 /* 悬停 / 选中时图标先「亮」起来 —— 层次感来自图标与文字的色差，而不是加粗加边框 */
@@ -785,11 +823,16 @@ html[data-menu='open'] .plugin-view {
   color: var(--text-4);
 }
 
-/* 歌单封面：一圈极淡的内描边，深浅封面上都能看清边界 */
+/* 歌单封面：一圈极淡的内描边，深浅封面上都能看清边界。
+   封面跟着图标一起缩放（26 × 1.5 = 39）—— 图标变大而封面不动的话，这一列会看出
+   「有些项大、有些项小」；两者的原始比例是定好的（图标 18 : 封面 26），等比放才不会走形。 */
 .nav-cover {
   flex: none;
   box-shadow: inset 0 0 0 1px var(--line-1);
-  transition: box-shadow var(--dur-1) var(--ease);
+  transform: scale(var(--nav-icon-scale));
+  transition:
+    box-shadow var(--dur-1) var(--ease),
+    transform var(--dur-3) var(--ease);
 }
 
 .nav-item:hover .nav-cover,
@@ -850,21 +893,27 @@ html[data-menu='open'] .plugin-view {
   transition: opacity var(--dur-2) var(--ease) var(--dur-2);
 }
 
-/* 歌单滚动区。左侧让出 12px（负 margin + 正 padding）不是绕弯：
-   .nav-item[aria-current] 的强调条画在 left:-12px，而滚动容器本身就是裁切线 ——
-   不让出来的话歌单项的强调条会被裁掉（导航项有、歌单项没有，看着像 bug）。 */
+/* 歌单滚动区。左侧让出一个侧栏内边距（负 margin + 正 padding）不是绕弯：
+   .nav-item[aria-current] 的强调条画在 left: -内边距 处，而滚动容器本身就是裁切线 ——
+   不让出来的话歌单项的强调条会被裁掉（导航项有、歌单项没有，看着像 bug）。
+   两侧都跟着 --sidebar-pad-x 走，所以密度换挡时强调条与裁切线始终同一条。 */
 .sidebar-playlists {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--nav-item-gap);
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  margin-left: -12px;
-  /* 底部留出 34px 的空档：右下角那颗「收起 / 展开」按钮浮在这块上（见 .sidebar-toggle），
-     不留空档的话，列表滚到底时最后一行的**右侧**（歌单条数那个数字）会被它盖住 */
-  padding: 0 0 34px 12px;
+  margin-left: calc(-1 * var(--sidebar-pad-x));
+  /* 底部留出空档：右下角那颗「收起 / 展开」按钮浮在这块上（见 .sidebar-toggle），
+     不留空档的话，列表滚到底时最后一行的**右侧**（歌单条数那个数字）会被它盖住。
+     ★ 这个空档不随密度压到 34 以下：按钮本身没变小，压下去它就压到行上了 */
+  padding: 0 0 var(--nav-list-pad-bottom) var(--sidebar-pad-x);
+  transition:
+    gap var(--dur-3) var(--ease),
+    margin var(--dur-3) var(--ease),
+    padding var(--dur-3) var(--ease);
   /* 滚到头之后把滚动「续」给外层是触控板上的常见困扰：侧栏只有这一块能滚，
      续出去只会让人以为整个侧栏在动。标准属性，各引擎都认；
      -webkit-overflow-scrolling 是 iOS Safari 的旧开关，Chromium 里是空操作。 */
@@ -890,7 +939,10 @@ html[data-menu='open'] .plugin-view {
   right: 0;
   bottom: 8px;
   z-index: 1;
-  /* 13px = 原先 26px 的一半；高度不动 —— 它是一条窄竖条，不是一颗圆钮 */
+  /* 13px = 原先 26px 的一半；高度不动 —— 它是一条窄竖条，不是一颗圆钮。
+     ★ 这颗钮**不随密度缩放**（而且两种密度下都要在）：它只有 13px 宽、内边距为 0，
+     12px 的箭头已经贴边，再放大就会被侧栏的 overflow: hidden 切掉一条边 ——
+     那时它就成了一个点得到却看不全的按钮。 */
   width: 13px;
   height: 26px;
   /* 窄条上左右不能再留白：留了会把图标挤出这条 13px 宽的地方 */

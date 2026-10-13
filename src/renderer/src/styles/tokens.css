@@ -40,10 +40,42 @@
 
   /* 尺寸 */
   --titlebar-h: 44px;
-  --sidebar-w: 244px;
-  --sidebar-w-collapsed: 72px;
   --player-h: 92px;
   --panel-w: 384px;
+
+  /* ── 侧栏尺寸（两条侧栏共用；界面密度只改这一组）────────────────────────
+     主导航（Songloft）与扩展侧栏是同一种东西（见 base.css 的 .ext-frame），宽度、内边距、
+     行高、图标缩放全走这一组令牌 —— 于是「切密度」只有一处改动，两条侧栏也不会各自漂开。
+
+     ★ 基准值取的是**舒适**，不是某一档「中性」：settings.density 的默认值就是 comfortable，
+       而 data-density 要等设置读回来才挂上（见 useSettings 的 applyToDocument）。
+       基准写成舒适，绝大多数用户、以及首帧，看到的就已经是最终形态 ——
+       否则会先按小尺寸画一帧再跳大。紧凑在文件末尾那段里显式覆盖。
+
+     ★ 图标缩放走 --nav-icon-scale（transform: scale），**不是**改 width/height：
+       图标尺寸已经有一个来源（TSX 里写的 size，落到 width/height 属性或内联样式），
+       CSS 再定一份就是两处真相；而且内联样式（歌单封面、插件图标兜底块）根本盖不过去。
+       缩放只作用于渲染结果，布局盒仍是原尺寸，所以居中计算与折叠动效都不受影响。 */
+  --sidebar-w: 272px;
+  --sidebar-w-collapsed: 80px;
+  --sidebar-pad-x: 16px;
+  --sidebar-pad-top: 16px;
+  --sidebar-pad-bottom: 12px;
+  /* 两组（导航 / 歌单）之间、以及组内相邻项之间 */
+  --sidebar-group-gap: 8px;
+  --nav-item-gap: 4px;
+  --nav-item-h: 52px;
+  --nav-item-pad-x: 16px;
+  /* 图标与文字之间。图标放大到 1.5× 后视觉上往两侧各溢出 1/4 宽，所以这里也要加宽，
+     否则「图标变大」会被吃掉一半 —— 看到的还是原来那么挤。 */
+  --nav-gap: 18px;
+  --nav-icon-scale: 1.5;
+  /* 当前项左侧那条强调条的高度 */
+  --nav-mark-h: 24px;
+  /* 分组标题行（「我的歌单」那一行）的最小高度 */
+  --nav-section-h: 38px;
+  /* 歌单列表底部让出的空档：右下角那颗「收起 / 展开」钮浮在这块上（见 .sidebar-toggle） */
+  --nav-list-pad-bottom: 38px;
 
   --r-xs: 6px;
   --r-sm: 9px;
@@ -128,7 +160,28 @@
      定义见上面深色段那段注释。 */
 }
 
-/* 紧凑密度 */
+/* 紧凑密度。
+   * 侧栏图标**保持原尺寸**（--nav-icon-scale: 1），只把内边距、行高、间距压一档；
+   * 折叠宽度按需求收掉三分之一（72 → 48）：18px 的图标 + 两侧 9px 内边距 = 36 < 48，
+     26px 的歌单封面也在里面 —— 折叠态不会截到任何一块内容；
+   * 展开宽度留在 244（舒适那档是 272）：紧凑省的是留白，不是文字宽度 ——
+     把展开的栏一起收窄的话，先被截断的是长歌单名，与「图标和文字不截断」相抵；
+   * 列表底部那 34px 空档不能跟着压：它让开的是浮在右下角的「收起 / 展开」钮
+     （26px 高 + 8px 偏移），压到 30 以下滚到底时最后一行的右端会被它盖住。 */
 :root[data-density='compact'] {
   --row-h: 38px;
+  --sidebar-w: 244px;
+  --sidebar-w-collapsed: 48px;
+  --sidebar-pad-x: 9px;
+  --sidebar-pad-top: 10px;
+  --sidebar-pad-bottom: 8px;
+  --sidebar-group-gap: 4px;
+  --nav-item-gap: 2px;
+  --nav-item-h: 34px;
+  --nav-item-pad-x: 10px;
+  --nav-gap: 10px;
+  --nav-icon-scale: 1;
+  --nav-mark-h: 18px;
+  --nav-section-h: 30px;
+  --nav-list-pad-bottom: 34px;
 }

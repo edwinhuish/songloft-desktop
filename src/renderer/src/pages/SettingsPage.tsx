@@ -376,7 +376,10 @@ function AppearanceSettings(): React.JSX.Element {
           </div>
         </Row>
 
-        <Row title="界面密度" desc="紧凑模式会把列表行高压到 34px，一屏多看几首">
+        <Row
+          title="界面密度"
+          desc="舒适：侧栏更大（图标与行高 1.5×）；紧凑：列表行高 38px、侧栏折叠更窄，一屏多看几首"
+        >
           <div className="segmented" role="group" aria-label="界面密度">
             <button
               type="button"
