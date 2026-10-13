@@ -39,19 +39,16 @@ import {
   IconListMusic,
   IconMaximize,
   IconMinimize,
-  IconPause,
   IconPuzzle,
   IconRestore,
   IconSearch,
   IconSettings,
-  IconTrash,
-  IconVolume,
-  IconVolumeX
+  IconSliders,
+  IconStore
 } from './Icons'
 import { useContextMenu, type MenuItem } from './ContextMenu'
 import { PluginIcon } from './PluginIcon'
 import { Cover } from './primitives'
-import { togglePlugin, uninstallPlugin } from '@/lib/plugin-actions'
 import { useUi } from '@/state/useUi'
 import { regularPlaylists, usePlaylists } from '@/state/usePlaylists'
 import { useDisplayablePlugins, usePlugins } from '@/state/usePlugins'
@@ -72,8 +69,8 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   const myPlaylists = regularPlaylists(playlists)
   // 扩展下拉与扩展侧栏同源：两处列出来的扩展因此永远是同一批
   const extensions = useDisplayablePlugins()
+  // 只为在标签后面缀一句「播放中」：菜单项的文字是字符串，没有别的地方能挂这个状态
   const runtime = usePlugins((s) => s.runtime)
-  const toggleMuted = usePlugins((s) => s.toggleMuted)
 
   /**
    * 两颗下拉各自的触发器。
@@ -203,58 +200,49 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   ]
 
   /**
-   * 扩展下拉的菜单项：把当前**已开启**的扩展直接列出来。
+   * 扩展下拉的内容：**两条固定入口 → 分割线 → 已开启的扩展**。
    *
+   * * 「插件商店 / 插件管理」与扩展侧栏顶部那两条是同一组去处，图标也用同一对
+   *   （IconStore / IconSliders），两处不会被认成两回事。
+   * * 已开启的扩展**不带二级菜单**：这一份菜单的用途是**快速跳转**，再挂一层
+   *   「静音 / 停用 / 卸载」等于把管理动作藏进悬浮里。要管扩展请走「插件管理」那一栏 ——
+   *   那儿有整行位置摆开关与按钮；「静音」也仍在扩展侧栏的右键菜单里。
    * * 用 useDisplayablePlugins 而不是「plugins 里 enabled 为真那些」：只有后端报 active
    *   的才真点得进去，把运行异常的也列出来只会让人点出一片空白。与扩展侧栏同一份过滤。
-   * * 每项都是「双面」的：悬浮展开对它自己的操作，单击直接进去。
-   * * 菜单项在**渲染期**算好（不是一个被调用的函数）：每一项要读「正在出声 / 已静音」这份
-   *   运行时状态，而 hook 不能在事件回调里调用。
+   * * 菜单项在**渲染期**算好（不是一个被调用的函数）：每一项要读「正在出声」这份运行时
+   *   状态，而 hook 不能在事件回调里调用。
    * * 空列表给一条不可点的说明：空框会让人以为是坏了（与「歌单」那一项同一个做法）。
    */
-  const extensionMenuItems: MenuItem[] = extensions.length
-    ? extensions.map((plugin) => {
-        const live = runtime[plugin.entryPath]
-        const name = pluginDisplayName(plugin)
-
-        const actions: MenuItem[] = []
-        // 静音只在它真的在出声（或已经被静音）时才摆出来：没出声的扩展静音了也听不出来，
-        // 摆着只会让人以为「静音没生效」
-        if (live?.playing || live?.muted) {
-          actions.push({
-            key: 'mute',
-            label: live?.muted ? '取消静音' : '静音',
-            icon: live?.muted ? <IconVolume size={16} /> : <IconVolumeX size={16} />,
-            onClick: () => toggleMuted(plugin.entryPath)
-          })
-        }
-        actions.push(
-          {
-            key: 'disable',
-            label: '停用',
-            icon: <IconPause size={16} />,
-            onClick: () => togglePlugin(plugin, false)
-          },
-          {
-            key: 'uninstall',
-            label: '卸载',
-            icon: <IconTrash size={16} />,
-            variant: 'danger',
-            onClick: () => uninstallPlugin(plugin)
+  const extensionMenuItems: MenuItem[] = [
+    {
+      key: 'extensions-store',
+      label: '插件商店',
+      icon: <IconStore size={16} />,
+      onClick: () => navigate({ name: 'extensions', pane: 'store' })
+    },
+    {
+      key: 'extensions-manage',
+      label: '插件管理',
+      icon: <IconSliders size={16} />,
+      onClick: () => navigate({ name: 'extensions', pane: 'manage' })
+    },
+    // 两条固定入口与「已开启的扩展」不是一类：分割线把它们划开
+    { key: 'sep-extensions', label: '', separator: true },
+    ...(extensions.length
+      ? extensions.map((plugin) => {
+          const live = runtime[plugin.entryPath]
+          const name = pluginDisplayName(plugin)
+          return {
+            key: `extension-${plugin.entryPath}`,
+            // 名字后面缀上「播放中」：菜单项的标签只能是字符串，而「哪个在出声」正是
+            // 这里唯一能顺带交代的状态（侧栏那边是靠图标上的蒙版）
+            label: live?.playing ? `${name} · 播放中` : name,
+            icon: <PluginIcon plugin={plugin} size={16} />,
+            onClick: () => navigate({ name: 'plugin', entryPath: plugin.entryPath })
           }
-        )
-
-        return {
-          key: `extension-${plugin.entryPath}`,
-          // 名字后面缀上「播放中」：菜单项的标签只能是字符串，而「哪个在出声」正是
-          // 在这里唯一能顺带交代的状态（侧栏那边是靠图标上的蒙版）
-          label: live?.playing ? `${name} · 播放中` : name,
-          icon: <PluginIcon plugin={plugin} size={16} />,
-          onClick: () => navigate({ name: 'plugin', entryPath: plugin.entryPath }),
-          children: actions
-        }
-      })
-    : [{ key: 'extension-empty', label: '还没有开启的扩展', disabled: true }]
+        })
+      : [{ key: 'extension-empty', label: '还没有开启的扩展', disabled: true }])
+  ]
 
   return (
     <header className="titlebar" onDoubleClick={handleDoubleClick}>
