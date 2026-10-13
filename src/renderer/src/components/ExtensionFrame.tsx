@@ -38,15 +38,23 @@ export function ExtensionFrame(): React.JSX.Element {
   // 读扩展面的路由：它是这一面自己的记忆，切到原生面去的时候**不动它**，
   // 所以切回来还是这一页（正是「记住上一页」的全部来源）
   const route = useUi((state) => state.extensionRoute)
-  const collapsed = useSettings((state) => state.settings.extensionSidebarCollapsed)
+  // 展开 / 折叠 / 隐藏。★ 隐藏时**整个 <nav> 不渲染**（而不是宽度给 0）：
+  // 宽度 0 的话 border-right 那条线还在，看着像一道没用的接缝
+  const sidebarState = useSettings((state) => state.settings.extensionSidebarState)
 
   // 「某个扩展」那一页与「固定入口」那一页共用这个框架，只有右侧内容面不同
   const pluginEntry = route.name === 'plugin' ? route.entryPath : ''
   const pane: ExtensionPane | null = route.name === 'extensions' ? route.pane : null
 
   return (
-    <div className="ext-frame" data-collapsed={collapsed ? 'true' : 'false'}>
-      <ExtensionSidebar pane={pane} pluginEntry={pluginEntry} collapsed={collapsed} />
+    <div className="ext-frame" data-sidebar={sidebarState}>
+      {sidebarState === 'hidden' ? null : (
+        <ExtensionSidebar
+          pane={pane}
+          pluginEntry={pluginEntry}
+          collapsed={sidebarState === 'collapsed'}
+        />
+      )}
 
       <div className="ext-content" data-pane={pluginEntry ? 'plugin' : 'native'}>
         {/* 一直挂着：切到「插件商店」不该把正在出声的扩展一起关掉（见文件头那段说明） */}
@@ -142,14 +150,16 @@ function ExtensionSidebar({
       </div>
 
       {/* 收起 / 展开。与主导航那颗同一个做法（压在右下角、不占一行，见 .sidebar-toggle）；
-          文字没了，所以提示任何时候都要挂 */}
+          文字没了，所以提示任何时候都要挂。
+          ★ 它只在「展开 ↔ 折叠」之间切：第三档「隐藏」在这颗按钮上做不到 —— 侧栏都藏了，
+            按钮自然也跟着没了，所以那一档只留在插件管理页的显式选择器里（也是找回来的路）。 */}
       <button
         type="button"
         className="icon-btn sidebar-toggle"
         aria-label={collapsed ? '展开侧栏' : '收起侧栏'}
         data-tip={collapsed ? '展开侧栏' : '收起侧栏'}
         data-tip-place={collapsed ? 'right' : undefined}
-        onClick={() => void patch({ extensionSidebarCollapsed: !collapsed })}
+        onClick={() => void patch({ extensionSidebarState: collapsed ? 'expanded' : 'collapsed' })}
       >
         {collapsed ? <IconChevronRight size={16} /> : <IconChevronLeft size={16} />}
       </button>

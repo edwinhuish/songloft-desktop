@@ -2312,6 +2312,19 @@ select.input option {
 /* 两栏各是一整页（不再是同一屏里的左右两列），而窗口最小宽 1080（main/windows.ts 的
    MIN_WIDTH）减去扩展侧栏后仍有 700px 以上，所以不必为窄屏做回退。 */
 
+/* 插件管理页顶部那一行「扩展侧栏 + 三档选择」。
+   三档走 .segmented（视图开关那一套），不摆开关：它不是「开/关」而是三选一，
+   两个格子表达不了三档（「隐藏」得有地方可选）。 */
+.frame-setting {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
 .extension-list {
   display: flex;
   flex-direction: column;

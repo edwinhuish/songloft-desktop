@@ -10,6 +10,7 @@
 
 import { useRef, useState } from 'react'
 
+import type { ExtensionSidebarState } from '@shared/ipc'
 import { entryPathsOf, pluginDisplayName, type JSPlugin } from '@shared/plugin'
 import { getGithubProxy } from '@/api/endpoints'
 import {
@@ -34,7 +35,15 @@ import { EmptyState, Switch } from '@/components/primitives'
 import { togglePlugin, uninstallPlugin } from '@/lib/plugin-actions'
 import { requireClient } from '@/state/useAuth'
 import { useOrderedPlugins, usePlugins } from '@/state/usePlugins'
+import { useSettings } from '@/state/useSettings'
 import { toast } from '@/state/useToasts'
+
+/** 扩展侧栏的三档形态，与 shared/ipc.ts 的 ExtensionSidebarState 一一对应 */
+const SIDEBAR_CHOICES: { value: ExtensionSidebarState; label: string }[] = [
+  { value: 'expanded', label: '展开' },
+  { value: 'collapsed', label: '折叠' },
+  { value: 'hidden', label: '隐藏' }
+]
 
 export function ExtensionsPage(): React.JSX.Element {
   const ordered = useOrderedPlugins()
@@ -42,6 +51,10 @@ export function ExtensionsPage(): React.JSX.Element {
   const error = usePlugins((state) => state.error)
   const setOrder = usePlugins((state) => state.setOrder)
   const load = usePlugins((state) => state.load)
+
+  /* 扩展侧栏的形态（展开 / 折叠 / 隐藏）。它既是「默认」也是「当前」——一个设置而已 */
+  const sidebarState = useSettings((state) => state.settings.extensionSidebarState)
+  const patchSettings = useSettings((state) => state.patch)
 
   /** 拖拽中的下标与悬停到的下标。都放本地：它们是纯粹的交互瞬时状态，不该进 store */
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -246,6 +259,30 @@ export function ExtensionsPage(): React.JSX.Element {
             if (file) void upload(file)
           }}
         />
+      </div>
+
+      {/*
+        扩展侧栏的形态。★ 放在这一页而不是「设置」里：它管的是**扩展主框架自己的侧栏**，
+        与扩展的其它配置在一处更顺。更要紧的是 —— 侧栏被隐藏之后，这里是**唯一**能改回来的
+        地方（侧栏上那颗收起按钮随侧栏一起没了），所以那句话也要写出来。
+      */}
+      <div className="frame-setting">
+        <span>扩展侧栏</span>
+        <div className="segmented" role="group" aria-label="扩展侧栏显示方式">
+          {SIDEBAR_CHOICES.map((choice) => (
+            <button
+              key={choice.value}
+              type="button"
+              aria-pressed={sidebarState === choice.value}
+              onClick={() => void patchSettings({ extensionSidebarState: choice.value })}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
+        {sidebarState === 'hidden' ? (
+          <span className="field-hint">已隐藏；随时可从标题栏的「扩展」菜单回到本页改回来</span>
+        ) : null}
       </div>
 
       {!loaded && !error ? (

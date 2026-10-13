@@ -183,8 +183,15 @@ a {
   transition: grid-template-columns var(--dur-3) var(--ease);
 }
 
-.ext-frame[data-collapsed='true'] {
+/* 侧栏形态三档（settings.extensionSidebarState）：展开 / 折叠成图标条 / 整个隐藏。
+   隐藏时那一列直接归 0，`<nav>` 也不再渲染（见 ExtensionFrame）——留个 0 宽的壳子
+   只会白留一条 border-right 的竖线。 */
+.ext-frame[data-sidebar='collapsed'] {
   --sidebar-current: var(--sidebar-w-collapsed);
+}
+
+.ext-frame[data-sidebar='hidden'] {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 /* 右侧那一栏。两个内容面（扩展 webview / 原生页）叠在同一个格子里：

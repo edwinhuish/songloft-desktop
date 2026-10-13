@@ -142,6 +142,9 @@ export interface ClientUpdateCheck {
   publishedAt: string
 }
 
+/** 扩展主框架里那条侧边栏的形态：展开 / 折叠成图标条 / 整个隐藏 */
+export type ExtensionSidebarState = 'expanded' | 'collapsed' | 'hidden'
+
 /** 桌面端偏好设置（纯本地，不属于后端 configs） */
 export interface AppSettings {
   /** 上次使用的服务器（按 URL 定位） */
@@ -186,8 +189,14 @@ export interface AppSettings {
   autoCheckUpdate: boolean
   /** 侧栏是否折叠 */
   sidebarCollapsed: boolean
-  /** 扩展主框架里那条侧边栏是否折叠（与主侧栏分开存：两者宽度与用途都不同） */
-  extensionSidebarCollapsed: boolean
+  /**
+   * 扩展主框架里那条侧边栏的形态：展开 / 折叠成图标条 / 整个隐藏。
+   *
+   * 与主侧栏分开存（两者宽度与用途都不同）。**它既是「默认」也是「当前」**：
+   * 右下角那颗按钮只在前两者之间来回切，三档选择器在插件管理页 —— 一个设置而已，
+   * 不必再分「默认值」与「临时值」两份（那两份迟早对不上）。
+   */
+  extensionSidebarState: ExtensionSidebarState
   /** 记住的播放队列（会话恢复） */
   lastQueue: number[]
   lastQueueIndex: number
@@ -217,7 +226,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // 默认开着：查一次很便宜，而「不知道自己落后了」的代价更大；嫌烦的人可以关掉
   autoCheckUpdate: true,
   sidebarCollapsed: false,
-  extensionSidebarCollapsed: false,
+  extensionSidebarState: 'expanded',
   lastQueue: [],
   lastQueueIndex: -1,
   lastQueueContext: null,
