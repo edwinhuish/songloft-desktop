@@ -441,6 +441,18 @@
     box-shadow var(--dur-2) var(--ease);
 }
 
+/* 歌手缩略图是圆的（Cover round），但阴影画在 .card-art 这个**方形**外壳上 ——
+   圆图配一圈圆角方形阴影，看着就是「阴影没跟着变圆」。外壳跟着变圆即可：
+   box-shadow 的形状取自元素自己的 border-radius，与 overflow 无关。
+
+   overflow 必须同时放开：圆形的剪裁会把悬停时右下角那颗播放按钮切掉一块
+   （播放按钮画在方形的角上，而这个角在圆外）。图片不受影响 —— 它由 .cover
+   自己的 border-radius + overflow 裁圆，本来就没依赖外层。 */
+.card-art:has(.cover[data-round='true']) {
+  border-radius: 50%;
+  overflow: visible;
+}
+
 .card:hover .card-art {
   transform: translateY(-3px);
   box-shadow: var(--shadow-3);
