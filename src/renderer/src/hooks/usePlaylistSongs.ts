@@ -84,6 +84,8 @@ export function usePlaylistSongs(
           keyword: keyword || undefined
         })
         if (token !== generation.current) return
+        // 取回来了就先清掉可能残留的错误提示：数据是好的，那条红字不该继续挂着
+        setError(null)
 
         if (silent) {
           const unchanged =
@@ -104,7 +106,6 @@ export function usePlaylistSongs(
           commit(next)
           setTotal(result.total)
         }
-        setError(null)
       } catch (err) {
         if (token !== generation.current) return
         // 静默刷新失败不冒泡：手头这份还能用，别为一次后台动作在页面上弹红字

@@ -64,6 +64,8 @@ export function useAsync<T>(factory: () => Promise<T>, deps: readonly unknown[])
     factory()
       .then((result) => {
         if (current !== generation.current) return
+        // 取回来了就先清掉可能残留的错误提示：数据是好的，那条红字不该继续挂着
+        setError(null)
         // 静默刷新且数据一模一样：连 setData 都不做 —— 滚动位置、展开态、页内筛选原样留着
         if (silent && sameData(dataRef.current, result)) return
         dataRef.current = result
