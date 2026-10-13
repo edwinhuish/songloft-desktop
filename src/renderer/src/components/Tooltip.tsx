@@ -22,10 +22,36 @@ import { create } from 'zustand'
 
 /** 提示文案写在这个属性上：`<button data-tip="收起面板">` */
 export const TIP_ATTR = 'data-tip'
+/** 单独指定摆放方位的属性，只给侧栏用（见 PLACE_ORDER）：`data-tip-place="right"` */
+export const TIP_PLACE_ATTR = 'data-tip-place'
 /** 提示框与被提示元素之间的间隙 */
 const GAP = 10
 /** 与视口边缘至少留出来的空隙 */
 const MARGIN = 8
+
+type TipPlace = 'top' | 'bottom' | 'left' | 'right'
+
+/**
+ * 各类提示的候选方位，按优先级排，取第一个装得下的。
+ *
+ * `auto`（默认，除侧栏外都用它）：**上 → 下 → 左 → 右**。
+ * 触发器几乎都长在「行」里或某条「栏」上，上方是内容区，放上方最不挡它自己要看的东西；
+ * 上方没空间（贴着窗口上缘的标题栏、表格首行、面板顶部）就退到下方，依次类推。
+ *
+ * `right` 只给折叠侧栏：那里条目竖着排成一列，上下都是别的条目，往右弹到列表外侧的空白
+ * 才是唯一不遮住邻居的方向。侧栏贴着窗口左缘，右侧永远有空间，不需要更多退路。
+ *
+ * 判定要等框量出来（宽度只有渲染后才知道），所以这一步在 TooltipHost 的 layout effect 里做。
+ */
+const PLACE_ORDER = {
+  auto: ['top', 'bottom', 'left', 'right'],
+  right: ['right', 'left']
+} as const satisfies Record<string, readonly TipPlace[]>
+
+/** 属性值只认 'right'（侧栏的那一套），其余一律按默认的 auto */
+function anchorPlaceOf(anchor: HTMLElement): keyof typeof PLACE_ORDER {
+  return anchor.getAttribute(TIP_PLACE_ATTR) === 'right' ? 'right' : 'auto'
+}
 
 /**
  * 悬停多久才弹。
@@ -52,7 +78,9 @@ interface TipState {
   rect: TipRect | null
   /** 被提示的元素。宿主靠它判断指针是不是还停在上面 */
   anchor: HTMLElement | null
-  show: (rect: TipRect, text: string, anchor: HTMLElement) => void
+  /** 候选方位表的名字（见 PLACE_ORDER） */
+  place: keyof typeof PLACE_ORDER
+  show: (rect: TipRect, text: string, anchor: HTMLElement, place: TipState['place']) => void
   hide: () => void
 }
 
@@ -60,7 +88,8 @@ export const useTooltip = create<TipState>((set) => ({
   text: '',
   rect: null,
   anchor: null,
-  show: (rect, text, anchor) => set({ text, rect, anchor }),
+  place: 'auto',
+  show: (rect, text, anchor, place) => set({ text, rect, anchor, place }),
   // 已经收起来时返回原状态对象：滚动等高频事件会反复喊 hide，不该每次都惊动订阅者
   hide: () => set((state) => (state.text === '' ? state : { text: '', rect: null, anchor: null }))
 }))
@@ -81,6 +110,38 @@ function cancelPendingShow(): void {
 function hideTip(): void {
   cancelPendingShow()
   useTooltip.getState().hide()
+}
+
+/** 这一侧够不够放：四边都按「与视口边缘至少留 MARGIN」算 */
+function fitsAt(place: TipPlace, rect: TipRect, size: { width: number; height: number }): boolean {
+  switch (place) {
+    case 'top':
+      return rect.top - GAP - size.height >= MARGIN
+    case 'bottom':
+      return rect.bottom + GAP + size.height <= window.innerHeight - MARGIN
+    case 'left':
+      return rect.left - GAP - size.width >= MARGIN
+    case 'right':
+      return rect.right + GAP + size.width <= window.innerWidth - MARGIN
+  }
+}
+
+/** 按方位算出浮层的左上角；与元素相邻的那条边贴住 GAP，另一轴居中 */
+function placeAt(
+  place: TipPlace,
+  rect: TipRect,
+  size: { width: number; height: number }
+): { left: number; top: number } {
+  if (place === 'top' || place === 'bottom') {
+    return {
+      left: rect.left + rect.width / 2 - size.width / 2,
+      top: place === 'top' ? rect.top - GAP - size.height : rect.bottom + GAP
+    }
+  }
+  return {
+    left: place === 'left' ? rect.left - GAP - size.width : rect.right + GAP,
+    top: rect.top + rect.height / 2 - size.height / 2
+  }
 }
 
 function rectOf(element: HTMLElement): TipRect {
@@ -129,7 +190,7 @@ function scheduleShow(anchor: HTMLElement): void {
     // ★ 到点再量坐标：等待期间侧栏可能正好在展开/收起，进入那一刻量的位置已经不作数了。
     //   元素若已不在文档里（列表被重渲染）就什么也不弹 —— 量出来会是全 0，浮层会跑到左上角。
     if (!anchor.isConnected) return
-    useTooltip.getState().show(rectOf(anchor), text, anchor)
+    useTooltip.getState().show(rectOf(anchor), text, anchor, anchorPlaceOf(anchor))
   }, SHOW_DELAY)
 }
 
@@ -174,33 +235,37 @@ export function TooltipHost(): React.JSX.Element | null {
   const text = useTooltip((state) => state.text)
   const rect = useTooltip((state) => state.rect)
   const anchor = useTooltip((state) => state.anchor)
+  const place = useTooltip((state) => state.place)
   const ref = useRef<HTMLDivElement | null>(null)
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
 
   useEffect(() => bindGlobalListeners(), [])
 
   /**
-   * 先挂载再定位：框有多宽只有渲染出来才知道，先按左边缘算的话，
-   * 右侧放不下时会在真实位置与初算位置之间闪一下。layout effect 里量完改位置，
-   * 发生在浏览器绘制之前，所以看不到这一闪。
+   * 先挂载再定位：框多大只有渲染出来才知道，方位与坐标都要等这个尺寸。
+   * 在 layout effect 里量完再摆，发生在浏览器绘制之前，所以既不会闪一下，
+   * 也不会出现「先摆右下角、再跳到上方」。
    */
   useLayoutEffect(() => {
     const element = ref.current
     if (!element || !rect) return
-    const width = element.offsetWidth
-    const height = element.offsetHeight
-    // 默认落在被提示元素的右侧（与折叠侧栏的图标名一致）；右边放不下就翻到左侧
-    let left = rect.right + GAP
-    if (left + width > window.innerWidth - MARGIN) left = rect.left - GAP - width
-    // 两侧都放不下（元素又宽又贴边）就夹进视口，宁可压着元素也不要跑出屏幕
-    left = Math.min(Math.max(MARGIN, left), Math.max(MARGIN, window.innerWidth - MARGIN - width))
-    // 垂直方向对齐元素中心，同样夹进视口
-    const top = Math.min(
-      Math.max(MARGIN, rect.top + rect.height / 2 - height / 2),
-      Math.max(MARGIN, window.innerHeight - MARGIN - height)
-    )
-    setPos({ left, top })
-  }, [rect, text])
+    const size = { width: element.offsetWidth, height: element.offsetHeight }
+    const order = PLACE_ORDER[place]
+    // 按候选顺序挑第一个装得下的；一个都装不下（触发器又宽又贴边）就按第一候选来，
+    // 随后被夹进视口 —— 宁可压着元素，也好过跑出屏幕看不见
+    const chosen = order.find((candidate) => fitsAt(candidate, rect, size)) ?? order[0]
+    const want = placeAt(chosen, rect, size)
+    setPos({
+      left: Math.min(
+        Math.max(MARGIN, want.left),
+        Math.max(MARGIN, window.innerWidth - MARGIN - size.width)
+      ),
+      top: Math.min(
+        Math.max(MARGIN, want.top),
+        Math.max(MARGIN, window.innerHeight - MARGIN - size.height)
+      )
+    })
+  }, [rect, text, place])
 
   /**
    * 浮层只该在指针仍停在被提示元素上时存在。
