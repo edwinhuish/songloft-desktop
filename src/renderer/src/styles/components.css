@@ -2325,6 +2325,14 @@ select.input option {
   color: var(--text-2);
 }
 
+/* 这一页那四个动作按钮（重新读取 / 上传插件 / 全部更新 / 清理数据）落在这一行的右端：
+   与「扩展侧栏 + 三档选择」同处一行，页头才只有一层。
+   ★ 用 margin-left: auto 而不是给 .frame-setting 加 justify-content: space-between ——
+   后者会把「隐藏」时那句提示也推到行中间去，看着像第二组控件。 */
+.frame-setting-actions {
+  margin-left: auto;
+}
+
 .extension-list {
   display: flex;
   flex-direction: column;

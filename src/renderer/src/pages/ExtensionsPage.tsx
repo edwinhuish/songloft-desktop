@@ -278,10 +278,36 @@ export function ExtensionsPage(): React.JSX.Element {
               : '正在读取…'}
           </p>
         </div>
+      </div>
 
-        {/* 四个动作按「改这一本机 → 动远端 → 收尾」排；重新读取只是个图标按钮，
-            它是查错用的，不该跟三个真实动作抢同一行位置 */}
-        <div className="row">
+      {/*
+        扩展侧栏的形态。★ 放在这一页而不是「设置」里：它管的是**扩展主框架自己的侧栏**，
+        与扩展的其它配置在一处更顺。更要紧的是 —— 侧栏被隐藏之后，这里是**唯一**能改回来的
+        地方（侧栏上那颗收起按钮随侧栏一起没了），所以那句话也要写出来。
+      */}
+      <div className="frame-setting">
+        <span>扩展侧栏</span>
+        <div className="segmented" role="group" aria-label="扩展侧栏显示方式">
+          {SIDEBAR_CHOICES.map((choice) => (
+            <button
+              key={choice.value}
+              type="button"
+              aria-pressed={sidebarState === choice.value}
+              onClick={() => void patchSettings({ extensionSidebarState: choice.value })}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
+        {sidebarState === 'hidden' ? (
+          <span className="field-hint">已隐藏；随时可从标题栏的「扩展」菜单回到本页改回来</span>
+        ) : null}
+
+        {/* 四个动作与上面那行「扩展侧栏 + 三档选择」**同一行**（靠右，见
+            .frame-setting-actions）：它们都是「这一页怎么摆」这一档的操作，各占一层
+            会把页头撑成两段。顺序照「改这一本机 → 动远端 → 收尾」排；重新读取只是个
+            图标按钮，它是查错用的，不该跟三个真实动作抢同一行位置 */}
+        <div className="row frame-setting-actions">
           <button
             type="button"
             className="icon-btn"
@@ -339,30 +365,6 @@ export function ExtensionsPage(): React.JSX.Element {
             if (file) void upload(file)
           }}
         />
-      </div>
-
-      {/*
-        扩展侧栏的形态。★ 放在这一页而不是「设置」里：它管的是**扩展主框架自己的侧栏**，
-        与扩展的其它配置在一处更顺。更要紧的是 —— 侧栏被隐藏之后，这里是**唯一**能改回来的
-        地方（侧栏上那颗收起按钮随侧栏一起没了），所以那句话也要写出来。
-      */}
-      <div className="frame-setting">
-        <span>扩展侧栏</span>
-        <div className="segmented" role="group" aria-label="扩展侧栏显示方式">
-          {SIDEBAR_CHOICES.map((choice) => (
-            <button
-              key={choice.value}
-              type="button"
-              aria-pressed={sidebarState === choice.value}
-              onClick={() => void patchSettings({ extensionSidebarState: choice.value })}
-            >
-              {choice.label}
-            </button>
-          ))}
-        </div>
-        {sidebarState === 'hidden' ? (
-          <span className="field-hint">已隐藏；随时可从标题栏的「扩展」菜单回到本页改回来</span>
-        ) : null}
       </div>
 
       {!loaded && !error ? (
