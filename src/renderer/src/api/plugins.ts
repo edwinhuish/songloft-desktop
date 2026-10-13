@@ -46,6 +46,92 @@ export function deletePlugin(client: ApiClient, id: number): Promise<void> {
   return client.request<void>(`/jsplugins/${id}`, { method: 'DELETE' })
 }
 
+/* ───────────────────── 单个插件的更新（检查 + 执行）───────────────────── */
+
+/** 更新检查结果（后端 handleCheckUpdate，字段名与上游 Flutter JSPluginUpdateCheck 对齐） */
+export interface PluginUpdateCheck {
+  hasUpdate: boolean
+  currentVersion: string
+  /** 远端最新版本；没有更新源或已是最新时为空 */
+  remoteVersion: string
+  downloadUrl: string
+}
+
+/**
+ * 检查某个插件有没有新版。
+ *
+ * ★ `has_update=false` 有两种含义，**响应分不出来**：已是最新版，或这个插件压根没声明远程
+ *   更新源（manifest 里的 updateUrl，见 jsplugin/auto_update.go）。所以调用方的文案只能说
+ *   「已是最新版」，别去断言「有更新源但无新版」。
+ *
+ * 它背后要去 GitHub 拉 release，可能慢（上游给 45s 超时）；本客户端的 fetch 层一律不设超时
+ * （全仓如此），所以调用方要自己把「正在检查」这个状态显示出来。
+ */
+export function checkPluginUpdate(
+  client: ApiClient,
+  id: number,
+  githubProxy = ''
+): Promise<PluginUpdateCheck> {
+  const query = githubProxy ? `?github_proxy=${encodeURIComponent(githubProxy)}` : ''
+  return client
+    .request<{
+      has_update?: boolean
+      current_version?: string
+      remote_version?: string
+      download_url?: string
+    }>(`/jsplugins/${id}/check-update${query}`)
+    .then((res) => ({
+      hasUpdate: Boolean(res.has_update),
+      currentVersion: res.current_version ?? '',
+      remoteVersion: res.remote_version ?? '',
+      downloadUrl: res.download_url ?? ''
+    }))
+}
+
+/**
+ * 下载并装上这个插件的新版。
+ *
+ * ★ 后端会**顺手重载**处于活跃状态的插件（handleDownloadUpdate 里那段 ReloadPlugin），
+ *   所以调用方不必自己再触一次重载。`force` 跳过版本比较强制重装，常规路径不要传。
+ */
+export function updatePlugin(
+  client: ApiClient,
+  id: number,
+  options: { githubProxy?: string; force?: boolean } = {}
+): Promise<JSPlugin> {
+  return client
+    .request<{ plugin: PluginWire }>(`/jsplugins/${id}/update`, {
+      method: 'POST',
+      body: { github_proxy: options.githubProxy ?? '', force: options.force ?? false }
+    })
+    .then((res) => toPlugin(res.plugin))
+}
+
+/* ─────────────────────────── 常驻运行（keep-alive）─────────────────────────── */
+
+/**
+ * 「常驻运行」白名单 —— 这些 entryPath 的插件不会被空闲检查卸载（10 分钟无活动就休眠）。
+ *
+ * ★ 它是**设置**而不是插件字段：`/api/v1/settings/plugin-keep-alive`，形态是
+ *   `{plugins: [entryPath, …]}`，只有「整表读 / 整表写」两个口子（与订阅源同一套结构）。
+ *   所以切换某一个插件 = 读出整份、增删它、再整份 PUT 回去；**改之前要重新读一次**，
+ *   拿一份可能过期的列表去覆盖，会把别处（另一台设备 / 另一个窗口）刚加的项抹掉。
+ */
+export function getPluginKeepAlive(client: ApiClient): Promise<string[]> {
+  return client
+    .request<{ plugins?: string[] }>('/settings/plugin-keep-alive')
+    .then((res) => res.plugins ?? [])
+}
+
+export function setPluginKeepAlive(client: ApiClient, entryPaths: string[]): Promise<string[]> {
+  return client
+    .request<{ plugins?: string[] }>('/settings/plugin-keep-alive', {
+      method: 'PUT',
+      body: { plugins: entryPaths }
+    })
+    .then((res) => res.plugins ?? [])
+}
+
 /** 上传结果里的单条（后端 jsPluginUploadResult，字段名与上游 Flutter 对齐） */
 export interface PluginUploadResult {
   fileName: string

@@ -392,6 +392,7 @@ export const IconUpload = (p: IconProps) => (
   </Svg>
 )
 
+/** 图钉 = 「常驻运行」（钉住不放：空闲检查不卸载它）。与上游 Flutter 端的 push_pin 同义 */
 export const IconPin = (p: IconProps) => (
   <Svg {...p}>
     <path d="M9 4.5h6l-.8 4.4 3.3 3.3H6.5l3.3-3.3Z" />

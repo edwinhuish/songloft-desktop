@@ -8,21 +8,28 @@
  * 两处各存一份的话，「拖完没反应」或「侧栏顺序自己变了」会随机出现。
  */
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { ExtensionSidebarState } from '@shared/ipc'
 import { entryPathsOf, pluginDisplayName, type JSPlugin } from '@shared/plugin'
 import { getGithubProxy } from '@/api/endpoints'
 import {
+  checkPluginUpdate,
   cleanupPluginStorage,
+  getPluginKeepAlive,
+  setPluginKeepAlive,
   updateAllPlugins,
+  updatePlugin,
   uploadPlugin,
   type PluginBatchUpdate
 } from '@/api/plugins'
+import { useContextMenu, type MenuItem } from '@/components/ContextMenu'
 import {
   IconDownload,
   IconGrip,
   IconLoader,
+  IconMore,
+  IconPin,
   IconPuzzle,
   IconRefresh,
   IconSliders,
@@ -67,6 +74,20 @@ export function ExtensionsPage(): React.JSX.Element {
   const [updating, setUpdating] = useState(false)
   const [updateFailure, setUpdateFailure] = useState<PluginBatchUpdate | null>(null)
   const [cleaning, setCleaning] = useState(false)
+  /* 单行那颗「⋯」里正在跑的动作（检查更新 / 下载更新）—— 按下标住，同一时刻只跑一个 */
+  const [busyId, setBusyId] = useState<number | null>(null)
+  /**
+   * 常驻白名单（entryPath 列表）。读一次只为把勾选显示出来；
+   * **真正切换时会再读一次**（这个设置是整表覆盖写的，见 toggleKeepAlive 的说明）。
+   * 读失败就当作「都没勾」——切换那一步自己是现读现改的，不受这份缓存影响。
+   */
+  const [keepAlive, setKeepAlive] = useState<string[]>([])
+
+  useEffect(() => {
+    void getPluginKeepAlive(requireClient())
+      .then(setKeepAlive)
+      .catch(() => undefined)
+  }, [])
 
   const enabledCount = ordered.filter((plugin) => plugin.status === 'active').length
 
@@ -176,6 +197,65 @@ export function ExtensionsPage(): React.JSX.Element {
       toast('清理失败', 'error', reason instanceof Error ? reason.message : undefined)
     } finally {
       setCleaning(false)
+    }
+  }
+
+  /**
+   * 常驻运行（上游 Flutter 端 `_toggleKeepAlive` 同款：读白名单 → 增删这一条 → 整份写回）。
+   *
+   * ★ 写回前**重新读一次**：这个设置只有「整表读 / 整表写」两个口子（PUT `{plugins:[…]}`），
+   *   拿一份可能过期的列表去覆盖，会把别处（另一台设备、另一个窗口）刚加进去的项悄悄抹掉。
+   *   缓存那一份只用来画勾选，不参与这次写入。
+   */
+  const toggleKeepAlive = async (plugin: JSPlugin): Promise<void> => {
+    const entryPath = plugin.entryPath
+    if (!entryPath) return
+    const name = pluginDisplayName(plugin)
+    try {
+      const current = await getPluginKeepAlive(requireClient())
+      const pinned = current.includes(entryPath)
+      const next = pinned ? current.filter((path) => path !== entryPath) : [...current, entryPath]
+      setKeepAlive(await setPluginKeepAlive(requireClient(), next))
+      toast(pinned ? `「${name}」不再常驻运行` : `「${name}」将常驻运行`, 'success')
+    } catch (reason) {
+      toast('常驻设置失败', 'error', reason instanceof Error ? reason.message : undefined)
+    }
+  }
+
+  /**
+   * 更新单个插件：先问后端有没有新版，有才下载（否则白等一次下载）。
+   *
+   * ★ 上游那一行菜单拆成「检查更新」与「强制更新」两条，这里合成一条：先查，查到新版让用户
+   *   确认再装。★ `has_update=false` 也可能是「这个插件没声明远程更新源」，响应分不出来，
+   *   所以文案只说「已是最新版本」（见 api/plugins.ts 的 checkPluginUpdate）。
+   */
+  const updateOne = async (plugin: JSPlugin): Promise<void> => {
+    const name = pluginDisplayName(plugin)
+    setBusyId(plugin.id)
+    try {
+      // 后端不会自己去读它存的那份代理配置；拿不到就直连，不因此放弃整次检查
+      const proxy = await getGithubProxy(requireClient()).catch(() => '')
+      const info = await checkPluginUpdate(requireClient(), plugin.id, proxy)
+      if (!info.hasUpdate) {
+        toast(
+          `「${name}」已是最新版本`,
+          'info',
+          info.currentVersion ? `当前 v${info.currentVersion}` : undefined
+        )
+        return
+      }
+      const ok = window.confirm(
+        `「${name}」有新版本 v${info.remoteVersion}（当前 v${info.currentVersion}），现在更新？`
+      )
+      if (!ok) return
+      await updatePlugin(requireClient(), plugin.id, { githubProxy: proxy })
+      // 后端已经顺手把它重载过了，这里只要把列表刷新到新版本号
+      await load()
+      toast(`「${name}」已更新到 v${info.remoteVersion}`, 'success')
+    } catch (reason) {
+      toast('更新失败', 'error', reason instanceof Error ? reason.message : undefined)
+    } finally {
+      setBusyId(null)
     }
   }
 
@@ -326,6 +406,8 @@ export function ExtensionsPage(): React.JSX.Element {
               dragging={dragIndex === index}
               // 拖到自己头上不算落点，否则会画出一条毫无意义的指示线
               over={overIndex === index && dragIndex !== null && dragIndex !== index}
+              pinned={keepAlive.includes(plugin.entryPath)}
+              busy={busyId === plugin.id}
               onDragStart={() => setDragIndex(index)}
               onDragOver={() => setOverIndex(index)}
               onDrop={() => dropAt(index)}
@@ -334,6 +416,8 @@ export function ExtensionsPage(): React.JSX.Element {
                 setOverIndex(null)
               }}
               onToggle={(next) => togglePlugin(plugin, next)}
+              onToggleKeepAlive={() => void toggleKeepAlive(plugin)}
+              onUpdate={() => void updateOne(plugin)}
               onUninstall={() => uninstallPlugin(plugin)}
             />
           ))}
@@ -385,11 +469,17 @@ interface ExtensionRowProps {
   plugin: JSPlugin
   dragging: boolean
   over: boolean
+  /** 这个插件在常驻白名单里（行内菜单里那一项的勾） */
+  pinned: boolean
+  /** 这一行有动作在跑（检查 / 下载更新）：菜单入口换成转圈并按住 */
+  busy: boolean
   onDragStart: () => void
   onDragOver: () => void
   onDrop: () => void
   onDragEnd: () => void
   onToggle: (next: boolean) => void
+  onToggleKeepAlive: () => void
+  onUpdate: () => void
   onUninstall: () => void
 }
 
@@ -397,15 +487,72 @@ function ExtensionRow({
   plugin,
   dragging,
   over,
+  pinned,
+  busy,
   onDragStart,
   onDragOver,
   onDrop,
   onDragEnd,
   onToggle,
+  onToggleKeepAlive,
+  onUpdate,
   onUninstall
 }: ExtensionRowProps): React.JSX.Element {
   const name = pluginDisplayName(plugin)
   const enabled = plugin.status === 'active'
+  const menuRef = useRef<HTMLButtonElement>(null)
+  // 只为把 aria-expanded 说准：读宿主的真实状态，不另存一份「我开着」（与标题栏那两颗一致）
+  const menuOpen = useContextMenu((state) => state.open && state.anchor === menuRef.current)
+
+  /**
+   * 行尾那颗「⋯」。
+   *
+   * 三条与上游 Flutter 端的行内菜单（PopupMenuButton）对齐：常驻运行（push_pin，选中打勾）、
+   * 更新、删除。那边把更新拆成「检查更新」与「强制更新」两条，这里合成一条「先查后更」；
+   * 删除放在分割线之下、走 danger 色 —— 它是这一行里唯一不可逆的动作。
+   */
+  const toggleMenu = (event: React.MouseEvent<HTMLButtonElement>): void => {
+    const menu = useContextMenu.getState()
+    // 宿主对「点触发器」刻意不关（anchor 放行），所以这里读到的仍是开着 → 收起
+    if (menu.open) {
+      menu.hide()
+      return
+    }
+    const items: MenuItem[] = [
+      {
+        key: 'keep-alive',
+        label: '常驻运行',
+        icon: <IconPin size={16} />,
+        // 给出 checked 会让整层面板切成「带勾位列」的排版 —— 正合适
+        checked: pinned,
+        disabled: busy,
+        onClick: onToggleKeepAlive
+      },
+      {
+        key: 'update',
+        label: '更新',
+        icon: <IconDownload size={16} />,
+        disabled: busy,
+        onClick: onUpdate
+      },
+      { key: 'menu-sep', label: '', separator: true },
+      {
+        key: 'delete',
+        label: '删除',
+        icon: <IconTrash size={16} />,
+        variant: 'danger',
+        disabled: busy,
+        onClick: onUninstall
+      }
+    ]
+    const rect = event.currentTarget.getBoundingClientRect()
+    // 右对齐：这颗按钮长在行尾，左对齐会让面板越出行外
+    menu.show(rect.left, rect.bottom + 6, items, {
+      anchor: event.currentTarget,
+      align: 'right',
+      anchorRect: rect
+    })
+  }
 
   return (
     <li
@@ -454,13 +601,17 @@ function ExtensionRow({
       <Switch checked={enabled} onChange={onToggle} ariaLabel={`启用 ${name}`} />
 
       <button
+        ref={menuRef}
         type="button"
         className="icon-btn"
-        data-tip="卸载"
-        aria-label={`卸载 ${name}`}
-        onClick={onUninstall}
+        data-tip="更多操作"
+        aria-label={`${name} 的更多操作`}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        disabled={busy}
+        onClick={toggleMenu}
       >
-        <IconTrash size={16} />
+        {busy ? <IconLoader size={16} /> : <IconMore size={16} />}
       </button>
     </li>
   )
