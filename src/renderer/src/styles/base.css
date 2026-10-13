@@ -357,17 +357,40 @@ a {
   min-height: 0;
 }
 
-/* 主内容滚动区 */
+/* 主内容区：每页一个槽，全叠在同一个格子里（同时只有一个是"看得见的那一页"）。
+   ★ 本身**不滚动**，滚动交给每个槽自己做 —— 页面常驻之后共用一个滚动容器的话，
+     切页会把上一页的 scrollTop 一并带过去（下一页一露面就停在别人的位置）。
+   ★ 叠放而不是「谁走就卸载谁」：离开的那一页只是被藏起来，它的滚动位置、已加载的
+     列表、页内的筛选与排序都还留着。与上面 .surface 两面之间是同一套办法。 */
 .main-scroll {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* 一个页面槽 */
+.page-slot {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  min-height: 0;
   scroll-behavior: smooth;
   /* ★ 滚动槽常驻。滚动条是 10px 的实体（见 ::-webkit-scrollbar），所以「有没有滚动条」
      会直接改变内容宽度 —— 曲库与文件夹两个标签的内容高度不同，一个能滚一个不能滚，
      来回切的时候整页会左右抖 10px。scrollbar-gutter 把这份宽度一直留着，跟滚动条
      现不出现无关。 */
   scrollbar-gutter: stable;
+}
+
+/* 藏起来的那一页：用 visibility 而不是 display —— 后者会让它失去布局，滚动位置与
+   已加载的列表都不再有保证（与 .surface[data-hidden] 同一个理由）。 */
+.page-slot[data-hidden='true'] {
+  visibility: hidden;
+  /* 不可见的那一页不许再收事件：它虽然不画，但布局还在 */
+  pointer-events: none;
 }
 
 .page {

@@ -134,7 +134,8 @@ src/
    │                 ExtensionFrame（扩展主框架：左侧栏 + 右内容面）/
    │                 PluginSurface（扩展 webview 栈）/ PluginIcon /
    │                 RegistrySourcesDialog（管理订阅源）
-   ├─ hooks/         useSongList / usePlaylistSongs / useAsync / useResponsiveSidebar
+   ├─ hooks/         useSongList / usePlaylistSongs / useAsync / useResponsiveSidebar /
+   │                 usePageActive（页面槽的「我看得见吗」，见 §4 的页面槽那段）
    ├─ lib/           url（资源 URL 拼接）/ color / accent / format / concurrency /
    │                 plugin-actions（插件的停用 / 卸载 —— 确认与提示只有这一份，
    │                 将来再加入口别另写；lib/ 里唯一一个不是纯函数的）
@@ -163,10 +164,29 @@ src/
 回去，加回去会被渲染到侧栏里那一小块去。它们刻意是两条路由而不是一条带 `view` 字段的：
 侧栏高亮与 `pane` 语义本来就不一样。
 
+**原生面内部同样是「挂着，只藏不走」**：`nativeRoute` 的每条对应一个页面槽
+（`App.tsx` 的 `NativePages` / `PageSlot`，`.page-slot[data-hidden]`；首次访问才挂、之后不卸）。
+于是切页只换「显示哪一槽」，页面里的筛选条件 / 排序方式 / 视图模式 / 滚动位置都还是离开时的
+样子（`.main-scroll` 因此不再自己滚动 —— 滚动交给每个槽，共用一个滚动容器会把上一页的
+`scrollTop` 带过去）。两条容易做错：
+
+* **页面组件不许自己读「当前路由」**（`useUi(s => s.nativeRoute)`）：常驻之后，不活跃的那份
+  实例读到的已经属于别人了，会当场变脸。参数一律由页面槽经 props 传进去（`LibraryPage`
+  为此收 `route`）。
+* **`library` 与 `folders` 是两个槽**，不是一个：共用一个槽的话，切标签会把「曲库」那一半的
+  筛选条件一并卸掉。
+
+代价是数据的新鲜度不再由「重新挂载」自动保证，改由那三个数据 hook 自己盯（见 §5.8）。
+
 ⚠️ **E2E 的选择器要限定在 `.surface-native` 里**：两面都在 DOM 里，而扩展面里也有一个用
 同一套 class 的侧栏。`scripts/e2e/drive.mjs` 的 `offCenter()` 已经这么写了 —— 不限定的话
 它会拿原生面那个侧栏的中心去量扩展面的图标，得到一个恒定的几十 px（断言"红了"，其实
 什么都没测到）。
+
+⚠️ **同一个理由，页面槽常驻之后 `drive.mjs` 的选择器一律走 `vis()`**（助手区那个包装）：
+它把范围收回「不在 `[data-hidden]` 子树里」的那一份。直接用 `document.querySelectorAll`
+会把藏在别的页里的 `.song-row` / `.card` / `.chip` 一起数进来 —— 计数翻倍，而断言看着还
+"挺像那么回事"。
 
 扩展面里**没有播放条**（宿主播放不会因此中断：音频是模块级对象、不挂在 DOM 上，见
 `state/usePlayer` 的 `audio`），此时控制播放只能靠媒体键 / 托盘 / MPRIS。
@@ -210,6 +230,12 @@ src/
    （`useAsync` / `useSongList` / `usePlaylistSongs`，所以调用方不必各自记得挂），
    store 级的副本由 `invalidate()` 重载。守望（`watchTasks()`）进应用查一次、在跑就轮询到停，
    **不依赖设置页是否挂在界面上**（刷新元数据动辄几分钟，用户多半已经走了）。
+8. **切换页面时自动刷新，但只在数据真的变了才动界面**：页面槽是常驻的（见 §4 那段），
+   所以「切回来」不再有重新挂载这一次机会，重取数据的责任落到那三个数据 hook 上 ——
+   它们从 `usePageActive()` 读「我这一槽是不是看得见的那一页」，切回来时静默重取一次，
+   再用 `shared/data.ts` 的 `sameData` 与手头这份比：**一样就一个字都不改**（不显示加载态、
+   不重设列表、不动滚动位置），不一样才更新（退回第一页 —— 与手动点「刷新」同一条路径）。
+   不活跃的页面连请求都不发；手动刷新、筛选条件变化、`revision` 变化照旧走「明着加载」。
 
 ---
 

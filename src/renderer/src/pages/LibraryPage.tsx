@@ -36,7 +36,7 @@ import { useAsync } from '@/hooks/useAsync'
 import { useSongList } from '@/hooks/useSongList'
 import { requireClient } from '@/state/useAuth'
 import { usePlayer } from '@/state/usePlayer'
-import { useUi } from '@/state/useUi'
+import { useUi, type NativeRoute } from '@/state/useUi'
 import { FoldersView } from './FoldersView'
 
 const TYPE_OPTIONS: { value: SongType | 'all'; label: string }[] = [
@@ -48,9 +48,16 @@ const TYPE_OPTIONS: { value: SongType | 'all'; label: string }[] = [
 
 const BROWSE_FIELDS: FacetField[] = ['artist', 'album', 'genre', 'language', 'style']
 
-export function LibraryPage(): React.JSX.Element {
-  // 「曲库 / 文件夹」这两个标签的选中态看的是**原生面**的路由（本页只长在原生面上）
-  const route = useUi((s) => s.nativeRoute)
+/** 本页的两条路由（两个页面槽，各留一份实例：见 App 的 PAGE_SLOTS） */
+type LibraryRoute = Extract<NativeRoute, { name: 'library' | 'folders' }>
+
+/**
+ * @param route 由页面槽传进来，**不是**自己从 useUi 里读「当前路由」：这一页在槽里常驻
+ *   （library 与 folders 各一份实例），不活跃的那一份读到的「当前路由」已经属于别人了 ——
+ *   拿它渲染会让留在 DOM 里的这一页跟着变脸（曲库槽里画出文件夹、反之亦然），
+ *   而它本该停在用户离开时的样子；更要紧的是「曲库」那一半的筛选条件会跟着一起丢。
+ */
+export function LibraryPage({ route }: { route: LibraryRoute }): React.JSX.Element {
   const navigate = useUi((s) => s.navigate)
 
   return (

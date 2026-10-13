@@ -40,6 +40,7 @@ import { TitleBar } from './components/TitleBar'
 import { Toasts } from './components/Toasts'
 import { TooltipHost } from './components/Tooltip'
 import { useResponsiveSidebar } from './hooks/useResponsiveSidebar'
+import { PageActiveProvider } from './hooks/usePageActive'
 import { formatVersion } from './lib/format'
 import { FavoritesPage } from './pages/FavoritesPage'
 import { HomePage } from './pages/HomePage'
@@ -62,7 +63,7 @@ import { usePlaylists } from './state/usePlaylists'
 import { usePlugins } from './state/usePlugins'
 import { useSettings, watchSystemTheme } from './state/useSettings'
 import { toast } from './state/useToasts'
-import { routeFromPath, useUi, type NativeRoute } from './state/useUi'
+import { routeFromPath, useUi, type NativeRoute, type Surface } from './state/useUi'
 
 let bootstrapped = false
 
@@ -403,11 +404,14 @@ function Shell(): React.JSX.Element {
 
           <div className="main-column">
             <Toolbar />
-            {/* key 只跟路由走。页签切换只影响右边抽屉，把 panelTab 也算进来的话，
-                切一次页签主内容区就整体卸载重建一次 —— 列表和封面全被冲掉，
-                看上去就是「左边闪一下」 */}
-            <div className="main-scroll" key={route.name}>
-              {renderRoute(route)}
+            {/*
+              主内容区：**所有去过的页面都挂在这里**，走的那一页只是被藏起来
+              （见下面 NativePages 的说明）。所以这里没有 key —— 路由变化不再卸载重建。
+              （原先那个 key={route.name} 是「换页就重来」：列表与封面每次都被冲掉，
+              页面里的筛选、排序、滚动位置也跟着没了。）
+            */}
+            <div className="main-scroll">
+              <NativePages route={route} surface={surface} />
             </div>
           </div>
 
@@ -503,6 +507,100 @@ function Toolbar(): React.JSX.Element {
 }
 
 /**
+ * 原生面的页面槽名：一条原生路由一个槽。
+ *
+ * ★ `library` 与 `folders` 虽然落在同一个组件里（见 LibraryPage：同一页的两个标签），
+ *   仍然**各占一个槽** —— 一个槽的话，两个标签就是在同一个实例里换渲染分支，
+ *   切过去会把「曲库」那一半的筛选条件与模式一并卸掉，而它们正是切回来时要留住的东西。
+ *   两个槽各留一份，标签条在两边各画一次（只显示一个，看不出重复）。
+ */
+type PageSlotName = NativeRoute['name']
+
+/** 槽的顺序（固定即可，只为让 DOM 有个稳定次序） */
+const PAGE_SLOTS: readonly PageSlotName[] = [
+  'home',
+  'library',
+  'folders',
+  'favorites',
+  'recent',
+  'search',
+  'playlists',
+  'playlist',
+  'settings'
+]
+
+/**
+ * 原生面的页面槽：**去过的页面都挂着，只藏不走**。
+ *
+ * ★ 与两面之间用的是同一套办法（见文件头与 base.css 里 `.surface` 那段），理由也一样：
+ *   切页时若把离开的那一页卸载掉，它里面的一切就都没了 —— 曲库的筛选条件与排序方式、
+ *   歌单页的视图模式（网格/列表）、歌单详情里在歌单内筛的关键词、滚动到哪儿了。
+ *   而这些正是用户切回来时期待的「还是我离开时的样子」。
+ *
+ *   代价是数据的新鲜度不再由「重新挂载」自动保证，改由数据 hook 自己盯：切回来时静默
+ *   重取一次，**数据没变就一个字都不改**（见 hooks/usePageActive 与三个数据 hook）。
+ *
+ * ★ 只藏不卸载的另一个后果是 DOM 里同时存在好几页，所以不活跃的槽带 `data-hidden`：
+ *   它让那一页不画、不收事件、不进 tab 序（CSS 里是 visibility: hidden，不是 display: none
+ *   —— 后者会让页面失去布局，滚动位置与已加载的列表就不再保证），也让 E2E 那份全局选择器
+ *   能把范围收回当前这一页（见 scripts/e2e/drive.mjs 的 `vis()`）。
+ *
+ * ★ **首次访问才挂**：没人去过的页面不该在开机时就替它发请求（与扩展面的 mountExtensions
+ *   同一个理由）。挂上之后就不再卸载，所以「第一次切过去」的那一帧也要算进去
+ *   （`name === route.name`），否则会白一帧。
+ */
+function NativePages({
+  route,
+  surface
+}: {
+  route: NativeRoute
+  surface: Surface
+}): React.JSX.Element {
+  /*
+   * 每个槽最后停在的那条路由。非活跃槽必须用「自己离开时的那一份」，而不是当前 route
+   * —— 后者只有一条、属于活跃槽，而歌单详情 / 文件夹 / 搜索都要靠各自那份参数渲染
+   * （共用一份的话，它们会被别人的参数覆盖成另一个歌单、另一个目录）。
+   */
+  const lastRoutes = useRef<Partial<Record<PageSlotName, NativeRoute>>>({})
+  lastRoutes.current[route.name] = route
+
+  const [visited, setVisited] = useState<ReadonlySet<PageSlotName>>(() => new Set([route.name]))
+  useEffect(() => {
+    setVisited((prev) => (prev.has(route.name) ? prev : new Set(prev).add(route.name)))
+  }, [route.name])
+
+  return (
+    <>
+      {PAGE_SLOTS.filter((name) => name === route.name || visited.has(name)).map((name) => {
+        const slotRoute = lastRoutes.current[name]
+        if (!slotRoute) return null
+        return (
+          // 活跃 = 既在原生面上，又正是当前这一页（切去扩展面时，面上的页面一起停摆）
+          <PageSlot key={name} active={surface === 'native' && name === route.name}>
+            {renderRoute(slotRoute)}
+          </PageSlot>
+        )
+      })}
+    </>
+  )
+}
+
+/** 一个页面槽。active 同时经 context 告诉页面里的数据 hook「你现在看得见吗」 */
+function PageSlot({
+  active,
+  children
+}: {
+  active: boolean
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <div className="page-slot" data-hidden={active ? undefined : 'true'}>
+      <PageActiveProvider value={active}>{children}</PageActiveProvider>
+    </div>
+  )
+}
+
+/**
  * 原生面的页面。
  *
  * 扩展那两条路由（`extensions` / `plugin`）**刻意不在这里** —— 它们不走主内容区，而是把
@@ -516,7 +614,7 @@ function renderRoute(route: NativeRoute): React.JSX.Element {
     // 「曲库」与「文件夹」是同一页的两种模式（标签条在页内），所以两条路由都落到它
     case 'library':
     case 'folders':
-      return <LibraryPage />
+      return <LibraryPage route={route} />
     case 'favorites':
       return <FavoritesPage />
     case 'recent':
