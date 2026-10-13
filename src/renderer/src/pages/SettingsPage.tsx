@@ -85,7 +85,7 @@ import {
   updateMusicPath
 } from '@/api/endpoints'
 import { useAsync } from '@/hooks/useAsync'
-import { formatBytes, formatDate, formatRelative } from '@/lib/format'
+import { formatBytes, formatDate, formatRelative, formatVersion, latencyLevel } from '@/lib/format'
 import { requireClient, useAuth } from '@/state/useAuth'
 import { currentAccentHex, useSettings } from '@/state/useSettings'
 import { useUi, type SettingsSection } from '@/state/useUi'
@@ -1688,23 +1688,36 @@ function AccountSettings(): React.JSX.Element {
   const [probe, setProbe] = useState<ServerProbeResult | null>(null)
   const [probing, setProbing] = useState(false)
 
-  const runProbe = useCallback(async (): Promise<void> => {
-    if (!baseUrl) return
-    setProbing(true)
-    try {
-      setProbe(await window.songloft.servers.probe(baseUrl))
-    } catch (error) {
-      setProbe({
-        ok: false,
-        version: null,
-        healthy: false,
-        error: error instanceof Error ? error.message : '探测失败',
-        elapsedMs: 0
-      })
-    } finally {
-      setProbing(false)
-    }
-  }, [baseUrl])
+  /**
+   * 探一次服务器。
+   * `announce` 只给手动点「测试连接」用：进页面时那次是自动的，不该弹提示 ——
+   * 每次切到这一页都冒一条 toast 是噪音。
+   */
+  const runProbe = useCallback(
+    async (announce = false): Promise<void> => {
+      if (!baseUrl) return
+      setProbing(true)
+      try {
+        const next = await window.songloft.servers.probe(baseUrl)
+        setProbe(next)
+        if (announce) {
+          if (next.ok) {
+            const level = latencyLevel(next.elapsedMs)
+            toast('连接正常', 'success', `${next.elapsedMs}ms · ${level.label}`)
+          } else {
+            toast('连接失败', 'error', next.error ?? undefined)
+          }
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : '探测失败'
+        setProbe({ ok: false, version: null, healthy: false, error: message, elapsedMs: 0 })
+        if (announce) toast('连接失败', 'error', message)
+      } finally {
+        setProbing(false)
+      }
+    },
+    [baseUrl]
+  )
 
   // 进页面自动探一次：版本号与连接耗时就是「已连接」这个状态的展示内容，
   // 不该等用户先点一下「测试连接」才肯出现。
@@ -1715,12 +1728,10 @@ function AccountSettings(): React.JSX.Element {
   // probe 结果是「此刻能不能连上」的可信来源；还没探完时退回登录态判断，
   // 免得刚进页面就闪一下「断开链接」。
   const connected = probe ? probe.ok : status === 'authenticated'
-  const meta = [
-    probe?.version ? `v${probe.version}` : null,
-    probe?.elapsedMs ? `${probe.elapsedMs}ms` : null
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  // 版本号走 formatVersion：后端发版返回值自带 `v`，再拼一个就成了 vv2.13.1
+  const version = probe?.version ? formatVersion(probe.version) : null
+  // 耗时单独做成带分级的标签，比混在「v2.13.1 · 42ms」里更容易看出快慢
+  const latency = probe && probe.ok && probe.elapsedMs > 0 ? latencyLevel(probe.elapsedMs) : null
 
   return (
     <>
@@ -1730,9 +1741,14 @@ function AccountSettings(): React.JSX.Element {
             <>
               {serverName ?? baseUrl ?? '未配置服务器'}
               {connected ? (
-                meta ? (
-                  <span className="setting-row-meta">{meta}</span>
-                ) : null
+                <>
+                  {version ? <span className="setting-row-meta">{version}</span> : null}
+                  {latency ? (
+                    <span className="badge setting-row-tag" data-tone={latency.tone}>
+                      {probe?.elapsedMs}ms · {latency.label}
+                    </span>
+                  ) : null}
+                </>
               ) : (
                 <span className="setting-row-meta" data-tone="danger">
                   断开链接
@@ -1750,7 +1766,7 @@ function AccountSettings(): React.JSX.Element {
             type="button"
             className="btn"
             disabled={!baseUrl || probing}
-            onClick={() => void runProbe()}
+            onClick={() => void runProbe(true)}
           >
             {probing ? <IconLoader size={15} /> : <IconServer size={15} />}
             测试连接
@@ -1795,7 +1811,7 @@ function AboutSettings(): React.JSX.Element {
 
   const rows: [string, string][] = info.data
     ? [
-        ['应用版本', info.data.version],
+        ['应用版本', formatVersion(info.data.version)],
         ['Electron', info.data.electron],
         ['Chromium', info.data.chrome],
         ['Node', info.data.node],
@@ -1804,7 +1820,7 @@ function AboutSettings(): React.JSX.Element {
           '运行方式',
           info.data.packaged ? (info.data.appImage ? 'AppImage' : '已安装包') : '开发模式'
         ],
-        ['后端版本', backendVersion ?? '未知']
+        ['后端版本', formatVersion(backendVersion)]
       ]
     : []
 

@@ -104,3 +104,38 @@ export function displayAlbum(album: string | null | undefined): string {
   const value = (album ?? '').trim()
   return value || '未知专辑'
 }
+
+/**
+ * 版本号的展示形式。
+ *
+ * 后端 `/api/v1/version` 在正式发版下**自带 `v`**（发版时把 git tag `v2.13.1` 原值注入），
+ * 本地/开发构建则是 `2.13.1` / `dev`。所以补前缀前必须先看有没有 —— 无条件拼一个 `v`
+ * 就是 `vv2.13.1`。
+ */
+export function formatVersion(raw: string | null | undefined): string {
+  const value = (raw ?? '').trim()
+  if (!value) return '未知'
+  if (value === 'dev') return '开发版'
+  return value.startsWith('v') ? value : `v${value}`
+}
+
+/** 连接耗时档位：给标签用的文案 + 配色档（对应 .badge 的 data-tone） */
+export interface LatencyLevel {
+  label: string
+  tone: 'good' | 'fair' | 'slow' | 'poor' | 'bad'
+}
+
+/**
+ * 连接耗时分级，绿 → 红共五档。
+ *
+ * 阈值按「自建后端」的常见分布定：同机 / 局域网个位数到几十毫秒，同城几十毫秒，
+ * 跨地区一百到三百，跨境或链路差则数百以上。分五档而不是三档，是因为真正要人拿主意的
+ * 恰恰是中间两档 —— 「连得上，但要不要换个地址、走代理」。
+ */
+export function latencyLevel(ms: number): LatencyLevel {
+  if (ms <= 30) return { label: '极快', tone: 'good' }
+  if (ms <= 80) return { label: '快', tone: 'fair' }
+  if (ms <= 200) return { label: '一般', tone: 'slow' }
+  if (ms <= 500) return { label: '偏慢', tone: 'poor' }
+  return { label: '很慢', tone: 'bad' }
+}

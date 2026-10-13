@@ -378,6 +378,38 @@
   color: var(--success);
 }
 
+/*
+ * 延迟分级：绿 → 黄绿 → 橙 → 橙红 → 红共五档（见 lib/format.ts 的 latencyLevel）。
+ * 中间两档不引入新色 token，直接用已有的成功/警告/危险三色混出来。
+ */
+.badge[data-tone='good'],
+.badge[data-tone='fair'],
+.badge[data-tone='slow'],
+.badge[data-tone='poor'],
+.badge[data-tone='bad'] {
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.badge[data-tone='good'] {
+  color: var(--success);
+}
+
+.badge[data-tone='fair'] {
+  color: color-mix(in srgb, var(--success) 45%, var(--warning));
+}
+
+.badge[data-tone='slow'] {
+  color: var(--warning);
+}
+
+.badge[data-tone='poor'] {
+  color: color-mix(in srgb, var(--warning) 42%, var(--danger));
+}
+
+.badge[data-tone='bad'] {
+  color: var(--danger);
+}
+
 /* ── 卡片网格 ─────────────────────────────────────────────────────────── */
 
 .card-grid {
@@ -1192,6 +1224,12 @@ select.input option {
 
 .setting-row-meta[data-tone='danger'] {
   color: var(--danger);
+}
+
+/* 行标题里的标签（连接耗时等）：与上面那个状态后缀共用同一条左间距 */
+.setting-row-tag {
+  margin-left: 8px;
+  vertical-align: 1px;
 }
 
 .setting-row-control {
