@@ -99,7 +99,28 @@ export const usePlugins = create<PluginsState>((set, get) => ({
     const client = requireClient()
     const updated = await setPluginEnabled(client, id, enabled)
     set((state) => ({
-      plugins: state.plugins.map((plugin) => (plugin.id === id ? updated : plugin)),
+      plugins: state.plugins.map((plugin) =>
+        plugin.id === id
+          ? {
+              ...updated,
+              /*
+               * ★ icon **保留本机那一份**，不采信响应里的。
+               *
+               * 这个端点（服务端 handleEnable / handleDisable）回的是数据库里
+               * manifest 声明的**原始**文件名，漏了像 GET /jsplugins 那样把它解析成
+               * 磁盘上真实存在的那一个。于是草率替换会让图标当场退回首字母方块，
+               * 而且只有重拉一次列表（或重启）才恢复：
+               *   - manifest 声明 "icon.svg" 而磁盘上是 "icon.abc123.svg"（构建加了
+               *     content hash）→ 拼出的 URL 404；
+               *   - manifest 压根没声明 icon、只往 static/ 放了个 icon.svg（由后端
+               *     兜底探测出来）→ 响应里是空串，直接走兜底图。
+               * 启用 / 停用并不动插件文件，所以本机这份（来自列表响应，已解析过）
+               * 永远不比它差。（上游 Flutter 端不吃这个字段：它 toggle 后重拉整份列表。）
+               */
+              icon: plugin.icon || updated.icon
+            }
+          : plugin
+      ),
       error: null
     }))
   },

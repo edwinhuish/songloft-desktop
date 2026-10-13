@@ -21,8 +21,13 @@ export function listPlugins(client: ApiClient): Promise<JSPlugin[]> {
 /**
  * 启用 / 停用一个插件。
  *
- * 后端返回更新后的插件本体，直接用它替换本地那一条 —— 比「改完再重拉整份列表」少一次
+ * 后端返回更新后的插件本体，用它替换本地那一条 —— 比「改完再重拉整份列表」少一次
  * 请求，也避免两次请求之间列表闪一下。
+ *
+ * ★ 但这份本体的 `icon` 是**未解析**的原始文件名（服务端这个端点没走 resolvePluginIcon，
+ *   与列表接口不一致）。`icon` 只由磁盘决定、而启用/停用不动文件，所以收口处
+ *   （`state/usePlugins.setEnabled`）刻意保留本机那一份 —— 直接整体采信会让图标退成
+ *   首字母兜底图，且重拉列表前不会自愈。
  */
 export function setPluginEnabled(
   client: ApiClient,

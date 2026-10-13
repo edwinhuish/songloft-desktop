@@ -79,6 +79,10 @@ export interface JSPlugin {
    *
    * 后端在返回列表时已经把 manifest 里声明的名字解析成**磁盘上真实存在**的那个
    * （带 content hash 指纹的也认），所以这里拿到的是可直接拼 URL 的名字；空串表示没有。
+   *
+   * ★ 只有**列表 / 详情**（`GET /jsplugins`、`GET /jsplugins/{id}`）保证是解析过的：
+   *   启用 / 停用（以及更新）的响应里是数据库里那份**原始**值。改动插件对象时别拿它
+   *   覆盖本机这份，否则图标会退回兜底图 —— 收口处见 `state/usePlugins.setEnabled`。
    */
   icon: string
   updateUrl: string
