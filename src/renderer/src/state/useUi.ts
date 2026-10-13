@@ -28,6 +28,9 @@ export type Route =
   | { name: 'playlist'; id: number }
   | { name: 'folders'; path: string }
   | { name: 'settings'; section: SettingsSection }
+  /** 扩展管理：左列已装、右列插件商店。它是独立页而不是设置里的一个分区 ——
+   *  装插件是「逛」，与「改配置」不是同一种操作节奏 */
+  | { name: 'extensions' }
   /**
    * 扩展页。它**不是**主内容区里的一个页签，而是把标题栏以下整块换成一个 webview ——
    * 见 App 里 `.shell[data-surface='plugin']` 的分支。所以它在 Route 里，但不在

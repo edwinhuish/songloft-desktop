@@ -2,9 +2,12 @@
  * 应用外壳。
  *
  * 三层结构（栅格来自 base.css 的 .shell / .shell-body / .main-column）：
- *   ┌ 标题栏（自绘窗口控制 + 当前曲目 + 全局搜索入口）
+ *   ┌ 标题栏（LOGO + 扩展入口条 + 导航菜单/搜索/窗口控制）—— 唯一常驻的原生 chrome
  *   ├ 侧栏 │ 工具条 + 主滚动区 │ 右侧抽屉
  *   └ 播放条
+ *
+ * ★ 标题栏以下是**一个可替换的内容面**：原生页（上面那三层）或者某个扩展的 webview。
+ *   切换靠 `.shell[data-surface]`，见下面 Shell 里的分支 —— 扩展不是主内容区里的一个页签。
  *
  * 三件「只该发生一次」的接线也放在这里：
  *   1. 全局快捷键（空格/方向键/Ctrl+K…）
@@ -31,6 +34,7 @@ import { Toasts } from './components/Toasts'
 import { TooltipHost } from './components/Tooltip'
 import { useResponsiveSidebar } from './hooks/useResponsiveSidebar'
 import { formatVersion } from './lib/format'
+import { ExtensionsPage } from './pages/ExtensionsPage'
 import { FavoritesPage } from './pages/FavoritesPage'
 import { HomePage } from './pages/HomePage'
 import { LibraryPage } from './pages/LibraryPage'
@@ -403,6 +407,10 @@ function renderRoute(route: Route): React.JSX.Element {
       return <PlaylistDetailPage playlistId={route.id} />
     case 'settings':
       return <SettingsPage section={route.section} />
+    case 'extensions':
+      return <ExtensionsPage />
+    // 'plugin' 刻意没有分支：它不走主内容区，而是把标题栏以下整块换成 webview
+    // （见上面 Shell 里的 data-surface 分支）
     default:
       return <HomePage />
   }

@@ -2285,3 +2285,76 @@ select.input option {
   color: var(--text-4);
   font-variant-numeric: tabular-nums;
 }
+
+/* ── 扩展管理 ─────────────────────────────────────────────────────────── */
+
+.extension-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 行间距用 margin 撑开而不是 padding：拖拽时整行要能看见自己在挪，行与行之间必须
+   留出可见的空隙，落点线才画得出来（画在 box-shadow 上，压在 padding 里会看不见） */
+.extension-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  transition:
+    border-color var(--dur-1) var(--ease),
+    opacity var(--dur-1) var(--ease);
+}
+
+/* 停用的那些留在列表里（用户要能把它们重新打开），但要一眼看出它们不参与入口条 */
+.extension-row[data-enabled='false'] .extension-info {
+  opacity: 0.55;
+}
+
+.extension-row[data-dragging='true'] {
+  opacity: 0.4;
+}
+
+/* 落点提示画在**上边**：插到这一行之前 */
+.extension-row[data-over='true'] {
+  box-shadow: 0 -2px 0 0 var(--accent);
+}
+
+.extension-grip {
+  display: grid;
+  place-items: center;
+  color: var(--text-4);
+  cursor: grab;
+}
+
+.extension-row[data-dragging='true'] .extension-grip {
+  cursor: grabbing;
+}
+
+.extension-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.extension-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 580;
+  color: var(--text-1);
+}
+
+.extension-meta {
+  font-size: 11.5px;
+  color: var(--text-2);
+}

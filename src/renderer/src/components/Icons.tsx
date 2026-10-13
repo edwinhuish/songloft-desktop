@@ -476,3 +476,10 @@ export const IconCommand = (p: IconProps) => (
 
 export const IconHistory = IconClock
 export const IconList = IconListMusic
+
+/** 扩展/插件。左侧两个凸起是拼图榫头 —— 这是「扩展」这个概念的通用图形 */
+export const IconPuzzle = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9.5 4.5a1.9 1.9 0 0 1 3.8 0v.9h2.4a1.5 1.5 0 0 1 1.5 1.5v2.5h.9a1.9 1.9 0 0 1 0 3.8h-.9v4.4a1.5 1.5 0 0 1-1.5 1.5H6.6a1.5 1.5 0 0 1-1.5-1.5v-4.4h-.6a1.9 1.9 0 0 1 0-3.8h.6V6.9a1.5 1.5 0 0 1 1.5-1.5h2.9Z" />
+  </Svg>
+)

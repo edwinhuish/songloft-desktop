@@ -19,6 +19,7 @@
 
 import { useEffect, useState } from 'react'
 
+import { pluginDisplayName } from '@shared/plugin'
 import {
   IconClock,
   IconClose,
@@ -29,13 +30,17 @@ import {
   IconMaximize,
   IconMenu,
   IconMinimize,
+  IconPuzzle,
   IconRestore,
   IconSearch,
-  IconSettings
+  IconSettings,
+  IconSliders
 } from './Icons'
 import { useContextMenu, type MenuItem } from './ContextMenu'
 import { ExtensionStrip } from './ExtensionStrip'
+import { PluginIcon } from './PluginIcon'
 import { Cover } from './primitives'
+import { useExtensionStrip } from '@/hooks/useExtensionStrip'
 import { useUi } from '@/state/useUi'
 import { regularPlaylists, usePlaylists } from '@/state/usePlaylists'
 
@@ -53,6 +58,8 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   const playlists = usePlaylists((s) => s.playlists)
   // 与侧栏「我的歌单」用同一个过滤器，两处名单不会各自漂移
   const myPlaylists = regularPlaylists(playlists)
+  // 被挤出标题栏的那些扩展要在这里列出来（入口条与它同源，见 hooks/useExtensionStrip）
+  const { hidden: hiddenExtensions, activate: activateExtension } = useExtensionStrip()
 
   useEffect(() => {
     void window.songloft.window.getState().then(setState)
@@ -135,8 +142,20 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
       icon: <IconClock size={16} />,
       onClick: () => navigate({ name: 'recent' })
     },
-    // 设置与上面那串「去哪儿」不是一类：分割线把这一段单独划出来
-    { key: 'sep-settings', label: '', separator: true },
+    // 「扩展 / 设置」与上面那串「去哪儿」不是一类：分割线把这一段单独划出来
+    { key: 'sep-manage', label: '', separator: true },
+    {
+      key: 'extensions',
+      label: '扩展',
+      icon: <IconPuzzle size={16} />,
+      /**
+       * 「双面」项：悬浮列出能直接打开的扩展（含被挤出标题栏的那些），单击进扩展管理页。
+       * 二级菜单的顺序与标题栏入口条同源（都走 useExtensionStrip），所以「列表里的第几个」
+       * 与「条上的第几个」永远对得上 —— 两边各算一套必然会出现自相矛盾的列法。
+       */
+      onClick: () => navigate({ name: 'extensions' }),
+      children: extensionMenuChildren()
+    },
     {
       key: 'settings',
       label: '设置',
@@ -144,6 +163,37 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
       onClick: () => navigate({ name: 'settings', section: 'appearance' })
     }
   ]
+
+  /**
+   * 「扩展」的二级菜单。
+   *
+   * 第一项固定是「扩展管理」；只有真的**有扩展被挤出可视范围**时，才补一条分割线与
+   * 那串被藏起来的扩展。全都露在标题栏上时把它们再列一遍是纯噪音。
+   *
+   * 点被隐藏的那一项 = 激活它（useExtensionStrip.activate 会顺手把它滚进可视范围），
+   * 这正是「挤出去了也还有一处能点到」的兜底入口。
+   */
+  const extensionMenuChildren = (): MenuItem[] => {
+    const children: MenuItem[] = [
+      {
+        key: 'extensions-manage',
+        label: '扩展管理',
+        icon: <IconSliders size={16} />,
+        onClick: () => navigate({ name: 'extensions' })
+      }
+    ]
+    if (!hiddenExtensions.length) return children
+    children.push({ key: 'extensions-sep', label: '', separator: true })
+    for (const plugin of hiddenExtensions) {
+      children.push({
+        key: `extension-${plugin.entryPath}`,
+        label: pluginDisplayName(plugin),
+        icon: <PluginIcon plugin={plugin} size={16} />,
+        onClick: () => activateExtension(plugin.entryPath)
+      })
+    }
+    return children
+  }
 
   const toggleNavMenu = (event: React.MouseEvent<HTMLButtonElement>): void => {
     const menu = useContextMenu.getState()
