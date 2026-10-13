@@ -300,6 +300,9 @@ function AppearanceSettings(): React.JSX.Element {
 function PlaybackSettings(): React.JSX.Element {
   const { settings, patch } = useSettings()
 
+  const normalize = useAsync(() => getVolumeNormalize(requireClient()), [])
+  const hls = useAsync(() => getHlsProxyEnabled(requireClient()), [])
+
   return (
     <>
       <Card title="播放">
@@ -356,8 +359,58 @@ function PlaybackSettings(): React.JSX.Element {
         </Row>
 
         <Row
+          server
+          title="响度归一化（EBU R128）"
+          desc={
+            <>
+              服务端统一各首歌的响度，杂食歌单不用一直调音量
+              <br />
+              需要后端安装 FFmpeg，未安装时开关不生效
+            </>
+          }
+        >
+          {normalize.loading ? (
+            <IconLoader size={16} />
+          ) : (
+            <Switch
+              ariaLabel="响度归一化"
+              checked={normalize.data?.enabled ?? false}
+              onChange={(checked) => {
+                void setVolumeNormalize(requireClient(), {
+                  enabled: checked,
+                  loudness: normalize.data?.loudness ?? -16
+                })
+                  .then(() => normalize.reload())
+                  .then(() => toast(checked ? '已开启响度归一化' : '已关闭响度归一化', 'success'))
+                  .catch((error: unknown) =>
+                    toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
+                  )
+              }}
+            />
+          )}
+        </Row>
+
+        <Row server title="HLS 代理" desc="播放 m3u8 时由服务端代理切片，解决跨域与防盗链">
+          {hls.loading ? (
+            <IconLoader size={16} />
+          ) : (
+            <Switch
+              ariaLabel="HLS 代理"
+              checked={hls.data ?? false}
+              onChange={(checked) => {
+                void setHlsProxyEnabled(requireClient(), checked)
+                  .then(() => hls.reload())
+                  .catch((error: unknown) =>
+                    toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
+                  )
+              }}
+            />
+          )}
+        </Row>
+
+        <Row
           title="本机音频归一化参数"
-          desc="把 normalize=1 一并交给后端音频端点（与「服务器」里的响度归一化是两件事）"
+          desc="把 normalize=1 一并交给后端音频端点（与上面那个开关是两件事）"
         >
           <Switch
             ariaLabel="本机音频归一化参数"
@@ -890,8 +943,6 @@ function DuplicatesModal({
 /* ───────────────────────────── 服务器 ───────────────────────────── */
 
 function ServerSettings(): React.JSX.Element {
-  const normalize = useAsync(() => getVolumeNormalize(requireClient()), [])
-  const hls = useAsync(() => getHlsProxyEnabled(requireClient()), [])
   const tokens = useAsync(() => getTokens(requireClient(), 50, 0), [])
 
   // 只列 refresh token：access token 短命、一台设备会刷出很多个，列出来只是噪音；
@@ -902,57 +953,6 @@ function ServerSettings(): React.JSX.Element {
 
   return (
     <>
-      <Card title="播放与转码">
-        <Row
-          title="响度归一化（EBU R128）"
-          desc={
-            <>
-              服务端统一各首歌的响度，杂食歌单不用一直调音量
-              <br />
-              需要后端安装 FFmpeg，未安装时开关不生效
-            </>
-          }
-        >
-          {normalize.loading ? (
-            <IconLoader size={16} />
-          ) : (
-            <Switch
-              ariaLabel="响度归一化"
-              checked={normalize.data?.enabled ?? false}
-              onChange={(checked) => {
-                void setVolumeNormalize(requireClient(), {
-                  enabled: checked,
-                  loudness: normalize.data?.loudness ?? -16
-                })
-                  .then(() => normalize.reload())
-                  .then(() => toast(checked ? '已开启响度归一化' : '已关闭响度归一化', 'success'))
-                  .catch((error: unknown) =>
-                    toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
-                  )
-              }}
-            />
-          )}
-        </Row>
-
-        <Row title="HLS 代理" desc="播放 m3u8 时由服务端代理切片，解决跨域与防盗链">
-          {hls.loading ? (
-            <IconLoader size={16} />
-          ) : (
-            <Switch
-              ariaLabel="HLS 代理"
-              checked={hls.data ?? false}
-              onChange={(checked) => {
-                void setHlsProxyEnabled(requireClient(), checked)
-                  .then(() => hls.reload())
-                  .catch((error: unknown) =>
-                    toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
-                  )
-              }}
-            />
-          )}
-        </Row>
-      </Card>
-
       <Card
         title="登录设备"
         action={
