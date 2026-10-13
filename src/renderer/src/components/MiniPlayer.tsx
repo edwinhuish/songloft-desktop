@@ -137,9 +137,6 @@ export function MiniPlayer(): React.JSX.Element {
           <IconSkipForward size={18} />
         </button>
 
-        {/* 传输控制与「视图」两组之间那条细线：几颗图标一字排开时分不出组 */}
-        <span className="mini-divider" aria-hidden="true" />
-
         <button
           type="button"
           className="icon-btn"
