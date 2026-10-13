@@ -283,6 +283,26 @@ function noContent(res) {
   res.end()
 }
 
+/**
+ * 读取 JSON 请求体：空体当 `{}`，非法 JSON 返回 null。
+ *
+ * 真实后端对解析不了的 body 也是 400，所以调用方拿到 null 就该回 400 —— 不能当空对象放行。
+ */
+function readJsonBody(req) {
+  return new Promise((resolve) => {
+    let raw = ''
+    req.on('data', (chunk) => (raw += chunk))
+    req.on('end', () => {
+      if (!raw) return resolve({})
+      try {
+        resolve(JSON.parse(raw))
+      } catch {
+        resolve(null)
+      }
+    })
+  })
+}
+
 function facetsOf(field) {
   const counts = new Map()
   for (const song of SONGS) {
@@ -333,6 +353,38 @@ function songsResponse(url) {
   const offset = Number(q.get('offset') ?? 0)
   const limit = Number(q.get('limit') ?? 50)
   return { songs: list.slice(offset, offset + limit), total }
+}
+
+/* ─────────────────────── 可变设置（需要回读的） ─────────────────────── */
+
+/**
+ * 音量均衡（EBU R128）：
+ *
+ * 形状对齐真实后端 `/api/v1/settings/volume-normalize` 的契约 —— `{ enabled: bool,
+ * loudness: number }`（LUFS，范围 -40 ~ -5，默认 -16）。历史 mock 返回的 `target_lufs` / `mode`
+ * 在后端并不存在，导致客户端的 `res.loudness ?? -16` 永远走兜底、字段名写错也发现不了。
+ *
+ * 取值刻意取非默认（enabled=true / loudness=-14）：与下面三个布尔开关同样的用意 ——
+ * 客户端读错字段或初始状态渲染错时，非默认值才看得出来。
+ */
+const volumeNormalize = { enabled: true, loudness: -14 }
+
+/**
+ * PUT /api/v1/settings/volume-normalize
+ *
+ * 真实后端语义：`loudness` 可省略（省略=只切开关、不改响度），越界报 400 而不是夹紧；
+ * 响应回显更新后的 `{ enabled, loudness }`，与随后的 GET 一致。
+ */
+function putVolumeNormalize(req, res) {
+  void readJsonBody(req).then((body) => {
+    if (body === null) return json(res, 400, { error: '请求格式错误' })
+    const loudness = body.loudness ?? volumeNormalize.loudness
+    if (typeof loudness !== 'number' || loudness < -40 || loudness > -5)
+      return json(res, 400, { error: `音量均衡响度 ${loudness} 越界，需在 -40 ~ -5 LUFS` })
+    volumeNormalize.enabled = body.enabled ?? volumeNormalize.enabled
+    volumeNormalize.loudness = loudness
+    return json(res, 200, { ...volumeNormalize })
+  })
 }
 
 /* ─────────────────────────── 路由 ─────────────────────────── */
@@ -567,7 +619,8 @@ const server = createServer((req, res) => {
     return json(res, 200, { path: '/music', exists: true, song_count: SONGS.length })
   }
   if (path === '/api/v1/settings/volume-normalize') {
-    return json(res, 200, { enabled: false, target_lufs: -14, mode: 'album' })
+    if (req.method === 'PUT') return putVolumeNormalize(req, res)
+    return json(res, 200, { ...volumeNormalize })
   }
   // 形状按 endpoints.ts 的读取函数来：三个布尔开关 + 一个枚举。
   // 刻意不都返回 false —— 全 false 时「开关初始状态渲染错了」这种缺陷看不出来。
