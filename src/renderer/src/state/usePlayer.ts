@@ -14,7 +14,7 @@
 import { create } from 'zustand'
 
 import type { PlayMode, PlaybackContext, Song } from '@shared/types'
-import { getLyric, reportPlayed } from '@/api/endpoints'
+import { getLyric, getSong, reportPlayed } from '@/api/endpoints'
 import { fetchCoverAccentFor } from '@/lib/accent'
 import { parseLyrics, type ParsedLyric } from '@shared/lyric'
 import { buildCoverUrl, buildSongUrl } from '@/lib/url'
@@ -71,6 +71,8 @@ export interface PlayerState {
   restoreLastQueue: () => Promise<void>
   /** 重新拉一次当前歌曲的歌词（歌词加载失败时界面上的「重试」） */
   reloadLyrics: () => Promise<void>
+  /** 重取「正在播放」那一首的元数据（曲库扫描 / 刷新元数据之后由 useLibrary 调） */
+  refreshCurrentSong: () => Promise<void>
 }
 
 const audio = new Audio()
@@ -432,6 +434,26 @@ export const usePlayer = create<PlayerState>((set, get) => {
       // 期间用户可能已经切歌，回来的结果不能再往界面上贴
       if (get().currentSong()?.id !== song.id) return
       set({ lyrics: parsed, lyricsLoading: false, lyricFailed: failed })
+    },
+
+    refreshCurrentSong: async () => {
+      const song = get().currentSong()
+      if (!song) return
+      try {
+        const fresh = await getSong(requireClient(), song.id)
+        /*
+         * 只换队列里那一个对象，别的一律不动：
+         *   · 不碰 audio —— 变的是元数据（标题/封面/时长），正在播的那一轨不该被打断；
+         *   · 不动 order / cursor —— 队列顺序与位置是用户的东西，跟元数据没关系。
+         * 拉不到就维持原样（多半是这首歌刚被删掉）：播放器自己会走「播不了」那条路，
+         * 这里不替它做决定。
+         */
+        set((state) => ({
+          queue: state.queue.map((item) => (item.id === fresh.id ? fresh : item))
+        }))
+      } catch {
+        // 静默：这是后台同步，失败不值得打断用户
+      }
     },
 
     setVolume: (volume) => {

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Song, SongQuery } from '@shared/types'
 import { getSongIds, getSongs } from '@/api/endpoints'
 import { requireClient } from '@/state/useAuth'
+import { useLibrary } from '@/state/useLibrary'
 
 export interface SongListController {
   songs: Song[]
@@ -44,6 +45,12 @@ export function useSongList(query: SongQuery, pageSize = 200): SongListControlle
 
   const generation = useRef(0)
   const queryKey = JSON.stringify(query)
+  /*
+   * 曲库数据的版本号（扫描 / 刷新元数据结束后 +1，见 state/useLibrary）。
+   * 放进 load 的依赖里 → 下面那个 effect 跟着重跑：与手动点「刷新」同一条路径
+   * （已加载的分页会退回第一页，这是「数据变了」该有的代价）。
+   */
+  const revision = useLibrary((s) => s.revision)
 
   const load = useCallback(
     async (offset: number, generationToken: number) => {
@@ -65,7 +72,7 @@ export function useSongList(query: SongQuery, pageSize = 200): SongListControlle
     },
     // query 通过 queryKey 参与依赖；直接放 query 对象会因每次渲染新引用而无限重跑
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [queryKey, pageSize]
+    [queryKey, pageSize, revision]
   )
 
   useEffect(() => {

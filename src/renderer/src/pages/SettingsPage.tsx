@@ -123,6 +123,7 @@ import {
   latencyLevel
 } from '@/lib/format'
 import { requireClient, useAuth } from '@/state/useAuth'
+import { isMetadataRefreshRunning, isScanRunning, useLibrary } from '@/state/useLibrary'
 import { currentAccentHex, useSettings } from '@/state/useSettings'
 import { useUi, type SettingsSection } from '@/state/useUi'
 import { toast } from '@/state/useToasts'
@@ -695,13 +696,13 @@ function LibrarySettings(): React.JSX.Element {
     }
   }, [])
 
-  const isScanning =
-    progress != null &&
-    ['scanning', 'importing', 'splitting_cue', 'creating_playlists', 'cancelling'].includes(
-      progress.status
-    )
+  /*
+   * 「在跑」的判定只有一份，在 state/useLibrary 里 —— 进度显示与那边的守望必须同时认同一套
+   * 状态表：各写一份的话，后端加一个中间态就会出现「进度条已经停了，但同步还没开始」。
+   */
+  const isScanning = isScanRunning(progress?.status)
 
-  const refreshRunning = refresh?.status === 'running' || refresh?.status === 'cancelling'
+  const refreshRunning = isMetadataRefreshRunning(refresh?.status)
 
   // 指纹任务的运行态只有一个值（后端没有单独的 cancelling 态）
   const fpRunning = fpProgress?.status === 'running'
@@ -1165,6 +1166,8 @@ function LibrarySettings(): React.JSX.Element {
                     'scan',
                     async () => {
                       await startScan(requireClient(), false)
+                      // 扫完要把各处的曲库副本同步一遍：守望交给 useLibrary（它一直跟到任务结束）
+                      useLibrary.getState().watchTasks()
                       setProgress(await getScanProgress(requireClient()))
                     },
                     '扫描已开始'
@@ -1185,6 +1188,8 @@ function LibrarySettings(): React.JSX.Element {
                     'force',
                     async () => {
                       await startScan(requireClient(), true)
+                      // 同上（强制扫描：已入库的也会重读元数据，更需要同步）
+                      useLibrary.getState().watchTasks()
                       setProgress(await getScanProgress(requireClient()))
                     },
                     '强制扫描已开始'
@@ -1286,6 +1291,8 @@ function LibrarySettings(): React.JSX.Element {
                   'refresh',
                   async () => {
                     await startMetadataRefresh(requireClient())
+                    // 同上：刷完的元数据要同步到曲库列表、歌单、正在播放那一首
+                    useLibrary.getState().watchTasks()
                     setRefresh(await getMetadataRefreshProgress(requireClient()))
                   },
                   '已开始刷新元数据（后台进行）'
@@ -1314,6 +1321,8 @@ function LibrarySettings(): React.JSX.Element {
                     `清理完成：共 ${result.total} 条（文件不存在 ${result.file_not_found}，在排除目录 ${result.in_excluded_dir}）`,
                     'success'
                   )
+                  // 删掉记录也是曲库变了：列表、歌单计数、统计那几处副本要跟上
+                  useLibrary.getState().invalidate()
                 },
                 '已执行清理'
               )

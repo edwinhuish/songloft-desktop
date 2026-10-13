@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Song } from '@shared/types'
 import { getPlaylistSongIds, getPlaylistSongs } from '@/api/endpoints'
 import { requireClient } from '@/state/useAuth'
+import { useLibrary } from '@/state/useLibrary'
 
 export interface PlaylistSongsController {
   songs: Song[]
@@ -52,6 +53,8 @@ export function usePlaylistSongs(
 
   const generation = useRef(0)
   const key = JSON.stringify([playlistId, sort, order, keyword])
+  /* 曲库数据的版本号（扫描 / 刷新元数据结束后 +1，见 state/useLibrary）—— 与 useSongList 同款 */
+  const revision = useLibrary((s) => s.revision)
 
   const load = useCallback(
     async (offset: number, token: number) => {
@@ -78,7 +81,7 @@ export function usePlaylistSongs(
     },
     // key 已经把 playlistId/sort/order/keyword 串起来了，避免对象引用导致的无限重跑
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [key, pageSize]
+    [key, pageSize, revision]
   )
 
   useEffect(() => {

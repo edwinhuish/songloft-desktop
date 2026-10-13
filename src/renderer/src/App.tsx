@@ -56,6 +56,7 @@ import {
   usePlayer
 } from './state/usePlayer'
 import { requireClient, useAuth } from './state/useAuth'
+import { useLibrary } from './state/useLibrary'
 import { usePlaylists } from './state/usePlaylists'
 import { usePlugins } from './state/usePlugins'
 import { useSettings, watchSystemTheme } from './state/useSettings'
@@ -270,6 +271,12 @@ export function App(): React.JSX.Element {
     void usePlaylists.getState().load()
     void usePlaylists.getState().loadFavorites()
     void usePlayer.getState().restoreLastQueue()
+    /*
+     * 守望曲库的后台任务（扫描 / 刷新元数据）：进应用时服务端可能正在扫（上一次会话没跑完、
+     * 或另一台客户端起的），那种情况下没有任何页面会去问进度 —— 由这里一直跟到它结束，
+     * 结束时 useLibrary 会把号 +1，各处的曲库副本随之重取。见 state/useLibrary。
+     */
+    useLibrary.getState().watchTasks()
     // 拿不到扩展不该弹错：标题栏少几个按钮，总好过开机弹一条红字
     void usePlugins
       .getState()

@@ -122,7 +122,8 @@ src/
    ├─ api/           client.ts（fetch 封装）/ endpoints.ts（端点清单，来自上游 Flutter 实现）/
    │                 plugins.ts（JS 插件：列表 / 启停 / 卸载 / 顺序 / 商店）
    ├─ state/         useAuth / usePlayer / usePlaylists / useSettings / useUi / useToasts /
-   │                 usePlugins（已装扩展 + 顺序 + 运行时音频状态，唯一事实源）
+   │                 usePlugins（已装扩展 + 顺序 + 运行时音频状态，唯一事实源）/
+   │                 useLibrary（曲库数据的版本号 + 后台任务守望，见 §5.7）
    ├─ pages/         10 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
    │                 Recent / Search / Settings / Login / Extensions（+ 同目录的 PluginStore）
    │                 （「文件夹」不是独立页面，是 LibraryPage 里的一个标签，见 FoldersView）
@@ -183,6 +184,13 @@ src/
 5. **封面取主色由主进程代取字节**（`cover:extract`）：渲染层直接读跨域 `canvas` 会污染画布。
 6. **持久化只在主进程**（`store.ts`）：设置（本地偏好）/ 凭据（token）/ 服务器列表。
    渲染层启动时拉一次，之后靠 IPC 读写。
+7. **曲库数据的各处副本靠一个「版本号」收敛**（`state/useLibrary`）：歌单与收藏在
+   `usePlaylists` 里，曲库 / 搜索 / 歌单详情 / 文件夹 / 首页的列表则在各自 hook 的本地 state 里。
+   而「扫描曲库」（含强制扫描）与「刷新元数据」是**服务端的后台任务**，客户端没有推送通道 ——
+   任务一结束就把 `useLibrary.revision` +1：页面级的列表在 hook **内部**订阅它
+   （`useAsync` / `useSongList` / `usePlaylistSongs`，所以调用方不必各自记得挂），
+   store 级的副本由 `invalidate()` 重载。守望（`watchTasks()`）进应用查一次、在跑就轮询到停，
+   **不依赖设置页是否挂在界面上**（刷新元数据动辄几分钟，用户多半已经走了）。
 
 ---
 

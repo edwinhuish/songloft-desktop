@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { useLibrary } from '@/state/useLibrary'
+
 export interface AsyncResult<T> {
   data: T | null
   loading: boolean
@@ -19,6 +21,14 @@ export function useAsync<T>(factory: () => Promise<T>, deps: readonly unknown[])
   const [error, setError] = useState<string | null>(null)
   const [nonce, setNonce] = useState(0)
   const generation = useRef(0)
+  /*
+   * 曲库数据的版本号（扫描 / 刷新元数据结束后 +1，见 state/useLibrary）。
+   *
+   * 挂在这里、而不是让每个调用方自己往 deps 里加：这些 useAsync 拉的基本都是服务端曲库
+   * 数据（歌曲列表、分面、文件夹、歌单详情、首页统计…），「曲库变了就重取」是它们的
+   * **公共语义** —— 散到十几处去加，迟早漏掉一处，而漏掉的那处就是一处陈旧。
+   */
+  const revision = useLibrary((s) => s.revision)
 
   useEffect(() => {
     const current = ++generation.current
@@ -44,7 +54,7 @@ export function useAsync<T>(factory: () => Promise<T>, deps: readonly unknown[])
       generation.current += 1
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, nonce])
+  }, [...deps, nonce, revision])
 
   const reload = useCallback(() => setNonce((n) => n + 1), [])
   return { data, loading, error, reload }
