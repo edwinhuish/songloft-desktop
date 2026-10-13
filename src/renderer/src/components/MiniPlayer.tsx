@@ -4,13 +4,15 @@
  * ★ 它不是「另一个播放器」：读同一个 usePlayer、调同一套 seek / toggle / next / previous，
  *   进度条连组件都复用底栏那一份（PlayerProgress）。「与现有底栏保持一致」只有这样才守得住 ——
  *   各写一套的话，两处的拖动手感（松手才 seek）与键盘行为迟早分叉。
- * ★ 窗口是无边框的，所以拖拽区与「退出迷你」那颗钮必须自己给：正常界面里的标题栏此刻正被
- *   藏着，不给就等于把用户关在了一个挪不动也回不去的窗里。
- *   **关闭则不在这里**：这一条窄栏上每多一颗钮就是从歌名那里抢一块地方，而关窗本来就有
- *   更好的去处（Ctrl+Q 是应用菜单给的全局加速键、托盘菜单里也有「退出」），
- *   另有一个「退出迷你模式」的入口把用户送回带标题栏的正常界面。
- * ★ 这里刻意只留播放必需的东西（上一首 / 播放 / 下一首 + 歌词 / 退出）：
+ * ★ 窗口是无边框的，标题栏此刻正被藏着 —— 拖拽区与那三颗窗口钮（最小化 / 退出迷你模式 /
+ *   关闭）都得自己给，少一颗就是「这个窗挪不动 / 回不去 / 关不掉」。三颗照标题栏右端那一组
+ *   的样子来（同用 .win-btn，只是各小一档），并排贴条的上缘 —— 右上角是这个动作在桌面
+ *   应用里的固定位置，两种形态下长相一致，用户不必重新找。
+ * ★ 条上那一行只放播放必需的东西（封面 / 歌名 / 时长 / 上一首 / 播放 / 下一首 / 歌词）：
  *   迷你模式的意思就是把它挂在屏幕一角，不该再摆音量条、播放模式、队列那一整套。
+ *   正因为横排已经这么满，窗口钮那一组是**这一行的最后一项**而不是绝对定位上去的 ——
+ *   参与排布，横向空间就是布局自己让出来的，不必手算右内边距（手算的那种一改按钮尺寸
+ *   就会撞在一起，或者白留一条缝）。
  * ★ 栅格的顺序是「播放条在**上**、歌词在下」（DOM 顺序同此），不是反过来：窗口加高时长的是
  *   下半截（main/windows.ts 的 applyMiniSize 不动位置），歌词摆下面才等于「原地展开」——
  *   摆上面的话一展开这一整排控件就要往下跳 300 多 px。进度线贴在播放条的下边缘，
@@ -20,7 +22,9 @@
 import { useMemo, useState } from 'react'
 
 import {
+  IconClose,
   IconLyrics,
+  IconMinimize,
   IconPause,
   IconPlay,
   IconRestore,
@@ -96,7 +100,7 @@ export function MiniPlayer(): React.JSX.Element {
           disabled={!song}
           onClick={() => void player.toggle()}
         >
-          {player.playing ? <IconPause size={16} /> : <IconPlay size={16} />}
+          {player.playing ? <IconPause size={14} /> : <IconPlay size={14} />}
         </button>
         <button
           type="button"
@@ -122,15 +126,37 @@ export function MiniPlayer(): React.JSX.Element {
         >
           <IconLyrics size={17} />
         </button>
-        <button
-          type="button"
-          className="icon-btn"
-          data-tip="退出迷你模式"
-          aria-label="退出迷你模式"
-          onClick={() => setMini(false)}
-        >
-          <IconRestore size={16} />
-        </button>
+        {/* 右上角那一组：最小化 / 退出迷你模式 / 关闭（从左至右，与标题栏右端同序） */}
+        <div className="mini-window-actions">
+          <button
+            type="button"
+            className="win-btn"
+            data-tip="最小化"
+            aria-label="最小化"
+            onClick={() => void window.songloft.window.minimize()}
+          >
+            <IconMinimize size={13} />
+          </button>
+          <button
+            type="button"
+            className="win-btn"
+            data-tip="退出迷你模式"
+            aria-label="退出迷你模式"
+            onClick={() => setMini(false)}
+          >
+            <IconRestore size={13} />
+          </button>
+          <button
+            type="button"
+            className="win-btn"
+            data-variant="close"
+            data-tip="关闭"
+            aria-label="关闭"
+            onClick={() => void window.songloft.window.close()}
+          >
+            <IconClose size={13} />
+          </button>
+        </div>
       </footer>
 
       {/*

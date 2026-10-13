@@ -910,7 +910,9 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  /* 8px 而不是常规那 10/12：这一条横排要放下 7 件东西（封面 / 歌名 / 时长 / 三颗传输键 /
+     歌词）+ 右上角那三颗窗口钮，宽度只有 560px，间距是唯一不牺牲可读性的余量。 */
+  gap: 8px;
   padding: 0 12px;
   /* 分界线在条的**下边缘**：收起时它就是窗口下边缘，展开时它是「播放条 / 歌词」的界线。
      进度线正压在这条线上（见下），所以这里不能再用 border-top —— 那样会多出一条横线在中间 */
@@ -938,20 +940,43 @@
   bottom: -1px;
 }
 
-/* 条上这几颗比常规 .icon-btn（32px）小一档：整条只有 64px 高，几颗大按钮会把歌名挤没 */
-.mini-bar .icon-btn {
+/*
+ * 条上这几颗都比常规那档小（.icon-btn 全局 32px、.play-btn 全局 44px）：整条只有 64px 高，
+ * 大按钮会把歌名挤没。
+ * ★ 主播放键刻意与旁边的图标钮**同尺寸**（30px）：它不必靠「更大」来立主次 —— 整条上只有
+ *   它是实心圆、只有它是 accent 填充，这已经够了；而它每小一档，横向就真的少占一档
+ *   （圆形钮的横向占位就是它的宽度），歌名那头就松一分。图标同步收到 14px
+ *   （见 MiniPlayer.tsx）—— 不跟着缩的话圆里会显得塞得慌。
+ * flex: none —— 这一行固定宽度的东西很多，别让它们互相挤成椭圆（该收缩的只有 .mini-info）。
+ */
+.mini-bar .icon-btn,
+.mini-bar .play-btn {
+  flex: none;
   width: 30px;
   height: 30px;
 }
 
 /*
- * 主播放键也小一档（全局 44px）。它是这一条上唯一的实心圆，比旁边的图标钮大一档就足以
- * 分出主次 —— 44px 放在 64px 高的条里会把上下余量吃光，整条看着松不掉。
- * 图标同步缩到 16px（见 MiniPlayer.tsx）：不改的话 44px 那颗的 18px 图标塞进 36px 里会顶边。
+ * 右上角那三颗窗口钮（最小化 / 退出迷你模式 / 关闭）。
+ * 与标题栏右端那一组同款（.win-btn，见 base.css），只是各小一档：这一条总高才 64px，
+ * 38×30 那套摆进来会顶到上缘、也压住下面那行控件。
+ * `align-self: flex-start` 把它们顶到条的上缘 —— 「右上角」正是窗口控制钮在桌面应用里的
+ * 固定落点；它们同时是这一行的最后一个 flex item，所以占的横向空间由布局自己让出。
+ * 与上一行的间距只剩 2px：三颗本身够小，再拉开就不像一组了。
  */
-.mini-bar .play-btn {
-  width: 36px;
-  height: 36px;
+.mini-window-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.mini-bar .win-btn {
+  width: 28px;
+  height: 24px;
+  border-radius: var(--r-xs);
 }
 
 .mini-info {
