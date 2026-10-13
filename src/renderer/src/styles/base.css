@@ -872,31 +872,35 @@ html[data-menu='open'] .plugin-view {
 }
 
 /* 收起 / 展开侧栏。
-   ★ 压在侧栏**右下角**上，不占布局：原先它是一条占满整宽、带文字的底部行
-     （.sidebar-foot），两条侧栏各被它吃掉 39px 高，而那里只剩这一个动作可点 ——
+   ★ 贴在侧栏**右下角、右边缘上**（right: 0），不占布局：原先它是一条占满整宽、带文字的
+     底部行（.sidebar-foot），两条侧栏各被它吃掉 39px 高，而那里只剩这一个动作可点 ——
      对「一屏要放下几十个歌单」的侧栏来说，这一笔很贵。
-   ★ 压着放就得自己带底：它下面是滚动的列表，没有底色会与条目文字叠在一起看不清。
-     底用 --bg-2（不是半透的 --surface-*）：这一颗要**压住**文字，得真盖住。
-   与它重叠的那点面积本来也是行的右端空白（图标在左、文字从左往右排），不影响阅读；
-   为了让最后一行整个让开，列表容器还留了 34px 的底部空档。 */
-/* ★ 选择器带 .sidebar 前缀是为了压过 .icon-btn（两者都是单类，而 components.css
-   后加载会把同特异性的规则盖掉）：尺寸与底色都要以这一处为准。 */
+   ★ 一窄条、**无底色**：所以它只是「贴在边上的一道记号」，不与列表内容抢地盘。
+     代价是不能像有底那样硬压住文字，所以列表容器留了 34px 底部空档，让最后一行整个让开
+     （那点面积本来也是行的右端空白 —— 图标在左、文字从左往右排）。
+   ★ 颜色走 --accent：它会随主题与封面主色一起变，正是「跟随当前主题」。
+     无底色就没有 hover 底色可用，于是 hover 靠**提高对比度**来表达（与 --text-1 混一档：
+     暗色主题下变亮、浅色主题下变暗，两边都是「更清楚」）。
+   ★ 选择器带 .sidebar 前缀是为了压过 .icon-btn（两者都是单类，而 components.css
+     后加载会把同特异性的规则盖掉）：尺寸、底色、颜色都要以这一处为准。 */
 .sidebar .sidebar-toggle {
   position: absolute;
-  right: 8px;
+  /* 贴死右边缘（侧栏自己 overflow: hidden，不会漏到外面去） */
+  right: 0;
   bottom: 8px;
   z-index: 1;
-  /* 26px 而不是 .icon-btn 的 32px：它是压在内容上的一颗小钮，比条目还重就喧宾夺主了 */
-  width: 26px;
+  /* 13px = 原先 26px 的一半；高度不动 —— 它是一条窄竖条，不是一颗圆钮 */
+  width: 13px;
   height: 26px;
-  background: var(--bg-2);
-  color: var(--text-3);
-  box-shadow: var(--shadow-1);
+  background: transparent;
+  color: var(--accent);
+  box-shadow: none;
 }
 
 .sidebar .sidebar-toggle:hover:not(:disabled) {
-  background: var(--bg-3);
-  color: var(--text-1);
+  /* 不许出现底色（.icon-btn 的 hover 底色要在这里被压掉），只把颜色调得更清楚一点 */
+  background: transparent;
+  color: color-mix(in srgb, var(--accent) 55%, var(--text-1));
 }
 
 /* 拖拽放置提示：从歌曲行拖到侧栏歌单上 */

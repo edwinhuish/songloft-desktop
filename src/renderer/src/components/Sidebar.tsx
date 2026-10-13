@@ -240,7 +240,8 @@ export function Sidebar(): React.JSX.Element {
           void patch({ sidebarCollapsed: next })
         }}
       >
-        {sidebarCollapsed ? <IconChevronRight size={16} /> : <IconChevronLeft size={16} />}
+        {/* 12px：那颗钮只有 13px 宽（见 .sidebar-toggle），图标再大就顶出去了 */}
+        {sidebarCollapsed ? <IconChevronRight size={12} /> : <IconChevronLeft size={12} />}
       </button>
     </nav>
   )

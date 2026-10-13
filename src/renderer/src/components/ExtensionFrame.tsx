@@ -161,7 +161,8 @@ function ExtensionSidebar({
         data-tip-place={collapsed ? 'right' : undefined}
         onClick={() => void patch({ extensionSidebarState: collapsed ? 'expanded' : 'collapsed' })}
       >
-        {collapsed ? <IconChevronRight size={16} /> : <IconChevronLeft size={16} />}
+        {/* 12px：那颗钮只有 13px 宽（见 .sidebar-toggle），图标再大就顶出去了 */}
+        {collapsed ? <IconChevronRight size={12} /> : <IconChevronLeft size={12} />}
       </button>
     </nav>
   )
