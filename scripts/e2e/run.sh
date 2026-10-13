@@ -70,6 +70,9 @@ fi
 
 rm -rf "$OUT_DIR"
 mkdir -p "$USER_DATA" "$SHOTS"
+# 夹具里的设置写死了 `theme: light`：文档引用的那些截图就是这一份观感
+# （`system` 在没有桌面偏好的 Xvfb 里本来也解析成浅色，写死只是为了不受环境影响；
+#  想拍一套深色的，改 fixtures/config.json 那一项即可，断言与主题无关）。
 cp "$E2E_DIR/fixtures/config.json" "$USER_DATA/config.json"
 
 # ── 1. mock 后端 ────────────────────────────────────────────────────────────

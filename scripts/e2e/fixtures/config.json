@@ -2,7 +2,7 @@
   "schema": 1,
   "settings": {
     "activeServerUrl": "http://127.0.0.1:58091",
-    "theme": "dark",
+    "theme": "light",
     "accent": "#7c5cff",
     "accentFromCover": true,
     "density": "comfortable",
