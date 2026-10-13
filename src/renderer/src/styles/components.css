@@ -186,6 +186,39 @@
   border-radius: 50%;
 }
 
+/* ── 默认封面 ─────────────────────────────────────────────────────────────
+   没有封面图（或图挂了）时按名字生成的那张，见 components/CoverArt.tsx。
+   底色是同色相的双色渐变：色相来自名字哈希（内联 --art-h/--art-h2/--art-angle），
+   明度与饱和度来自主题令牌，于是深浅主题各有各的成立方式、且换主题不必重算。 */
+.cover-art {
+  position: absolute;
+  inset: 0;
+  /* 图案统一用同色相的一档「墨色」：深色主题取浅、浅色主题取深（见 tokens.css） */
+  color: hsl(var(--art-h, 262) var(--cover-art-ink-s) var(--cover-art-ink));
+  background: linear-gradient(
+    var(--art-angle, 150deg),
+    hsl(var(--art-h, 262) var(--cover-art-s) var(--cover-art-l1)),
+    hsl(var(--art-h2, 292) var(--cover-art-s) var(--cover-art-l2))
+  );
+  /* 描一圈同色相的内边：小尺寸下（26px）平涂容易糊进背景，这圈让它有边界感 */
+  box-shadow: inset 0 0 0 1px hsl(var(--art-h, 262) 60% var(--cover-art-ink) / 14%);
+}
+
+/* 左上角一层极淡的高光。放在 ::before 而不是 ::after —— 后者会盖在图案上面 */
+.cover-art::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 100% at 18% -10%, rgba(255, 255, 255, 0.14), transparent 62%);
+}
+
+.cover-art svg {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .cover[data-loading='true']::after {
   content: '';
   position: absolute;

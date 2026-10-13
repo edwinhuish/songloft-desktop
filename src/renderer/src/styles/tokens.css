@@ -74,6 +74,16 @@
     ui-monospace, 'JetBrains Mono', 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
 
   --row-h: 46px;
+
+  /* ── 默认封面（没有封面图时按名字生成的那张）─────────────────────────
+     色相由名字算出来（见 lib/cover-art.ts），明度与饱和度在这里定，于是同一张图
+     在深浅两个主题下各自成立，且换主题不需要重算。 */
+  --cover-art-s: 46%;
+  --cover-art-l1: 38%;
+  --cover-art-l2: 17%;
+  /* 图案（音符条/列表/人像）的颜色：取同色相的浅色，压在渐变上看得清 */
+  --cover-art-ink: 87%;
+  --cover-art-ink-s: 62%;
 }
 
 /* 浅色主题：只换中性色阶与阴影强度，其余令牌沿用 */
@@ -104,6 +114,13 @@
   --shadow-1: 0 1px 2px rgba(15, 18, 32, 0.08);
   --shadow-2: 0 8px 24px -10px rgba(15, 18, 32, 0.18);
   --shadow-3: 0 24px 64px -20px rgba(15, 18, 32, 0.28);
+
+  /* 默认封面：浅色主题下改成柔和但仍有色的底，图案换成同色相的深色 */
+  --cover-art-s: 40%;
+  --cover-art-l1: 84%;
+  --cover-art-l2: 66%;
+  --cover-art-ink: 26%;
+  --cover-art-ink-s: 54%;
 }
 
 /* 紧凑密度 */
