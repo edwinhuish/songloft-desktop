@@ -76,15 +76,20 @@
   --row-h: 46px;
 
   /* ── 默认封面（没有封面图时显示的那张）───────────────────────────────
-     三类共用同一块底，色相一律取自**主题色** `--accent`（它本身会跟着当前播放的封面
-     取色变，见 state/useTheme.ts），这里只按主题定明度与墨色：
-     深色主题是一块**压暗的主题色**底 + 一枚**提亮的主题色**记号。
-     类型不由颜色区分 —— 交给图案（单音符 / 双音符 / 麦克风，见 components/CoverArt.tsx）。 */
-  --cover-art-bg-1: color-mix(in srgb, var(--accent) 34%, var(--bg-2));
-  --cover-art-bg-2: color-mix(in srgb, var(--accent) 16%, var(--bg-1));
-  --cover-art-ink: color-mix(in srgb, var(--accent) 45%, #ffffff);
-  --cover-art-ink-a: 72%;
-  --cover-art-edge-a: 14%;
+     灰底黑字：一块中性灰的底 + 一枚近黑的记号。类型不由颜色区分 ——
+     交给图案（单音符 / 双音符 / 麦克风，见 components/CoverArt.tsx）。
+
+     ★ 底色**刻意不跟主题色走**。`--accent` 会被当前封面的主色改写（state/useTheme.ts），
+       默认封面若跟着它变，长列表里就会随正在播放的那首歌整体飘色；而默认封面要表达的
+       是「这里没有封面」，它该是一枚**稳定的、与主题无关的色标**。
+     ★ 深浅主题**共用同一组值**（浅色段不再覆盖）：灰底黑字本身就是它要表达的意思，
+       在两种主题下都该是同一个灰。 */
+  --cover-art-bg-1: #a8adb8;
+  --cover-art-bg-2: #949aa5;
+  --cover-art-ink: #0f1116;
+  --cover-art-ink-a: 94%;
+  /* 一圈内边的浓度：灰底比原先的主题色底亮得多，边线要更淡才不会显出一道框 */
+  --cover-art-edge-a: 12%;
 }
 
 /* 浅色主题：只换中性色阶与阴影强度，其余令牌沿用 */
@@ -116,13 +121,8 @@
   --shadow-2: 0 8px 24px -10px rgba(15, 18, 32, 0.18);
   --shadow-3: 0 24px 64px -20px rgba(15, 18, 32, 0.28);
 
-  /* 默认封面：浅色主题下是一块很淡的主题色底 + 一枚压深的主题色记号。
-     透明度比深色主题高一点：浅底上的记号本就吃亏，20~34px 那几个小尺寸会淡到看不见 */
-  --cover-art-bg-1: color-mix(in srgb, var(--accent) 26%, #ffffff);
-  --cover-art-bg-2: color-mix(in srgb, var(--accent) 14%, #ffffff);
-  --cover-art-ink: color-mix(in srgb, var(--accent) 62%, #0c0e18);
-  --cover-art-ink-a: 78%;
-  --cover-art-edge-a: 20%;
+  /* 默认封面（--cover-art-*）**不在这里覆盖**：灰底黑字对两种主题是同一个灰，
+     定义见上面深色段那段注释。 */
 }
 
 /* 紧凑密度 */

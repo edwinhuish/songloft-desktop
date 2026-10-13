@@ -187,17 +187,16 @@
 }
 
 /* ── 默认封面 ─────────────────────────────────────────────────────────────
-   一类一张图（见 components/CoverArt.tsx）：三张图共用一块底 —— 全部由**主题色**调出
+   一类一张图（见 components/CoverArt.tsx）：灰底黑字，三张图共用一块底
    （tokens.css 的 --cover-art-*），刻意**不**按类型/名字换色相（那版在长列表里太吵），
    类型只由图案区分。于是这里没有 `[data-kind]` 分支：底色对三类是同一套值。 */
 .cover-art {
   position: absolute;
   inset: 0;
-  /* 图案用同色系的一档「墨色」（比底色更亮/更深），且只在低透明度下出现：
-     要的是一枚安静的记号，不是图标 */
+  /* 记号是近黑的实心色（不是原先那层淡淡的「墨」）：灰底上要黑得干脆，才像印刷的色标 */
   color: color-mix(in srgb, var(--cover-art-ink) var(--cover-art-ink-a), transparent);
   background: linear-gradient(150deg, var(--cover-art-bg-1), var(--cover-art-bg-2));
-  /* 一圈同色系的内边：小尺寸下（20px）平涂容易糊进背景，这圈让它有边界感 */
+  /* 一圈淡淡的内边：小尺寸下（20px）平涂容易糊进背景，这圈让它有边界感 */
   box-shadow: inset 0 0 0 1px
     color-mix(in srgb, var(--cover-art-ink) var(--cover-art-edge-a), transparent);
 }
