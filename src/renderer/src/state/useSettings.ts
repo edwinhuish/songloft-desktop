@@ -2,8 +2,8 @@
  * 桌面端偏好设置。
  *
  * 落在主进程的 config.json（经 preload 白名单读写），同时把「影响外观的几项」
- * 同步到 :root 的 CSS 变量上 —— 主题、密度、强调色、玻璃强度、**整窗不透明度**，
- * 以及三处底色的不透明度（主播放器 / 迷你播放器 / 歌词区域）与歌词字体颜色都靠这一步生效。
+ * 同步到 :root 的 CSS 变量上 —— 主题、密度、强调色、玻璃强度、**主窗与迷你窗各自的
+ * 整窗不透明度**，以及歌词区域那层底色与歌词字体颜色都靠这一步生效。
  *
  * ▶ UI 优化的一个关键点：强调色默认跟随封面取色（accentFromCover）。
  *   播放一首歌时界面光晕与按钮颜色会平滑过渡到封面主色，这是原 Flutter 端
@@ -40,20 +40,17 @@ function applyToDocument(settings: AppSettings, coverAccent: string | null): voi
   root.style.setProperty('--glass', String(settings.glassIntensity))
 
   /*
-   * 整窗浓度 —— 唯一一个作用于**整个程序**的透明度：它喂给 body 的 opacity
+   * 两个**整窗**浓度：主窗一个、迷你窗一个 —— 它们喂给 body 的 opacity
    * （styles/base.css），配合主进程那个透明窗口，整个客户端一起透出后面的桌面。
-   * ★ 与下面三项「某个面自己的底色」是两回事，见 shared/ipc.ts 的 windowOpacity。
-   * ★ 传 0–1 而不是百分比：它直接作为 opacity 的值使用，而 opacity 吃的是 alpha 值。
+   * ★ 传 0–1 而不是百分比：直接作为 opacity 的值用，而 opacity 吃的是 alpha 值。
+   * ★ 各写各的、不合成一个：两种形态想要的通透程度本来就不同（见 shared/ipc.ts）。
+   *   至于「哪一条生效」由样式表按 <html> 的 data-mini 标记分开挑 —— 迷你窗与主窗是
+   *   同一个 BrowserWindow、同一棵树，不在变量这一层分。
    */
   root.style.setProperty('--window-opacity', String(settings.windowOpacity / 100))
+  root.style.setProperty('--mini-window-opacity', String(settings.miniWindowOpacity / 100))
 
-  /*
-   * 三处「底色浓度」：主播放器、迷你播放器、歌词区域各一个，全部是绝对值（%）。
-   * ★ 各写各的，不合成一个变量 —— 这三项要的就是「调一个不动另外两个」，
-   *   一旦共用，它们的独立性就没了（见 shared/ipc.ts 里 playerOpacity 的说明）。
-   */
-  root.style.setProperty('--player-opacity', `${settings.playerOpacity}%`)
-  root.style.setProperty('--mini-opacity', `${settings.miniOpacity}%`)
+  /* 歌词区域自己那层底色：与上面两项互不相干，也不参与整窗浓度（见 shared/ipc.ts） */
   root.style.setProperty('--lyric-panel-opacity', `${settings.lyricPanelOpacity}%`)
 
   /*

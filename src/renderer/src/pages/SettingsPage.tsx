@@ -412,12 +412,15 @@ function AppearanceSettings(): React.JSX.Element {
         </Row>
       </Card>
 
-      {/* 唯一一个作用于**整个程序**的浓度：调低了连窗口本身一起透出桌面（窗口是透明窗口，
-          见 main/windows.ts）。与下面那两张卡片里「某个面自己的底色」不是一回事 ——
-          那些怎么调都只在窗口内部透，桌面始终进不来（见 shared/ipc.ts 的 windowOpacity） */}
+      {/* 整窗透明度：调低了**连窗口本身一起**透出桌面（窗口是透明窗口，见 main/windows.ts）。
+          与「某个面自己的底色」不是一回事 —— 那些怎么调都只在窗口内部透，桌面始终进不来
+          （见 shared/ipc.ts 的 windowOpacity / miniWindowOpacity）。
+
+          主窗与迷你窗各一个滑块：两者想要的通透程度本来就不同 —— 主窗常与别的窗口并排看，
+          迷你条则要浮在屏幕角上、还能瞧见底下在放什么，所以各管各的而不是共用一个 */}
       <Card title="窗口透明度">
         <Row
-          title="整个界面不透明度"
+          title="主播放器不透明度"
           desc={`${settings.windowOpacity}%：整个窗口的浓度，100 为不透明；调低后连文字一起透出后面的桌面`}
         >
           <input
@@ -425,42 +428,23 @@ function AppearanceSettings(): React.JSX.Element {
             min={0}
             max={100}
             value={settings.windowOpacity}
-            aria-label="整个界面不透明度"
-            onChange={(event) => void patch({ windowOpacity: Number(event.target.value) })}
-            style={{ width: 180 }}
-          />
-        </Row>
-      </Card>
-
-      {/* 两个播放器各有各的底色浓度：主播放条常与曲库并排看，迷你窗口要浮在别的窗口上，
-          想要的通透程度本来就不同，所以各给一个滑块而不是共用一个 */}
-      <Card title="播放器透明度">
-        <Row
-          title="主播放器不透明度"
-          desc={`底部播放条底色的浓度：${settings.playerOpacity}%（100 为不透明，0 只留模糊）`}
-        >
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={settings.playerOpacity}
             aria-label="主播放器不透明度"
-            onChange={(event) => void patch({ playerOpacity: Number(event.target.value) })}
+            onChange={(event) => void patch({ windowOpacity: Number(event.target.value) })}
             style={{ width: 180 }}
           />
         </Row>
 
         <Row
           title="迷你播放器不透明度"
-          desc={`迷你窗口底色的浓度：${settings.miniOpacity}%（与主播放器各管各的，调一个不动另一个）`}
+          desc={`${settings.miniWindowOpacity}%：迷你窗的浓度，与主播放器各管各的（调一个不动另一个）`}
         >
           <input
             type="range"
             min={0}
             max={100}
-            value={settings.miniOpacity}
+            value={settings.miniWindowOpacity}
             aria-label="迷你播放器不透明度"
-            onChange={(event) => void patch({ miniOpacity: Number(event.target.value) })}
+            onChange={(event) => void patch({ miniWindowOpacity: Number(event.target.value) })}
             style={{ width: 180 }}
           />
         </Row>

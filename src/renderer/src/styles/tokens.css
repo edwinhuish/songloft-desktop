@@ -94,32 +94,33 @@
   --glass-tint: color-mix(in srgb, var(--bg-1) calc(100% - var(--glass) * 0.7), transparent);
 
   /*
-   * 整窗浓度（设置里可调）：唯一一个作用于**整个程序**的不透明度 —— 配合主进程那个
-   * 透明窗口（main/windows.ts 的 transparent），整个客户端一起透出后面的桌面 / 别的窗口。
-   * 1 = 实心，也就是改动前的观感。
-   * ★ 与下面那几处「某个面自己的底色」各管各的，别把它们并成一个旋钮（见 shared/ipc.ts）。
+   * 两个**整窗**浓度（设置里可调）：主窗一个、迷你窗一个 —— 配合主进程那个透明窗口
+   * （main/windows.ts 的 transparent），整个客户端一起透出后面的桌面 / 别的窗口。
+   * 1 = 实心（两个默认都是），也就是改动前的观感。
    * ★ 值域 0–1 而不是百分比：它直接作为 body 的 opacity 用（见 base.css）。
+   * ★ 两条都写在这里、由 base.css 按 <html> 的 data-mini 标记挑一条生效 ——
+   *   迷你窗与主窗是同一个 BrowserWindow、同一棵树，分不到变量这一层。
+   * ★ 与下面那几处「某个面自己的底色」各管各的，别把它们并成一个旋钮（见 shared/ipc.ts）。
    */
   --window-opacity: 1;
+  --mini-window-opacity: 1;
 
   /* 玻璃底色的**颜色**（不含浓度）：深色取 --bg-1，浅色是纯白（见下面那段覆盖）。
-     下面三个面各自定浓度，所以它们要的是颜色而不是上面那份调好的 --glass-tint。 */
+     下面那几处底色各自定浓度，所以它们要的是颜色而不是上面那份调好的 --glass-tint。 */
   --glass-base: var(--bg-1);
 
   /*
-   * 三处「底色不透明度」（设置里可调）：主播放器 / 迷你播放器 / 歌词区域。
-   *
-   * ★ 刻意**不跟着 --glass 走**，也**互相不共享**：--glass 是「所有玻璃面的统一浓度」，
-   *   而这三处想要多通透本来就不同 —— 主播放条常与曲库并排看，迷你窗口要浮在别的窗口上，
-   *   歌词区域又只是面板里的一层。合成一个旋钮的话，动一处另外两处跟着变，正是要避免的。
-   *   默认值因此写死在这里：57% 就是改动前 --glass = 62 时那层底色的浓度（一上来观感不变）；
-   *   浅色主题不再单独差一档，改为同一个绝对值。
+   * 播放条 / 迷你条的**底色**浓度：写死，不再是设置项。
+   * 设置里那两个「不透明度」现在调的是上面的**整窗**那一层 —— 那才是「整个程序透出桌面」；
+   * 底色也跟着一起可调没有意义（两层叠在一起，谁也说不清是哪一层在变）。
+   * 57% 是它们一直以来的观感（--glass = 62 时那层底色的浓度），浅色主题共用同一个绝对值。
    */
-  --player-opacity: 57%;
-  --mini-opacity: 57%;
+  --bar-tint-opacity: 57%;
+  --player-tint: color-mix(in srgb, var(--glass-base) var(--bar-tint-opacity), transparent);
+  --mini-tint: color-mix(in srgb, var(--glass-base) var(--bar-tint-opacity), transparent);
+
+  /* 歌词区域叠在宿主之上的那层额外底色：0% 是默认，也就是完全透出所在面板 */
   --lyric-panel-opacity: 0%;
-  --player-tint: color-mix(in srgb, var(--glass-base) var(--player-opacity), transparent);
-  --mini-tint: color-mix(in srgb, var(--glass-base) var(--mini-opacity), transparent);
   --lyric-panel-tint: color-mix(in srgb, var(--glass-base) var(--lyric-panel-opacity), transparent);
 
   /*

@@ -466,24 +466,27 @@ query 回退分支）—— 按「像不像外链」判断会让整店退成首�
 
 ### 8.13 整窗透明度 = 透明窗口 + 整棵树 opacity，缺一半都只是「变暗」
 
-设置里那个「整个界面不透明度」（`AppSettings.windowOpacity`）要真的透出桌面，必须**两件事
-同时成立**：
+设置里「窗口透明度」那两张滑块（`AppSettings.windowOpacity` / `miniWindowOpacity`：主窗与迷你
+窗各自的整窗浓度）要真的透出桌面，必须**两件事同时成立**：
 
 | 一半 | 在哪 | 少了它会怎样 |
 |---|---|---|
 | 窗口是**透明窗口** | `main/windows.ts` 的 `transparent: true`（恒开） | 界面再淡也只是与窗口那块底色混在一起，看着像「变暗」，桌面透不进来 |
 | 整棵界面树带 opacity | `styles/base.css` 里 `body { opacity: var(--window-opacity) }` | 窗口虽有 alpha 通道，可每一层画上去的都是实心的，全被遮住 |
 
-配套的两条：`html` / `body` **不许铺底色**（底色一律由 `.shell` 画）；这条 opacity 挂在 `body`
+配套的三条：`html` / `body` **不许铺底色**（底色一律由 `.shell` 画）；这条 opacity 挂在 `body`
 而不是 `#root` 上 —— `Modal` 是 portal 到 `body` 的（见 `components/Modal.tsx`），挂在 `#root`
-里的话对话框不跟着透，一开一关是两个浓度。
+里的话对话框不跟着透，一开一关是两个浓度；迷你那一份由 `html[data-mini='true'] body` 顶掉 ——
+迷你窗与主窗是**同一个 BrowserWindow**（主进程只把它缩成 400×64），渲染层里也是同一棵树，
+不靠那个标记就分不开。
 
-★ 它和 `glassIntensity` / `playerOpacity` / `miniOpacity` / `lyricPanelOpacity` **不是一类**：
-那几项调的是「某个面**自己那层底色**」有多厚，而窗口始终是实心的 —— 怎么调都只透出同一窗口
-里它下面的一层，桌面永远进不来。
+★ 它和 `glassIntensity` / `lyricPanelOpacity` **不是一类**：那几项调的是「某个面**自己那层
+底色**」有多厚，而窗口始终是实心的 —— 怎么调都只透出同一窗口里它下面的一层，桌面永远进不来。
+播放条 / 迷你条自己的底色浓度因此写死在 `tokens.css` 的 `--bar-tint-opacity`（57%），不再是
+设置项：让「整窗」与「底色」两层都能拧，只会让人说不清是哪一层在变。
 
 ⚠ 透明窗口是**创建时**属性，运行中改不了 —— 所以它恒开、不跟设置开关（否则拧一次滑块就得
-重启应用）。代价是窗口一直带 alpha 通道；默认 `windowOpacity = 100` 时观感与改动前一致。
+重启应用）。代价是窗口一直带 alpha 通道；两个浓度默认都是 100，观感与改动前一致。
 ⚠ Linux 下要有合成器（GNOME / KDE 默认都有，裸 WM 下退化成实心，不崩）。另外 Chromium 的
 `backdrop-filter` **只模糊同一窗口里它下面的内容**，别指望透明窗口能「毛玻璃看穿到桌面」
 （那是 macOS vibrancy / Windows backgroundMaterial 那种系统级能力）。扩展页是 `<webview>`，

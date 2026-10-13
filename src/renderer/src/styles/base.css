@@ -49,6 +49,17 @@ body {
   opacity: var(--window-opacity);
 }
 
+/*
+ * 迷你态换成它自己那一份浓度（设置里的「迷你播放器不透明度」）。
+ *
+ * ★ 为什么是「换一条」而不是另一份样式：迷你窗与主窗是**同一个 BrowserWindow**
+ *   （主进程只把它缩成 400×64），渲染层里也是同一棵树 —— 唯一的区分就是 <html> 上那个
+ *   data-mini 标记（App.tsx 打的，见那里为什么挂在 documentElement 上）。
+ */
+html[data-mini='true'] body {
+  opacity: var(--mini-window-opacity);
+}
+
 button,
 input,
 select,

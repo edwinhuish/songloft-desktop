@@ -179,12 +179,12 @@ export interface AppSettings {
   /** 玻璃质感强度 0–100（标题栏 / 侧栏 / 右侧抽屉共用的那层「统一浓度」） */
   glassIntensity: number
   /**
-   * **整个程序**的不透明度 0–100：100 = 完全实心（默认，观感与改动前一致），0 = 整窗消失。
+   * **普通（非迷你）窗口**的整窗不透明度 0–100：100 = 完全实心（默认，观感与改动前一致），
+   * 0 = 整窗消失。也就是设置页里那个「主播放器不透明度」。
    *
-   * ★ 它与上面那几项「浓度」不是一类东西，别混着看：
-   *   glassIntensity / playerOpacity / miniOpacity / lyricPanelOpacity 调的都是
-   *   「某个面**自己那层底色**」有多厚 —— 窗口本身始终是实心的，所以怎么调都**透不出桌面**，
-   *   只能透出同一窗口里它下面的一层。
+   * ★ 它调的是**整个程序这一层窗口**，与 glassIntensity / lyricPanelOpacity 那种
+   *   「某个面**自己那层底色**」不是一类东西，别混着看：底色浓度只能透出同一窗口里它下面的
+   *   一层，**桌面永远进不来**。
    *   要让整个客户端透出后面的桌面 / 别的窗口，只能动窗口这一层，且必须**两件事同时成立**：
    *     1. 主进程把窗口做成透明窗口（main/windows.ts 的 `transparent`）——
    *        否则渲染层再淡，也只是与窗口那块不透明底色混在一起，看着像「变暗」而不是「透明」；
@@ -194,23 +194,22 @@ export interface AppSettings {
    */
   windowOpacity: number
   /**
-   * 主播放器（底部播放条）底色不透明度 0–100：100 = 完全不透明，0 = 完全透明（只剩模糊）。
+   * **迷你窗口**的整窗不透明度 0–100，与 windowOpacity **各存一份、互不影响**。
    *
-   * ★ 与 glassIntensity **各管各的**，也刻意不与 miniOpacity 共用一个值：
-   *   glassIntensity 是「所有玻璃面的统一浓度」，而这两个播放器想要的通透程度本来就不同 ——
-   *   主播放条常与曲库并排看，迷你窗口则要浮在别的窗口之上。合成一个旋钮的话，
-   *   调通透了一处，另一处跟着一起变，正是要避免的。
+   * ★ 主窗与迷你窗是**同一个 BrowserWindow**（迷你只是被主进程缩成 400×64、外加一条
+   *   界面形态），所以两者在 DOM 上是同一棵树的两种形态 —— 分开靠的是 <html> 上的
+   *   data-mini 标记（见 base.css 里那两条 opacity）。
+   * ★ 为什么不与 windowOpacity 共用一个值：它们想要的通透程度本来就不一样 —— 主窗常与
+   *   别的窗口并排看，迷你条则要浮在屏幕角上、还能瞧见底下在放什么。
    */
-  playerOpacity: number
-  /** 迷你播放器底色不透明度 0–100。与 playerOpacity 各存一份、互不影响 */
-  miniOpacity: number
+  miniWindowOpacity: number
   /** 歌词字号 px */
   lyricFontSize: number
   /**
    * 歌词区域自身底色不透明度 0–100：100 = 完全不透明，0 = 完全透明（默认）。
    *
    * 它只是**叠在**宿主（右侧抽屉 / 迷你窗口）玻璃质感之上的一层 —— 0 时完全透出宿主，
-   * 也就是改动前的观感。与上面两项同为「底色浓度」，但作用于哪个面互不相干。
+   * 也就是改动前的观感。与 glassIntensity 同为「底色浓度」，但作用于哪个面互不相干。
    */
   lyricPanelOpacity: number
   /** 歌词字体颜色（`#rrggbb`；空串 = 跟随主题文字色） */
@@ -290,11 +289,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accentFromCover: true,
   density: 'comfortable',
   glassIntensity: 62,
-  // 整窗默认实心：透明窗口只是提供可能，要不要真透由用户拧这个滑块决定
+  // 两个整窗浓度都默认实心：透明窗口只是提供可能，要不要真透由用户拧滑块决定
   windowOpacity: 100,
-  // 57% 正是改动前 glassIntensity=62 时那层底色的浓度 —— 默认观感与原样一致
-  playerOpacity: 57,
-  miniOpacity: 57,
+  // 迷你窗同样默认实心（与主窗各管各的）
+  miniWindowOpacity: 100,
   lyricFontSize: 30,
   // 默认不铺额外底色：歌词区域透出所在面板的玻璃质感（与改动前一致）
   lyricPanelOpacity: 0,
