@@ -50,6 +50,7 @@ pnpm dev                  # 开发（渲染层 HMR）
 pnpm run check            # ★ 提交前必跑：typecheck + lint + format:check + test
 pnpm run build            # 产出 out/（main + preload + renderer）
 pnpm run e2e              # 端到端 UI 巡检（起 mock 后端 + 截图 + 断言）
+pnpm run shots            # 把巡检截图整理成文档用图（docs/screenshots + docs/e2e-walkthrough.png）
 pnpm run pack:linux       # 打 deb / AppImage / tar.gz 到 release/
 pnpm run pack:win         # 打 NSIS 安装包（要在 Windows 上跑；Linux/macOS 上跑不动）
 pnpm run pack:mac         # 打 dmg / zip（要在 macOS 上跑）
@@ -117,6 +118,8 @@ src/
 │  ├─ bridge-types.ts 桥接层的小类型
 │  ├─ lyric.ts        歌词四路合并 + 解析 + 当前行/逐字定位
 │  ├─ plugin.ts       JS 插件模型 / 排序纯函数 / 扩展页 URL 拼接 / PLUGIN_PARTITION
+│  ├─ data.ts         两份数据快照是否等价（页面切回时的**静默刷新**靠它判断「要不要动界面」）
+│  ├─ version.ts      版本号比较（认不出来的写法一律判「不比它新」，宁可少提示一次更新）
 │  └─ links.ts        对外 URL 常量（本仓库 / 上游）
 └─ renderer/       React 19 + zustand
    ├─ api/           client.ts（fetch 封装）/ endpoints.ts（端点清单，来自上游 Flutter 实现）/
@@ -135,8 +138,10 @@ src/
    │                 PluginSurface（扩展 webview 栈）/ PluginIcon /
    │                 RegistrySourcesDialog（管理订阅源）
    ├─ hooks/         useSongList / usePlaylistSongs / useAsync / useResponsiveSidebar /
-   │                 usePageActive（页面槽的「我看得见吗」，见 §4 的页面槽那段）
+   │                 usePageActive（页面槽的「我看得见吗」，见 §4 的页面槽那段）/
+   │                 useHorizontalScroll（溢出时才出的横向滚动条）
    ├─ lib/           url（资源 URL 拼接）/ color / accent / format / concurrency /
+   │                 responsive（断点判定，纯函数）/
    │                 plugin-actions（插件的停用 / 卸载 —— 确认与提示只有这一份，
    │                 将来再加入口别另写；lib/ 里唯一一个不是纯函数的）
    └─ styles/        tokens.css / base.css / components.css / index.css
@@ -266,7 +271,24 @@ src/
 同为 5，只数个数区分不出「有没有点中 chip」，所以断言的是卡片的**文字**变成流派名。
 
 `scripts/e2e/` 的结构：`server.mjs`（mock 后端）、`drive.mjs`（CDP 驱动器 + 步骤与断言）、
-`run.sh`（编排）、`fixtures/`（自动登录配置与封面）。产物落在 `.e2e/`（已 gitignore）。
+`run.sh`（编排）、`shots.sh`（把截图整理成文档用图）、`fixtures/`（自动登录配置与封面）。
+产物落在 `.e2e/`（已 gitignore）。
+
+一次巡检 **73 步**，覆盖：首页 / 曲库（类型与分面筛选、文件夹逐级进入）/ 歌单 / 最近 / 收藏 /
+搜索（含空态）/ 多选与右键菜单 / 设置九个分区 / 扩展面（商店、订阅源、插件管理、扩展页 webview）/
+播放（面板与满窗的歌词、队列、迷你模式）/ 命令面板 / 退出登录与登录。每步一张截图。
+
+`pnpm run shots` 从这些截图生成**文档引用**的两份东西，`README.md` 与 `docs/development.md`
+引的就是它们（都是生成物，改界面后重跑，别手工截图替换）：
+
+| 产物 | 用途 |
+|---|---|
+| `docs/screenshots/*.png` | 主要界面单张图（1440 宽折到 1080），嵌进 README |
+| `docs/e2e-walkthrough.png` | 全部 73 个状态的覆盖图，一格一步带步骤名 —— 用于一屏扫出「哪一格是空的」 |
+
+⚠️ 在 `drive.mjs` 里加断言时注意**口径的形状**：`settingText` / `modalText` 取的是**整段字符串**，
+而 `containsAll` 早先只处理数组 —— 于是 8 条断言**恒假**，红的原因却像「界面上了错的内容」。
+断言不是代码，写错了不会编译报错；每种口径都在这两个文件里写清了它是什么形状。
 
 ---
 
@@ -517,6 +539,20 @@ query 回退分支）—— 按「像不像外链」判断会让整店退成首�
 `backdrop-filter` **只模糊同一窗口里它下面的内容**，别指望透明窗口能「毛玻璃看穿到桌面」
 （那是 macOS vibrancy / Windows backgroundMaterial 那种系统级能力）。扩展页是 `<webview>`，
 guest 自己的背景不透明，那块也永远透不出来。
+
+### 8.14 玻璃的 `--glass` 是无单位数字，两条 `calc` 得自己补单位
+
+`settings.glassIntensity`（0–100）由 `state/useSettings.ts` 写到 `<html>` 的 `--glass` 上，
+`tokens.css` 拿它算两样东西：模糊半径（`calc(8px + var(--glass) * 0.28px)`）与那层底色
+（color-mix 里的 `* 0.7%`）。这两处**必须自己给单位** —— `--glass` 本身是裸数字，
+写成 `8px + 62 * 0.28` 是「长度 + 数字」、`100% - 62 * 0.7` 是「百分比 - 数字」，两条都非法。
+
+自定义属性**不校验**，非法值要到「使用处」才退化：`--glass-blur` / `--glass-tint` 双双失效，
+`backdrop-filter` 与 `background` 各自退回初始值 —— 玻璃面整层变透明、模糊消失，
+**控制台一声不响**。（历史形态：tokens.css 声明 `62%`、useSettings 写裸数字 `62`，两边互相打架。）
+
+所以：`--glass` 只放裸数字，单位在样式表使用处补。改完跑 `pnpm run e2e` ——
+`titlebarGlass` 那两条断言（满窗播放时标题栏换透明底、Esc 收起后回到玻璃底）就是为这件事设的。
 
 ---
 

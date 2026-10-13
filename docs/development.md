@@ -34,6 +34,7 @@ pnpm dev                  # 开发（渲染层 HMR）
 pnpm run check            # ★ 提交前必跑：typecheck + lint + format:check + test
 pnpm run build            # 产出 out/（main + preload + renderer）
 pnpm run e2e              # 端到端 UI 巡检（起 mock 后端 + 截图 + 断言）
+pnpm run shots            # 把巡检截图整理成文档用图（docs/screenshots + 汇总图）
 pnpm run pack:linux       # 打 deb / AppImage / tar.gz 到 release/
 pnpm run verify:package   # 校验打包产物的桌面集成项
 pnpm run icons            # 由 build/icon.svg 生成全套图标 + 托盘图
@@ -51,9 +52,12 @@ pnpm run audit            # 依赖安全公告（刻意不进 check 的必过路
 | `lint` / `format` | ESLint flat config / Prettier |
 | `audit` | `pnpm audit --audit-level=high`（安全公告会随时新增，不挡构建） |
 | `icons` | 从 `build/icon.svg` 渲染全套尺寸 + 托盘图，并断言渐变没丢 |
-| `pack:*` | electron-builder 打包，输出到 `release/`（目前只有 Linux 目标） |
+| `pack:*` | electron-builder 打包，输出到 `release/`（`pack:linux` / `pack:deb` / `pack:appimage`；`pack:win` / `pack:mac` 要在对应平台上跑） |
 | `verify:package` | 校验 `.desktop` 文件名、`StartupWMClass`、AppArmor profile、托盘资源等 |
-| `e2e` | 端到端巡检，见第 6 节 |
+| `desktop:install` / `desktop:uninstall` | 把本应用（或某个 AppImage）注册 / 注销到当前用户桌面目录 —— 为什么需要它见 `README.md` 的「任务栏图标」一节 |
+| `release` | `bumpp`：升版本 → 提交 → 打 `v*` 标签 → 推送，之后由 CI 三平台发布 |
+| `e2e` | 端到端巡检，见第 7 节 |
+| `shots` | 把 `.e2e/shots` 里的巡检截图整理成 `docs/screenshots/` 与覆盖图（详见第 7 节） |
 
 ---
 
@@ -62,32 +66,49 @@ pnpm run audit            # 依赖安全公告（刻意不进 check 的必过路
 ```
 src/
 ├─ main/          Electron 主进程（Node 环境，唯一持有系统权限的地方）
-│  ├─ index.ts        生命周期、窗口创建后的监听装配、安全策略与 CSP、setDesktopName、userData 覆盖
-│  ├─ windows.ts      BrowserWindow 构造（contextIsolation / sandbox / nodeIntegration）
+│  ├─ index.ts        生命周期、窗口创建、安全策略与 CSP、setDesktopName、userData 覆盖
+│  ├─ windows.ts      BrowserWindow 构造（contextIsolation / sandbox / nodeIntegration）+ 迷你窗几何
+│  ├─ app-icon.ts     窗口图标定位（只对 X11 / Windows / macOS 有效；Wayland 那份传不出去）
 │  ├─ media-keys.ts   媒体键（globalShortcut 兜底；优先走 Media Session 自动映射）
 │  ├─ store.ts        本地持久化：设置 / 凭据 / 服务器列表（JSON，落在 userData）
+│  ├─ cache.ts        本机磁盘缓存（Chromium 会话缓存）的占用 / 清理 / 启动上限
+│  ├─ files.ts        导出 / 导入的文本文件对话框（读入限 32MB）
 │  ├─ probe.ts        后端探测与封面取字节（本地解码，避免为它关掉 webSecurity）
 │  ├─ tray.ts         托盘图标与菜单
 │  └─ app-menu.ts     应用菜单（窗口无边框、看不到菜单栏，但它提供全局加速键）
 ├─ preload/        contextBridge 白名单 —— 渲染层唯一的对外通道（window.songloft）
-├─ shared/         两侧共用的**纯代码**，无副作用、可直接单测
+├─ shared/         两侧共用的**纯代码**，无副作用、可直接单测（多数带同名 .test.ts）
 │  ├─ types.ts        后端数据模型（Song / Playlist / Facet…）
 │  ├─ ipc.ts          IPC 频道常量 + 跨进程传输的类型 + 默认设置
 │  ├─ bridge.ts       window.songloft 的接口定义（白名单的唯一事实源）
+│  ├─ bridge-types.ts 桥接层的小类型（放这里避免 shared/bridge 反向依赖主进程代码）
 │  ├─ lyric.ts        歌词四路合并 + 解析 + 当前行/逐字定位
+│  ├─ plugin.ts       JS 插件模型 / 排序纯函数 / 扩展页 URL 拼接 / PLUGIN_PARTITION
+│  ├─ data.ts         两份数据快照是否等价（页面切回时的静默刷新靠它）
+│  ├─ version.ts      版本号比较（认不出来的写法一律判「不比它新」）
 │  └─ links.ts        对外 URL 常量（本仓库 / 上游）
 └─ renderer/       React 19 + zustand
-   ├─ api/           client.ts（fetch 封装）/ endpoints.ts（端点清单，来自上游 Flutter 实现）
-   ├─ state/         useAuth / usePlayer / usePlaylists / useSettings / useUi / useToasts
-   ├─ pages/         9 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
-   │                 Recent / Search / Settings / Login
-   │                 （「文件夹」不是独立页面，是 LibraryPage 里的一个标签，见 FoldersView）
+   ├─ api/           client.ts（fetch 封装）/ endpoints.ts（端点清单，来自上游 Flutter 实现）/
+   │                 plugins.ts（JS 插件：列表 / 启停 / 卸载 / 顺序 / 商店）
+   ├─ state/         useAuth / usePlayer / usePlaylists / useSettings / useUi / useToasts /
+   │                 usePlugins（已装扩展 + 顺序 + 运行时音频状态，唯一事实源）/
+   │                 useLibrary（曲库数据的版本号 + 后台任务守望）
+   ├─ pages/         10 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
+   │                 Recent / Search / Settings / Login / Extensions
+   │                 （同目录还有 PluginStore —— 扩展面的「插件商店」那一栏；
+   │                  「文件夹」不是独立页面，是 LibraryPage 里的一个标签，见 FoldersView）
    ├─ components/    Sidebar / TitleBar / SongTable / PlayerBar / LyricsView / CommandPalette /
-   │                 Panel / ContextMenu / Modal / Toasts / SelectionBar / …
-   ├─ hooks/         useSongList / usePlaylistSongs / useAsync
-   ├─ lib/           url / color / accent / format / concurrency
+   │                 Panel / ContextMenu / Modal / Toasts / SelectionBar / FullPlayer /
+   │                 MiniPlayer / ExtensionFrame / PluginSurface / RegistrySourcesDialog / …
+   ├─ hooks/         useSongList / usePlaylistSongs / useAsync / usePageActive /
+   │                 useResponsiveSidebar / useHorizontalScroll
+   ├─ lib/           url / color / accent / format / concurrency / responsive / plugin-actions
    └─ styles/        tokens.css / base.css / components.css / index.css
 ```
+
+> 两条容易看错的地方：**「文件夹」不是一个页面**（它是曲库页里的第二个标签），
+> 而**「扩展」那一整面不在 `renderRoute` 的 switch 里** —— 它有自己的路由与侧栏，
+> 详见 [`../AGENTS.md`](../AGENTS.md) 第 4 节。
 
 技术栈版本表见 [`../AGENTS.md`](../AGENTS.md) 第 2 节。
 
@@ -178,10 +199,10 @@ Linux 侧有几个会**静默失败**（不报错，但产物在用户机器上�
 pnpm test
 ```
 
-覆盖 `src/shared` 与 `src/renderer/src/lib` 里的纯函数。目前最要紧的一批用例锁的是
-`lyric.ts` 的一个**静默丢行**缺陷：后端返回的四路歌词里，`lxlyric`（逐字）常常只覆盖副歌，
-而早先的实现是 `base = wordSource ?? main` —— 一旦有逐字歌词就整份换掉主歌词，于是主歌词里
-其余的行被**整行丢弃**，界面上表现为「歌词莫名其妙少几句」，且没有任何报错。
+覆盖 `src/shared` 与 `src/renderer/src/lib` 里的纯函数（vitest，7 个文件）：目前最要紧的一批
+用例锁的是 `lyric.ts` 的一个**静默丢行**缺陷：后端返回的四路歌词里，`lxlyric`（逐字）常常只
+覆盖副歌，而早先的实现是 `base = wordSource ?? main` —— 一旦有逐字歌词就整份换掉主歌词，于是
+主歌词里其余的行被**整行丢弃**，界面上表现为「歌词莫名其妙少几句」，且没有任何报错。
 
 同一批用例还覆盖了时间戳对齐：原先用「按 20ms 分桶」匹配，`12.000` 与 `12.010` 会分别落进
 相邻两桶、恰好跨桶边界就漏配。现在改成单调游标 + 容差内最近邻。
@@ -204,7 +225,44 @@ pnpm run e2e
 并断言曲库的类型筛选真的收敛了行数（43 → 41 → 0）、流派分面的**卡片文字**确实换成了流派名
 （卡片数同为 5，只数个数区分不出「有没有点中 chip」）。
 
-一次完整巡检覆盖 **22 个界面状态**，全部截图的汇总见 [`e2e-walkthrough.png`](e2e-walkthrough.png)。
+一次完整巡检 **73 步**，按链路大致这么分布（每步都会截一张图）：
+
+| 链路 | 覆盖到的关键判据 |
+|---|---|
+| 首页 / 曲库 | 统计条名目、类型筛选的行数收敛（43 → 41 → 0）、分面卡片**文字**换成维度名、筛选 chip |
+| 文件夹 | 目录行上「N 首」与点进去的实际行数一致、面包屑逐级跳回 |
+| 歌单 / 最近 / 收藏 | 列表条目、歌单内有序列表、本机记录条数 |
+| 搜索 | 命中数（只可能来自后端）、相关歌单/歌手/专辑三块、空态文案 |
+| 多选与右键菜单 | Ctrl 加选的行数递增、操作条文案、菜单条目/分割线/本地曲那句说明 |
+| 设置九个分区 | 分区名与**顺序**、开关状态、版本号、缓存与数据管理卡片 |
+| 扩展面 | 商店四档动作（安装 / 可更新 / 已装 / 入口撞名）、订阅源弹窗、插件管理顺序与「运行异常」角标、扩展页 webview 装载、切回原生面 |
+| 播放 | 面板与满窗三处歌词都是 10 行、队列、满窗时标题栏换底色、迷你模式进出 |
+| 侧栏 / 命令面板 | 折叠态图标居中、命令面板四组分组 |
+| 退出登录 → 登录 | 退出前的确认、退出后侧栏消失、连不上与登录成功是两种结果 |
+
+两条**踩过的坑**记在这里，因为它们的症状都不像缺陷：
+
+* 断言里 `containsAll` 一度只认数组，而 `settingText` / `modalText` 这两个口径取的是
+  **整段字符串** —— 于是 8 条断言永远是红的，红的原因却长得像「界面上了错的内容」。
+  断言不是代码，写错了不会编译报错；`drive.mjs` 里因此对每种口径都写清「它会是什么形状」。
+* 巡检等待的起点曾是「`.shell` 在不在」。它在登录页时就已经成立，于是第一步会偶发地
+  撞在还没渲染出侧栏的那一帧上 —— 现在等的是 `.nav-item`。
+
+### 文档用的截图
+
+```bash
+pnpm run e2e && pnpm run shots
+```
+
+`scripts/e2e/shots.sh` 从巡检产物里生成两样东西，`README.md` 与本文引用的就是它们：
+
+| 产物 | 用途 |
+|---|---|
+| `docs/screenshots/*.png` | 主要界面的单张图（1440 宽折到 1080），嵌进 README |
+| `docs/e2e-walkthrough.png` | **全部 73 个状态**的覆盖图：一格一步、带步骤名；用于一屏扫出「哪一格是空的 / 弹窗没关掉」 |
+
+它们都是**生成物**：改了界面就重跑这两条命令，不要手工截图替换 —— 手工图会安静地过期，
+而且下一次没人愿意重做。脚本按**步骤名**（不是序号）挑图，序号会随步骤增删而漂。
 
 ---
 
@@ -229,4 +287,6 @@ pnpm run e2e
 | [`../README.md`](../README.md) | 这是什么、有哪些功能、与上游 Flutter 版的差异 |
 | [`../AGENTS.md`](../AGENTS.md) | 面向 AI 编码代理的项目说明：架构地图、命令、约定、雷区 |
 | [`electron-migration-evaluation.md`](electron-migration-evaluation.md) | 换栈评估报告：10 条技术路线横向对比与结论 |
+| [`screenshots/`](screenshots/) | 主要界面截图（`pnpm run shots` 生成） |
+| [`e2e-walkthrough.png`](e2e-walkthrough.png) | 巡检覆盖的全部界面状态一览 |
 | [`../NOTICE`](../NOTICE) | 第三方组件署名与编解码器许可说明 |

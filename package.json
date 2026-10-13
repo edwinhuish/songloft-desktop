@@ -28,6 +28,7 @@
     "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",
     "test": "vitest run",
     "e2e": "bash scripts/e2e/run.sh",
+    "shots": "bash scripts/e2e/shots.sh",
     "lint": "eslint .",
     "audit": "pnpm audit --audit-level=high",
     "format": "prettier --write .",
