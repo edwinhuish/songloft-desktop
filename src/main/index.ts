@@ -62,6 +62,35 @@ app.setDesktopName('io.github.edwinhuish.songloft-desktop')
 const userDataOverride = process.env.SONGLOFT_USER_DATA
 if (userDataOverride) app.setPath('userData', userDataOverride)
 
+/**
+ * ★ Linux / Wayland 会话下改用 X11 后端（XWayland）。
+ *
+ * 这不是偏好，是**能力缺口**：Wayland 的 xdg-shell 里没有「置顶」这个请求，GNOME 也没实现
+ * 任何替代扩展 —— window.setAlwaysOnTop() 在那条路上会被合成器**无声忽略**，而迷你模式的
+ * 整个用法就是「浮在别的窗口之上」（见 windows.ts 的 setMiniAlwaysOnTop）。
+ * 同一类缺口在这套桌面上还有两处：窗口图标传不出去（app-icon.ts，AGENTS §8.11）、
+ * GNOME 50 起 globalShortcut 走门户被拒（AGENTS §8.1）。走 XWayland 之后这三件事都回到
+ * X11 的正常路径（_NET_WM_STATE_ABOVE / _NET_WM_ICON / X11 键盘抓取）。
+ *
+ * 代价也写在这里，别让它变成暗坑：XWayland 不做原生 Wayland 的分数缩放与输入法适配
+ * （GNOME 下它按整数缩放，分数缩放会糊一档）。
+ * 想留原生 Wayland：`SONGLOFT_OZONE=wayland`（代价是上面三件事在 GNOME 下都不成立）。
+ *
+ * ★ 必须赶在 app ready 之前设：Chromium 只在启动时读一次平台，运行中改不了 —— 所以它和
+ *   SONGLOFT_USER_DATA 一样放在文件顶部这一段。
+ * ★ 还要有 DISPLAY 才敢切：会话是 Wayland 但没跑 XWayland（或 XWayland 没挂上）时，
+ *   指定 x11 的后果是**起不来**（Chromium 报 "Missing X server or $DISPLAY"），
+ *   那比"置顶不生效"严重得多。这种环境按原样走原生 Wayland，只是置顶不成立。
+ */
+const ozonePref = process.env.SONGLOFT_OZONE
+const onWaylandSession =
+  process.env.XDG_SESSION_TYPE === 'wayland' || Boolean(process.env.WAYLAND_DISPLAY)
+const canUseX11 = Boolean(process.env.DISPLAY)
+const forceX11 = ozonePref === 'x11' || (ozonePref !== 'wayland' && onWaylandSession && canUseX11)
+if (process.platform === 'linux' && forceX11) {
+  app.commandLine.appendSwitch('ozone-platform', 'x11')
+}
+
 // 只允许一个实例：第二次启动就把已有窗口顶到前面，而不是再开一个播放器。
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {

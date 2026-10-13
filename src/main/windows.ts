@@ -182,16 +182,42 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
   }
 
   /**
+   * 迷你态的「浮在别的窗口之上」。**分平台各做各的那一份**，因为三个平台的机制与坑都不一样：
+   *
+   * · Windows：`setAlwaysOnTop(true)` 就是 HWND_TOPMOST，一句够用（level 参数它不认，传了无害）。
+   * · macOS：level 在这里才有意义 —— 'floating' 是「浮在普通窗口之上、但在菜单栏与系统通知
+   *   之下」那一档，正是迷你播放器该待的位置。但只写这一句还不够：用户切到别的 Space、或
+   *   别的应用进全屏时，这个窗会跟着被盖掉/收起，所以还要 setVisibleOnAllWorkspaces ——
+   *   其中 visibleOnFullScreen 是它对「全屏之上」唯一的开关。
+   * · Linux / X11：走 _NET_WM_STATE_ABOVE，由窗口管理器实现，一句够用。
+   * · Linux / Wayland：**协议层就没有这个请求**（xdg-shell 里没有，GNOME 也没实现任何替代
+   *   扩展），下面这一句会被合成器**无声忽略**。所以这条路上它不是「写漏了」，而是本来就
+   *   没有可写的 API —— 真正让置顶在这类会话下成立的是启动时改用 X11 后端，见 index.ts
+   *   顶部那段 ozone-platform 的说明。
+   */
+  const setMiniAlwaysOnTop = (on: boolean): void => {
+    if (on) {
+      window.setAlwaysOnTop(true, 'floating')
+      if (process.platform === 'darwin') {
+        window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+      }
+      return
+    }
+    window.setAlwaysOnTop(false)
+    if (process.platform === 'darwin') window.setVisibleOnAllWorkspaces(false)
+  }
+
+  /**
    * 把迷你态的窗口状态重新落一遍 —— **尺寸与置顶一起**。
    *
-   * 两件都要，是因为平台在几个时机（退出全屏、取消最大化、从最小化回来）会把「窗口状态」
-   * 整份摆回去，而置顶是这份状态里的一项：只补尺寸的话，表现是「小窗还在，却不再浮在
-   * 别的窗口上面了」—— 用户看到的是「置顶时灵时不灵」。
+   * 两件都要，是因为平台在几个时机（退出全屏、取消最大化、从最小化回来、隐藏后再显示）
+   * 会把「窗口状态」整份摆回去，而置顶是这份状态里的一项：只补尺寸的话，表现是「小窗还在，
+   * 却不再浮在别的窗口上面了」—— 用户看到的是「置顶时灵时不灵」。
    * 幂等：重复设没有副作用（与 applyMiniSize 同一个口径）。
    */
   const reassertMiniWindow = (): void => {
     if (!miniActive || window.isDestroyed()) return
-    window.setAlwaysOnTop(true, 'floating')
+    setMiniAlwaysOnTop(true)
     applyMiniSize()
   }
 
@@ -229,7 +255,8 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
 
       if (!restore) return
       window.setResizable(true)
-      window.setAlwaysOnTop(false)
+      // 退出迷你：置顶（macOS 还带着「跨空间 / 全屏之上」）一并还回去
+      setMiniAlwaysOnTop(false)
       window.setMinimumSize(MIN_WIDTH, MIN_HEIGHT)
       window.setBounds(restore.bounds)
       if (restore.maximized) window.maximize()
@@ -248,6 +275,9 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
   /* 从最小化回来（迷你条右上角就有一颗最小化钮，托盘 / 任务栏也能唤回）同样是「状态被摆回」
      的时机之一，一并补。 */
   window.on('restore', reassertMiniWindow)
+  /* 从托盘 / 任务栏重新显示（closeToTray 那条路是 hide→show，不经过 minimize）。
+     macOS 上 setVisibleOnAllWorkspaces 也会在隐藏/显示之间被平台摆回，同样要补。 */
+  window.on('show', reassertMiniWindow)
 
   // ── 位置尺寸记忆（防抖：拖动窗口期间不该狂写盘）────────────────────────
   let saveTimer: NodeJS.Timeout | null = null
