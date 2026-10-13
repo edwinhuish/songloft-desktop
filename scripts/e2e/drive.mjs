@@ -500,7 +500,6 @@ const STEPS = [
     1800,
     { settingText: containsAll('导出歌单', '导入歌单') }
   ],
-  ['23-settings-server', "window.__t.click('.settings-nav button', '服务器')", 1600],
   // 账号：版本号整串比 —— vv2.13.1 这个缺陷只有这么断言才挡得住（见 metaTags 的注释）
   [
     '24-settings-account',

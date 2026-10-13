@@ -14,7 +14,6 @@ export type SettingsSection =
   | 'cache'
   | 'network'
   | 'data'
-  | 'server'
   | 'account'
   | 'shortcuts'
   | 'about'
@@ -138,7 +137,6 @@ export function routeFromPath(path: string): Route | null {
           'cache',
           'network',
           'data',
-          'server',
           'account',
           'shortcuts',
           'about'

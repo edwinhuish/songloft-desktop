@@ -27,7 +27,6 @@ import type {
   ServerUpgradeCheck,
   ServerUpgradeProgress,
   ServerUpdateTarget,
-  TokenInfo,
   UploadedServerBinary
 } from '@shared/types'
 import { isNewerVersion } from '@shared/version'
@@ -39,7 +38,6 @@ import {
   IconChevronDown,
   IconDownload,
   IconEdit,
-  IconEyeOff,
   IconExternal,
   IconFingerprint,
   IconLoader,
@@ -91,10 +89,8 @@ import {
   getScanPlaylistMode,
   getScanTitleSource,
   getTagSyncToFile,
-  getTokens,
   getVolumeNormalize,
   importPlaylists,
-  revokeToken,
   setAutoScan,
   setGithubProxy,
   setHlsProxyEnabled,
@@ -138,7 +134,6 @@ const SECTIONS: { key: SettingsSection; label: string }[] = [
   { key: 'cache', label: '缓存管理' },
   { key: 'network', label: '网络设置' },
   { key: 'data', label: '数据管理' },
-  { key: 'server', label: '服务器' },
   { key: 'account', label: '账号' },
   { key: 'shortcuts', label: '快捷键' },
   { key: 'about', label: '关于与更新' }
@@ -184,7 +179,6 @@ export function SettingsPage({ section }: { section: SettingsSection }): React.J
           ) : null}
           {section === 'network' ? <NetworkSettings /> : null}
           {section === 'data' ? <DataSettings /> : null}
-          {section === 'server' ? <ServerSettings /> : null}
           {section === 'account' ? <AccountSettings /> : null}
           {section === 'shortcuts' ? <ShortcutsSettings /> : null}
           {section === 'about' ? <AboutSettings /> : null}
@@ -2529,81 +2523,6 @@ function DataSettings(): React.JSX.Element {
             </div>
           </Row>
         ) : null}
-      </Card>
-    </>
-  )
-}
-
-/* ───────────────────────────── 服务器 ───────────────────────────── */
-
-function ServerSettings(): React.JSX.Element {
-  const tokens = useAsync(() => getTokens(requireClient(), 50, 0), [])
-
-  // 只列 refresh token：access token 短命、一台设备会刷出很多个，列出来只是噪音；
-  // refresh token 才对应「一条登录设备记录」，吊销它才会让那台设备下线。
-  const devices: TokenInfo[] = (tokens.data?.tokens ?? []).filter(
-    (token) => token.token_type === 'refresh'
-  )
-
-  return (
-    <>
-      <Card
-        title="登录设备"
-        action={
-          <>
-            <span className="badge">{devices.length}</span>
-            <button type="button" className="btn" data-size="sm" onClick={() => tokens.reload()}>
-              <IconRefresh size={14} />
-              刷新
-            </button>
-          </>
-        }
-      >
-        {tokens.loading ? (
-          <Row title="正在读取设备…">
-            <IconLoader size={16} />
-          </Row>
-        ) : tokens.error ? (
-          <Row title="读取失败" desc={tokens.error}>
-            <span />
-          </Row>
-        ) : devices.length === 0 ? (
-          <Row title="没有可管理的设备">
-            <span />
-          </Row>
-        ) : (
-          devices.map((token) => (
-            <Row
-              key={token.token_id}
-              title={token.client_info ?? '未知设备'}
-              desc={`签发 ${formatDate(token.created_at)} · 过期 ${formatDate(token.expires_at)}${
-                token.revoked_at ? ' · 已吊销' : ''
-              }`}
-            >
-              <button
-                type="button"
-                className="btn"
-                data-size="sm"
-                data-variant="danger"
-                disabled={Boolean(token.revoked_at)}
-                onClick={() => {
-                  if (!window.confirm('吊销该令牌？使用它的设备会立刻退出登录。')) return
-                  void revokeToken(requireClient(), token.token_id)
-                    .then(() => {
-                      toast('已吊销', 'success')
-                      tokens.reload()
-                    })
-                    .catch((error: unknown) =>
-                      toast('吊销失败', 'error', error instanceof Error ? error.message : undefined)
-                    )
-                }}
-              >
-                <IconEyeOff size={14} />
-                吊销
-              </button>
-            </Row>
-          ))
-        )}
       </Card>
     </>
   )
