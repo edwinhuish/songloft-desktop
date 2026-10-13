@@ -929,15 +929,24 @@ html[data-menu='open'] .plugin-view {
   overscroll-behavior: contain;
 }
 
-/* 滑块贴住容器右边缘：外边距收到 1px。
-   全局那套（本文件顶部）给的是 3px 透明边框 + padding-box 裁切 —— 3px 会让滑块看着
-   浮在轨道中间，而且可见宽度只剩 4px（10 - 3×2），在这种浅色玻璃底上几乎看不出来；
-   收到 1px 之后可见宽度 8px，溢出时一眼能看到，右边缘也就只剩 1px 外边距。
-   ★ 只覆盖 border-width：透明边框自身、background-clip、底色与 hover 变亮都沿用全局
-     那一条，不在这里重写第二份（那边改了这里跟着改）；轨道本来就是透明且贴着右边缘的，
-     不需要动。 */
+/* 滑块：贴着容器右边缘只剩 1px 外边距，宽度**细一半**，鼠标悬浮上来再变粗。
+   可见宽度 = 轨道宽（10px）减去左右透明边框之和 —— 全局那套用 background-clip: padding-box
+   把透明边框当留白，所以「变粗」只需改边框宽度：轨道宽度一动，滚动槽跟着变、整个列表
+   会左右抖一下；边框怎么改都不影响布局。
+   ★ 透明边框全留在**左侧**：滑块永远贴着右边缘，变粗也只往左长，右侧那 1px 一直留着。
+   ★ 两条规则必须**分开写**：::-webkit-scrollbar:hover::-webkit-scrollbar-thumb 这种写法
+     Chromium 并不认（CSS.supports('selector(...)') 实测为 false），而选择器一旦非法，
+     整条规则连同里面的声明会被整份丢弃 —— 跟合法的那条合写在一起，就一起失效了。
+   ★ 只覆盖 border-width：透明边框自身、background-clip、底色与悬浮变亮都沿用全局那一条
+     （悬浮那条重声明过 background-clip，所以变粗时不至于把背景铺满整条轨道）。 */
 .sidebar-playlists::-webkit-scrollbar-thumb {
-  border-width: 1px;
+  /* 10 - 5 - 1 = 4px 可见 */
+  border-width: 0 1px 0 5px;
+}
+
+.sidebar-playlists::-webkit-scrollbar-thumb:hover {
+  /* 悬到滑块上：10 - 1 - 1 = 8px 可见，右侧仍留 1px */
+  border-width: 0 1px 0 1px;
 }
 
 /* 非 WebKit 引擎（Firefox 之类）根本拿不到 ::-webkit-scrollbar 那套：给一条标准属性兜底。
@@ -945,7 +954,7 @@ html[data-menu='open'] .plugin-view {
      scrollbar-color，就**整份忽略** ::-webkit-scrollbar —— 不包的话这条「兜底」反而会把
      上面调好的 1px 外边距一起废掉。
    （本应用跑在 Electron 里，渲染层永远是 Chromium，这一支实际到不了；它只是保证换引擎
-     时行为不退化。兜底那支没有 hover 变亮，所以颜色取明显一档。） */
+     时行为不退化。标准属性做不了「悬浮变亮 / 变粗」，所以颜色直接取明显一档。） */
 @supports not selector(::-webkit-scrollbar) {
   .sidebar-playlists {
     scrollbar-width: thin;
