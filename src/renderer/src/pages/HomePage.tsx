@@ -18,9 +18,9 @@ import { openMenuFromEvent } from '@/components/ContextMenu'
 import {
   IconClock,
   IconDisc,
-  IconHeart,
   IconHistory,
   IconLibrary,
+  IconListMusic,
   IconPlay,
   IconRefresh,
   IconSparkle,
@@ -239,7 +239,7 @@ export function HomePage(): React.JSX.Element {
       {/* ── 我的歌单 ── */}
       <div className="section-title">
         <span className="row" style={{ gap: 8 }}>
-          <IconHeart size={16} filled />
+          <IconListMusic size={16} />
           我的歌单
         </span>
         <button
