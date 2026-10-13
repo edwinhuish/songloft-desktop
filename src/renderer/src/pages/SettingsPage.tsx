@@ -885,18 +885,169 @@ function DuplicatesModal({
 /* ───────────────────────────── 服务器 ───────────────────────────── */
 
 function ServerSettings(): React.JSX.Element {
-  const { settings, patch } = useSettings()
-  const { servers, baseUrl, switchServer, forgetServer, refreshServers } = useAuth()
-  const [probe, setProbe] = useState<ServerProbeResult | null>(null)
-  const [probing, setProbing] = useState(false)
-
   const normalize = useAsync(() => getVolumeNormalize(requireClient()), [])
   const hls = useAsync(() => getHlsProxyEnabled(requireClient()), [])
+  const tokens = useAsync(() => getTokens(requireClient(), 50, 0), [])
+
+  const all: TokenInfo[] = tokens.data?.tokens ?? []
+
+  return (
+    <>
+      <Card title="播放与转码（服务端）">
+        <Row
+          server
+          title="响度归一化（EBU R128）"
+          desc={
+            <>
+              服务端统一各首歌的响度，杂食歌单不用一直调音量
+              <br />
+              需要后端安装 FFmpeg，未安装时开关不生效
+            </>
+          }
+        >
+          {normalize.loading ? (
+            <IconLoader size={16} />
+          ) : (
+            <Switch
+              ariaLabel="响度归一化"
+              checked={normalize.data?.enabled ?? false}
+              onChange={(checked) => {
+                void setVolumeNormalize(requireClient(), {
+                  enabled: checked,
+                  loudness: normalize.data?.loudness ?? -16
+                })
+                  .then(() => normalize.reload())
+                  .then(() => toast(checked ? '已开启响度归一化' : '已关闭响度归一化', 'success'))
+                  .catch((error: unknown) =>
+                    toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
+                  )
+              }}
+            />
+          )}
+        </Row>
+
+        <Row server title="HLS 代理" desc="播放 m3u8 时由服务端代理切片，解决跨域与防盗链">
+          {hls.loading ? (
+            <IconLoader size={16} />
+          ) : (
+            <Switch
+              ariaLabel="HLS 代理"
+              checked={hls.data ?? false}
+              onChange={(checked) => {
+                void setHlsProxyEnabled(requireClient(), checked)
+                  .then(() => hls.reload())
+                  .catch((error: unknown) =>
+                    toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
+                  )
+              }}
+            />
+          )}
+        </Row>
+      </Card>
+
+      <Card title="登录设备 / 令牌">
+        <Row title="令牌总数" desc="可以在别的设备上从这里吊销不再使用的登录">
+          <div className="row" style={{ gap: 8 }}>
+            <span className="badge">{all.length}</span>
+            <button type="button" className="btn" data-size="sm" onClick={() => tokens.reload()}>
+              <IconRefresh size={14} />
+              刷新
+            </button>
+          </div>
+        </Row>
+
+        {tokens.loading ? (
+          <Row title="正在读取令牌…">
+            <IconLoader size={16} />
+          </Row>
+        ) : tokens.error ? (
+          <Row title="读取失败" desc={tokens.error}>
+            <span />
+          </Row>
+        ) : all.length === 0 ? (
+          <Row title="没有可管理的令牌">
+            <span />
+          </Row>
+        ) : (
+          all.map((token) => (
+            <Row
+              key={token.token_id}
+              title={`${token.client_info ?? '未知设备'} · ${token.token_type}`}
+              desc={`签发 ${formatDate(token.created_at)} · 过期 ${formatDate(token.expires_at)}${
+                token.revoked_at ? ' · 已吊销' : ''
+              }`}
+            >
+              <button
+                type="button"
+                className="btn"
+                data-size="sm"
+                data-variant="danger"
+                disabled={Boolean(token.revoked_at)}
+                onClick={() => {
+                  if (!window.confirm('吊销该令牌？使用它的设备会立刻退出登录。')) return
+                  void revokeToken(requireClient(), token.token_id)
+                    .then(() => {
+                      toast('已吊销', 'success')
+                      tokens.reload()
+                    })
+                    .catch((error: unknown) =>
+                      toast('吊销失败', 'error', error instanceof Error ? error.message : undefined)
+                    )
+                }}
+              >
+                <IconEyeOff size={14} />
+                吊销
+              </button>
+            </Row>
+          ))
+        )}
+      </Card>
+    </>
+  )
+}
+
+/* ───────────────────────────── 账号与设备 ───────────────────────────── */
+
+function AccountSettings(): React.JSX.Element {
+  const { settings, patch } = useSettings()
+  const {
+    servers,
+    baseUrl,
+    serverName,
+    status,
+    logout,
+    switchServer,
+    forgetServer,
+    refreshServers
+  } = useAuth()
+  const [probe, setProbe] = useState<ServerProbeResult | null>(null)
+  const [probing, setProbing] = useState(false)
 
   const active = useMemo(() => servers.find((s) => s.url === baseUrl), [servers, baseUrl])
 
   return (
     <>
+      <Card title="当前账号">
+        <Row title="服务器" desc={`${serverName ?? '未知'} · ${baseUrl ?? '—'}`}>
+          <span className="badge" data-tone={status === 'authenticated' ? 'success' : 'default'}>
+            {status === 'authenticated' ? '已登录' : status}
+          </span>
+        </Row>
+        <Row title="退出登录" desc="清除本机保存的访问令牌；服务端会吊销当前令牌">
+          <button
+            type="button"
+            className="btn"
+            data-variant="danger"
+            onClick={() => {
+              if (window.confirm('退出登录？')) void logout()
+            }}
+          >
+            <IconLogout size={15} />
+            退出登录
+          </button>
+        </Row>
+      </Card>
+
       <Card title="当前连接">
         <Row title="服务器" desc={baseUrl ?? '未连接'}>
           <div className="row" style={{ gap: 8 }}>
@@ -997,159 +1148,6 @@ function ServerSettings(): React.JSX.Element {
             <span />
           </Row>
         )}
-      </Card>
-
-      <Card title="播放与转码（服务端）">
-        <Row
-          server
-          title="响度归一化（EBU R128）"
-          desc={
-            <>
-              服务端统一各首歌的响度，杂食歌单不用一直调音量
-              <br />
-              需要后端安装 FFmpeg，未安装时开关不生效
-            </>
-          }
-        >
-          {normalize.loading ? (
-            <IconLoader size={16} />
-          ) : (
-            <Switch
-              ariaLabel="响度归一化"
-              checked={normalize.data?.enabled ?? false}
-              onChange={(checked) => {
-                void setVolumeNormalize(requireClient(), {
-                  enabled: checked,
-                  loudness: normalize.data?.loudness ?? -16
-                })
-                  .then(() => normalize.reload())
-                  .then(() => toast(checked ? '已开启响度归一化' : '已关闭响度归一化', 'success'))
-                  .catch((error: unknown) =>
-                    toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
-                  )
-              }}
-            />
-          )}
-        </Row>
-
-        <Row server title="HLS 代理" desc="播放 m3u8 时由服务端代理切片，解决跨域与防盗链">
-          {hls.loading ? (
-            <IconLoader size={16} />
-          ) : (
-            <Switch
-              ariaLabel="HLS 代理"
-              checked={hls.data ?? false}
-              onChange={(checked) => {
-                void setHlsProxyEnabled(requireClient(), checked)
-                  .then(() => hls.reload())
-                  .catch((error: unknown) =>
-                    toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
-                  )
-              }}
-            />
-          )}
-        </Row>
-      </Card>
-    </>
-  )
-}
-
-/* ───────────────────────────── 账号与设备 ───────────────────────────── */
-
-function AccountSettings(): React.JSX.Element {
-  const { baseUrl, serverName, logout, status } = useAuth()
-  const tokens = useAsync(() => getTokens(requireClient(), 50, 0), [])
-
-  const all: TokenInfo[] = tokens.data?.tokens ?? []
-
-  return (
-    <>
-      <Card title="当前账号">
-        <Row title="服务器" desc={`${serverName ?? '未知'} · ${baseUrl ?? '—'}`}>
-          <span className="badge" data-tone={status === 'authenticated' ? 'success' : 'default'}>
-            {status === 'authenticated' ? '已登录' : status}
-          </span>
-        </Row>
-        <Row title="退出登录" desc="清除本机保存的访问令牌；服务端会吊销当前令牌">
-          <button
-            type="button"
-            className="btn"
-            data-variant="danger"
-            onClick={() => {
-              if (window.confirm('退出登录？')) void logout()
-            }}
-          >
-            <IconLogout size={15} />
-            退出登录
-          </button>
-        </Row>
-      </Card>
-
-      <Card title="登录设备 / 令牌">
-        <Row title="令牌总数" desc="可以在别的设备上从这里吊销不再使用的登录">
-          <div className="row" style={{ gap: 8 }}>
-            <span className="badge">{all.length}</span>
-            <button type="button" className="btn" data-size="sm" onClick={() => tokens.reload()}>
-              <IconRefresh size={14} />
-              刷新
-            </button>
-          </div>
-        </Row>
-
-        {tokens.loading ? (
-          <Row title="正在读取令牌…">
-            <IconLoader size={16} />
-          </Row>
-        ) : tokens.error ? (
-          <Row title="读取失败" desc={tokens.error}>
-            <span />
-          </Row>
-        ) : all.length === 0 ? (
-          <Row title="没有可管理的令牌">
-            <span />
-          </Row>
-        ) : (
-          all.map((token) => (
-            <Row
-              key={token.token_id}
-              title={`${token.client_info ?? '未知设备'} · ${token.token_type}`}
-              desc={`签发 ${formatDate(token.created_at)} · 过期 ${formatDate(token.expires_at)}${
-                token.revoked_at ? ' · 已吊销' : ''
-              }`}
-            >
-              <button
-                type="button"
-                className="btn"
-                data-size="sm"
-                data-variant="danger"
-                disabled={Boolean(token.revoked_at)}
-                onClick={() => {
-                  if (!window.confirm('吊销该令牌？使用它的设备会立刻退出登录。')) return
-                  void revokeToken(requireClient(), token.token_id)
-                    .then(() => {
-                      toast('已吊销', 'success')
-                      tokens.reload()
-                    })
-                    .catch((error: unknown) =>
-                      toast('吊销失败', 'error', error instanceof Error ? error.message : undefined)
-                    )
-                }}
-              >
-                <IconEyeOff size={14} />
-                吊销
-              </button>
-            </Row>
-          ))
-        )}
-      </Card>
-
-      <Card title="本机凭据">
-        <Row
-          title="凭据存储位置"
-          desc="访问令牌与刷新令牌保存在主进程的 config.json（用户数据目录），不写入渲染层的任何存储"
-        >
-          <span className="badge">仅本机</span>
-        </Row>
       </Card>
     </>
   )
