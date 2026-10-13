@@ -415,28 +415,14 @@
 .card-grid {
   display: grid;
   gap: 18px;
-  /* 卡片基准宽。大图档的封面封顶值由它算出来（见下），所以只在这一处写死 */
+  /* 卡片基准宽。单行横滚那档直接拿它当卡片宽度（见下），所以只在这一处写死 */
   --card-w: 158px;
   grid-template-columns: repeat(auto-fill, minmax(var(--card-w), 1fr));
 }
 
-/* 大图一档（首页「最近加入」用）：封面封顶在基准宽的 1.2 倍。
-   ★ 为什么是「封顶」而不是把列宽放大到 240px：auto-fill 的列数是阶梯函数 ——
-   列宽一放大，某些窗口宽度下会整整少掉一列，封面反而涨到基准的 1.4~1.8 倍
-   （取决于窗口多宽，最难看的恰好是窄窗口）。封顶与窗口宽度无关，任何宽度下都 ≤ 1.2 倍，
-   封面尺寸也就此恒定，拖窗口时不会忽大忽小。
-   轨道仍然是 1fr：富余的宽度留在轨道里，整行照样铺到页面右缘（右侧不会豁一个口子），
-   代价只是窗口越窄、图与图的间距越松一点。 */
-.card-grid[data-size='lg'] {
-  --card-w: calc(158px * 1.2);
-}
-
-.card-grid[data-size='lg'] > .card {
-  max-width: var(--card-w);
-}
-
 /* 单行横向滚动一档（首页「最近加入」用）：封面排成一行，装不下的往右滚，不换行。
-   宽度仍然取 --card-w，所以与网格档共用同一个封顶值。 */
+   卡片宽度取 --card-w —— 首页会把歌单卡的实测宽度写进去，让两处封面一样大
+   （那边的宽度是 auto-fill 摊出来的，随窗口在 158~202 之间变，CSS 里推不出来）。 */
 .card-grid[data-scroll='x'] {
   display: flex;
   gap: 18px;
@@ -444,12 +430,23 @@
   /* 悬停时卡片会抬升 3px，而 overflow-x: auto 会按规范把纵轴一并算成 auto ——
      上下不留出这点量的话，卡片顶边会被那条"隐形"的纵轴裁掉。 */
   padding: 4px 0;
+  /* 整行可拖（见 hooks/useDragScroll.ts）：光标要说得出这件事；
+     拖动过程会划选文字、也会碰到原生图片拖拽，所以一并禁掉选中 */
+  cursor: grab;
+  user-select: none;
 }
 
-/* 单行滚动里卡片不参与伸缩：宽度就是封顶值，多出来的交给横向滚动 */
+/* 单行滚动里卡片不参与伸缩：宽度就是 --card-w，多出来的交给横向滚动。
+   光标要覆盖掉 .card 那个 pointer —— 卡片本身已经不是可点区域了（只有播放键是）。 */
 .card-grid[data-scroll='x'] > .card {
   flex: none;
   width: var(--card-w);
+  cursor: grab;
+}
+
+.card-grid[data-scroll='x'][data-dragging='true'],
+.card-grid[data-scroll='x'][data-dragging='true'] > .card {
+  cursor: grabbing;
 }
 
 .card {

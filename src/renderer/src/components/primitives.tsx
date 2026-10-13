@@ -222,22 +222,14 @@ export function SongRowsSkeleton({
 
 export function CardGridSkeleton({
   cards = 10,
-  size,
   scroll
 }: {
   cards?: number
-  /** 与落地后的网格同档：否则加载中是 158px 的小方块，加载完跳成大图 */
-  size?: 'lg'
   /** 落地后是单行横向滚动（首页「最近加入」）时也要跟着，否则骨架是两行、加载完变一行 */
   scroll?: boolean
 }): React.JSX.Element {
   return (
-    <div
-      className="card-grid"
-      data-size={size}
-      data-scroll={scroll ? 'x' : undefined}
-      aria-hidden="true"
-    >
+    <div className="card-grid" data-scroll={scroll ? 'x' : undefined} aria-hidden="true">
       {Array.from({ length: cards }, (_, i) => (
         <div key={i} className="card" style={{ pointerEvents: 'none' }}>
           <div className="skeleton" style={{ aspectRatio: '1', borderRadius: 'var(--r-md)' }} />

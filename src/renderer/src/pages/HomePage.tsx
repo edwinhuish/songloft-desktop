@@ -5,13 +5,13 @@
  *   * 统计条从「底部小面板」提到顶部 —— 桌面第一眼能看到库规模，比空荡荡的标题栏有用
  *   * 歌单/歌手用卡片网格横向铺开，而不是移动端的两列纵向滚动
  *   * 卡片自带播放按钮（hover 才显形）：不用先进详情页就能开播
- *   * 「最近加入」是**单行**大图封面排（超出部分横向滚动），而不是紧凑表格：
- *     首页的职责是「一眼看到有什么新东西」，封面比一行行的元数据有用，
+ *   * 「最近加入」是**单行**封面排（与「我的歌单」封面同宽，超出部分横向滚动/可按住拖动），
+ *     而不是紧凑表格：首页的职责是「一眼看到有什么新东西」，封面比一行行的元数据有用，
  *     而占两行会把「我的歌单」「常听歌手」挤到首屏之外。要按列比较（时长/加入时间/专辑）
  *     或看完整列表时去曲库页
  */
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Song, SongFacet } from '@shared/types'
 import { openMenuFromEvent } from '@/components/ContextMenu'
@@ -30,6 +30,7 @@ import { CardGridSkeleton, Cover, EmptyState } from '@/components/primitives'
 import { buildSongMenuItems } from '@/components/songMenu'
 import { getFacets, getLibraryStats, getSongs } from '@/api/endpoints'
 import { useAsync } from '@/hooks/useAsync'
+import { useDragScroll } from '@/hooks/useDragScroll'
 import {
   displayArtist,
   formatBytes,
@@ -124,6 +125,35 @@ export function HomePage(): React.JSX.Element {
     [playlists]
   )
 
+  /**
+   * 「最近加入」的封面要与「我的歌单」的封面**一样大**，但横向滚动要求卡片宽度是确定值，
+   * 而歌单那边的宽度是 auto-fill 的 1fr 摊出来的 —— 同一个窗口下 158~202 都可能，
+   * CSS 里推不出来（列数是阶梯函数）。所以量一次歌单卡的真实宽度写进 --card-w。
+   *
+   * 量的好处是列宽公式仍然只有 CSS 一份：歌单网格怎么改，这里跟着变。
+   * 歌单区为空时（那边是空状态、没有卡片）没有可比对象，退回 CSS 里的基准宽即可。
+   */
+  const playlistGridRef = useRef<HTMLDivElement>(null)
+  const [coverWidth, setCoverWidth] = useState<number | null>(null)
+  // 歌单区有没有卡片渲染出来：有网格才谈得上量它，空状态时这一条变化即可重跑
+  const hasPlaylistGrid = regularPlaylists.length > 0
+
+  useEffect(() => {
+    const grid = playlistGridRef.current
+    if (!grid) return
+    const measure = (): void => {
+      const card = grid.querySelector('.card')
+      setCoverWidth(card ? card.getBoundingClientRect().width : null)
+    }
+    measure()
+    // 观察网格本身即可：卡片宽度只由容器宽度决定（增删歌单不会改变列宽）
+    const observer = new ResizeObserver(measure)
+    observer.observe(grid)
+    return () => observer.disconnect()
+  }, [hasPlaylistGrid])
+
+  const recentRow = useDragScroll()
+
   return (
     <div className="page">
       <div className="page-header">
@@ -206,7 +236,7 @@ export function HomePage(): React.JSX.Element {
       </div>
 
       {recent.loading ? (
-        <CardGridSkeleton cards={8} size="lg" scroll />
+        <CardGridSkeleton cards={8} scroll />
       ) : recentSongs.length === 0 ? (
         <EmptyState
           icon={<IconLibrary size={26} />}
@@ -224,7 +254,17 @@ export function HomePage(): React.JSX.Element {
           }
         />
       ) : (
-        <div className="card-grid" data-size="lg" data-scroll="x">
+        <div
+          className="card-grid"
+          data-scroll="x"
+          data-dragging={recentRow.dragging}
+          ref={recentRow.ref}
+          style={
+            coverWidth === null
+              ? undefined
+              : ({ '--card-w': `${coverWidth}px` } as React.CSSProperties)
+          }
+        >
           {recentSongs.map((song, index) => (
             <RecentSongCard
               key={song.id}
@@ -260,7 +300,7 @@ export function HomePage(): React.JSX.Element {
           description="侧栏右上角的 + 可以新建；也可以把歌曲行直接拖到侧栏歌单上"
         />
       ) : (
-        <div className="card-grid">
+        <div className="card-grid" ref={playlistGridRef}>
           {regularPlaylists.map((playlist) => (
             <PlaylistCard
               key={playlist.id}
@@ -317,9 +357,10 @@ function Stat({ value, label }: { value: string; label: string }): React.JSX.Ele
 /**
  * 「最近加入」的大图卡。
  *
- * 单击即播：歌没有详情页可去，「打开」这个动作无处落脚 —— 与歌单卡（进详情）、
- * 歌手卡（进搜索）不同，这里唯一有意义的落点就是从这一首开始播。
- * 右键直接复用曲库那套歌曲菜单（见 songMenu.tsx），免得大图卡变成功能孤岛。
+ * ★ 卡片本体**不是**可点区域：这一行要能按住横向拖动（见 useDragScroll），
+ * 而拖动松手时浏览器仍会补一个 click —— 卡片若响应点击，拖一下就会顺带播放。
+ * 所以只有封面右下角那颗播放键会开播，点封面、点歌名都什么都不做。
+ * 右键菜单照旧复用曲库那套（见 songMenu.tsx），免得大图卡变成功能孤岛。
  */
 function RecentSongCard({
   song,
@@ -333,10 +374,6 @@ function RecentSongCard({
   return (
     <div
       className="card"
-      role="button"
-      tabIndex={0}
-      data-tip={song.title}
-      onClick={onPlay}
       onContextMenu={(event) => openMenuFromEvent(event, buildSongMenuItems([song], { onDeleted }))}
     >
       <div className="card-art">
@@ -346,15 +383,14 @@ function RecentSongCard({
           className="card-play"
           aria-label={`播放 ${song.title}`}
           data-tip="播放这首歌"
-          onClick={(event) => {
-            event.stopPropagation()
-            onPlay()
-          }}
+          onClick={onPlay}
         >
           <IconPlay size={17} />
         </button>
       </div>
-      <div className="card-title truncate">{song.title}</div>
+      <div className="card-title truncate" data-tip={song.title}>
+        {song.title}
+      </div>
       <div className="card-meta truncate">
         {formatRelative(song.added_at)}
         {song.artist ? ` · ${displayArtist(song.artist)}` : ''}
