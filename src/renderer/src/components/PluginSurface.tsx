@@ -34,6 +34,11 @@ import { useSettings } from '@/state/useSettings'
  * 刻意**不复用** `Electron.WebviewTag`：渲染层不许 import electron（eslint 会拦），
  * 而 electron 的类型也不在 tsconfig.web 的程序里。这里只声明真正调用的成员，
  * 少一个都不写 —— 未知的成员在这里就是编译错误，而不是运行时的静默失效。
+ *
+ * ★ 下面这两个方法都**不是**「拿到元素就能调」：它们内部要先 `getWebContentsId()`，
+ *   而那个 id 只有在元素已插入 DOM **并且 guest 已经 `dom-ready`** 之后才存在。违反这条
+ *   时序会抛 `The WebView must be attached to the DOM and the dom-ready event emitted…`，
+ *   而且它抛在 effect 里、会连带把整个组件树掀掉。所以调用方一律要先过 `guestReady` 这一关。
  */
 interface PluginWebviewHandle {
   setAudioMuted(muted: boolean): void
@@ -116,6 +121,18 @@ function ExtensionView({ plugin, active, ctx }: ExtensionViewProps): React.JSX.E
   const hostRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<PluginWebviewHandle | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'failed'>('loading')
+  /**
+   * guest 是否已经就绪（`dom-ready`）。
+   *
+   * 元素插进 DOM 与 guest 真正建好是**两件事**：appendChild 只是排上队。在那之前
+   * `setAudioMuted` / `reload` 都会抛（见 PluginWebviewHandle 的注释）。
+   *
+   * 这是 state 而不是 ref：静音那个 effect 要在它翻成 true 时**再跑一次**，把用户
+   * 早就设置好的静音补上去。
+   */
+  const [guestReady, setGuestReady] = useState(false)
+  /** 换一个值即整体重建 webview。给「重试」用 —— guest 没起来时不能再 reload */
+  const [buildToken, setBuildToken] = useState(0)
 
   const entryPath = plugin.entryPath
   const url = useMemo(() => pluginPageUrl(plugin, ctx), [plugin, ctx])
@@ -137,6 +154,9 @@ function ExtensionView({ plugin, active, ctx }: ExtensionViewProps): React.JSX.E
     if (!host || !url) return
 
     setStatus('loading')
+    // 旧 guest 已经随上一个 effect 的清理被丢掉了，先把它那一份「就绪」作废
+    setGuestReady(false)
+
     const view = document.createElement('webview') as unknown as PluginWebviewHandle & HTMLElement
     view.className = 'plugin-webview'
     // 独立 session：宿主给 defaultSession 注入的 CSP 会连插件页一起改写（见 PLUGIN_PARTITION）
@@ -146,7 +166,8 @@ function ExtensionView({ plugin, active, ctx }: ExtensionViewProps): React.JSX.E
 
     const started = (): void => setRuntime(entryPath, { playing: true })
     const paused = (): void => setRuntime(entryPath, { playing: false })
-    const ready = (): void => setStatus('ready')
+    const domReady = (): void => setGuestReady(true)
+    const loaded = (): void => setStatus('ready')
     const failed = (event: Event): void => {
       // -3 是 ABORTED（正常的导航取消，换 token 重建时必然出现），不算失败
       const code = (event as Event & { errorCode?: number }).errorCode
@@ -156,31 +177,37 @@ function ExtensionView({ plugin, active, ctx }: ExtensionViewProps): React.JSX.E
 
     view.addEventListener('media-started-playing', started)
     view.addEventListener('media-paused', paused)
-    view.addEventListener('did-finish-load', ready)
+    // ★ dom-ready 标记的是「guest 建好了，能调它的方法了」，与「页面加载完成」是两回事
+    view.addEventListener('dom-ready', domReady)
+    view.addEventListener('did-finish-load', loaded)
     view.addEventListener('did-fail-load', failed)
     host.appendChild(view)
 
     return () => {
       view.removeEventListener('media-started-playing', started)
       view.removeEventListener('media-paused', paused)
-      view.removeEventListener('did-finish-load', ready)
+      view.removeEventListener('dom-ready', domReady)
+      view.removeEventListener('did-finish-load', loaded)
       view.removeEventListener('did-fail-load', failed)
       viewRef.current = null
       view.remove()
       // 销毁即不可能再出声。不复位的话，入口条上会永远留着一枚不再更新的「播放中」
       setRuntime(entryPath, { playing: false })
     }
-  }, [url, entryPath, setRuntime])
+  }, [url, entryPath, setRuntime, buildToken])
 
   /**
    * 静音落到 guest 上。
    *
-   * 依赖里带 `url` 是必要的：换 token 会重建 webview，新节点得重新套一次静音状态，
-   * 否则用户明明静音了，刷新一次又响了。
+   * 依赖里的三项都不是多余的：
+   *   * `guestReady` —— 首次静音必须等到 guest 建好，否则直接抛（这就是它曾经的样子）；
+   *   * `url`        —— 换 token 会重建 webview，新节点得重新套一次，
+   *                     否则用户明明静音了，刷新一次又响了。
    */
   useEffect(() => {
+    if (!guestReady) return
     viewRef.current?.setAudioMuted(muted)
-  }, [muted, url])
+  }, [muted, guestReady, url])
 
   /**
    * 兜底超时。
@@ -195,11 +222,19 @@ function ExtensionView({ plugin, active, ctx }: ExtensionViewProps): React.JSX.E
       setStatus((current) => (current === 'loading' ? 'failed' : current))
     }, LOAD_TIMEOUT_MS)
     return () => clearTimeout(timer)
-  }, [status, url])
+  }, [status, url, buildToken])
 
+  /**
+   * 重试。
+   *
+   * 分两种情况，不能一律 reload：guest 建好过（`guestReady`）说明只是这次导航失败，
+   * reload 最快；**没建好**（连接被拒这类，`dom-ready` 根本没来过）时 reload 会抛，
+   * 只能整个换掉这个元素重建一次。
+   */
   const retry = (): void => {
     setStatus('loading')
-    viewRef.current?.reload()
+    if (guestReady) viewRef.current?.reload()
+    else setBuildToken((token) => token + 1)
   }
 
   return (
