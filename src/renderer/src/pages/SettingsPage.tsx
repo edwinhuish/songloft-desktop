@@ -6,21 +6,25 @@
  * 原 Flutter 端把两类混在同一个长列表里，用户改完不知道到底改了谁。
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 
 import type { AppInfo, ServerProbeResult } from '@shared/ipc'
 import { REPO_URL, UPSTREAM_URL } from '@shared/links'
 import type {
   AutoScanSetting,
+  CacheConfigInput,
+  CacheDirCheck,
   DuplicatesResult,
   FailedFingerprint,
   FingerprintProgress,
   MetadataRefreshProgress,
   MetadataRefreshStatus,
   MusicPathSetting,
+  PlaylistImportResult,
   PlaylistMode,
   ScanProgress,
   ScanTitleSource,
+  ServerUpgradeCheck,
   TokenInfo
 } from '@shared/types'
 import { useContextMenu, type MenuItem } from '@/components/ContextMenu'
@@ -29,6 +33,8 @@ import {
   IconAlert,
   IconCheck,
   IconChevronDown,
+  IconDownload,
+  IconEdit,
   IconEyeOff,
   IconExternal,
   IconFingerprint,
@@ -41,7 +47,8 @@ import {
   IconSliders,
   IconSparkle,
   IconSun,
-  IconTrash
+  IconTrash,
+  IconUpload
 } from '@/components/Icons'
 import { Modal } from '@/components/Modal'
 import { EmptyState, Switch } from '@/components/primitives'
@@ -50,17 +57,25 @@ import {
   cancelFingerprintCompute,
   cancelMetadataRefresh,
   cancelScan,
+  checkServerUpgrade,
+  cleanCache,
   cleanMissingSongs,
   computeFingerprints,
   deleteSong,
+  exportPlaylists,
   findDuplicates,
   getAutoScan,
+  getCacheConfig,
+  getCacheStats,
   getFailedFingerprints,
   getFingerprintProgress,
   getFingerprintStatus,
+  getGithubProxy,
   getHlsProxyEnabled,
+  getHttpProxy,
   getMetadataRefreshProgress,
   getMusicPath,
+  getProxyAllowlist,
   getRemoteTitleSource,
   getScanProgress,
   getScanAutoCreatePlaylists,
@@ -70,9 +85,13 @@ import {
   getTagSyncToFile,
   getTokens,
   getVolumeNormalize,
+  importPlaylists,
   revokeToken,
   setAutoScan,
+  setGithubProxy,
   setHlsProxyEnabled,
+  setHttpProxy,
+  setProxyAllowlist,
   setRemoteTitleSource,
   setScanAutoCreatePlaylists,
   setScanAutoFingerprint,
@@ -82,10 +101,19 @@ import {
   setVolumeNormalize,
   startMetadataRefresh,
   startScan,
-  updateMusicPath
+  updateCacheConfig,
+  updateMusicPath,
+  validateCacheDir
 } from '@/api/endpoints'
 import { useAsync } from '@/hooks/useAsync'
-import { formatBytes, formatDate, formatRelative, formatVersion, latencyLevel } from '@/lib/format'
+import {
+  formatBytes,
+  formatCount,
+  formatDate,
+  formatRelative,
+  formatVersion,
+  latencyLevel
+} from '@/lib/format'
 import { requireClient, useAuth } from '@/state/useAuth'
 import { currentAccentHex, useSettings } from '@/state/useSettings'
 import { useUi, type SettingsSection } from '@/state/useUi'
@@ -95,9 +123,13 @@ const SECTIONS: { key: SettingsSection; label: string }[] = [
   { key: 'appearance', label: '外观' },
   { key: 'playback', label: '播放与歌词' },
   { key: 'library', label: '曲库与扫描' },
+  { key: 'cache', label: '缓存管理' },
+  { key: 'network', label: '网络设置' },
+  { key: 'data', label: '数据管理' },
   { key: 'server', label: '服务器' },
   { key: 'account', label: '账号' },
-  { key: 'about', label: '关于' }
+  { key: 'shortcuts', label: '快捷键' },
+  { key: 'about', label: '关于与更新' }
 ]
 
 const ACCENT_PRESETS = ['#7c5cff', '#22a7d6', '#ee5a8a', '#f08a3c', '#3fb27f', '#c9c2b6']
@@ -132,8 +164,12 @@ export function SettingsPage({ section }: { section: SettingsSection }): React.J
           {section === 'appearance' ? <AppearanceSettings /> : null}
           {section === 'playback' ? <PlaybackSettings /> : null}
           {section === 'library' ? <LibrarySettings /> : null}
+          {section === 'cache' ? <CacheSettings /> : null}
+          {section === 'network' ? <NetworkSettings /> : null}
+          {section === 'data' ? <DataSettings /> : null}
           {section === 'server' ? <ServerSettings /> : null}
           {section === 'account' ? <AccountSettings /> : null}
+          {section === 'shortcuts' ? <ShortcutsSettings /> : null}
           {section === 'about' ? <AboutSettings /> : null}
         </div>
       </div>
@@ -386,7 +422,6 @@ function PlaybackSettings(): React.JSX.Element {
   const { settings, patch } = useSettings()
 
   const normalize = useAsync(() => getVolumeNormalize(requireClient()), [])
-  const hls = useAsync(() => getHlsProxyEnabled(requireClient()), [])
 
   // 「音量均衡」的开关在服务端，本机的 volumeNormalize 只是它的镜像 ——
   // 音频 URL 由 audio 元素直接请求，拼装时没机会再问一次服务端。
@@ -473,24 +508,6 @@ function PlaybackSettings(): React.JSX.Element {
                   .then(() => patch({ volumeNormalize: checked }))
                   .then(() => normalize.reload())
                   .then(() => toast(checked ? '已开启音量均衡' : '已关闭音量均衡', 'success'))
-                  .catch((error: unknown) =>
-                    toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
-                  )
-              }}
-            />
-          )}
-        </Row>
-
-        <Row server title="HLS 代理" desc="播放 m3u8 时由服务端代理切片，解决跨域与防盗链">
-          {hls.loading ? (
-            <IconLoader size={16} />
-          ) : (
-            <Switch
-              ariaLabel="HLS 代理"
-              checked={hls.data ?? false}
-              onChange={(checked) => {
-                void setHlsProxyEnabled(requireClient(), checked)
-                  .then(() => hls.reload())
                   .catch((error: unknown) =>
                     toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
                   )
@@ -1606,6 +1623,740 @@ function FailedFingerprintsModal({
   )
 }
 
+/* ───────────────────────────── 缓存管理 ───────────────────────────── */
+
+const GB = 1024 ** 3
+
+/** 缓存上限档位（字节，0 = 不限）。给档位而不是任意值：上限差几百兆没有实际意义 */
+const CACHE_SIZE_STEPS: { value: number; label: string }[] = [
+  { value: 0, label: '不限' },
+  { value: GB / 2, label: '512 MB' },
+  { value: GB, label: '1 GB' },
+  { value: 2 * GB, label: '2 GB' },
+  { value: 5 * GB, label: '5 GB' },
+  { value: 10 * GB, label: '10 GB' },
+  { value: 20 * GB, label: '20 GB' },
+  { value: 50 * GB, label: '50 GB' },
+  { value: 100 * GB, label: '100 GB' }
+]
+
+/**
+ * 上限的显示文案。
+ *
+ * 优先用档位自己的名字 —— 下拉里写的是「2 GB」，同一张卡片里的「上限」那行若用通用字节
+ * 格式化写成「2.00 GB」，看上去就像两个不同的值。只有后端存着档位外的值时才退回通用写法。
+ */
+function cacheSizeLabel(size: number): string {
+  if (size <= 0) return '不限'
+  return CACHE_SIZE_STEPS.find((step) => step.value === size)?.label ?? formatBytes(size)
+}
+
+/** 落盘转码目标格式；空值 = 不转码（后端语义） */
+const TRANSCODE_FORMATS: SelectOption<string>[] = [
+  { value: '', label: '原始（不转码）' },
+  { value: 'mp3', label: 'MP3' },
+  { value: 'm4a', label: 'M4A' },
+  { value: 'ogg', label: 'OGG' },
+  { value: 'flac', label: 'FLAC' },
+  { value: 'wav', label: 'WAV' }
+]
+
+/** 转码码率；空值 = 最高质量，且只对有损格式生效 */
+const TRANSCODE_QUALITIES: SelectOption<string>[] = [
+  { value: '', label: '最高质量' },
+  { value: '320', label: '320 kbps' },
+  { value: '192', label: '192 kbps' },
+  { value: '128', label: '128 kbps' }
+]
+
+function CacheSettings(): React.JSX.Element {
+  const stats = useAsync(() => getCacheStats(requireClient()), [])
+  const config = useAsync(() => getCacheConfig(requireClient()), [])
+  const [busy, setBusy] = useState<string | null>(null)
+  const [dirEditing, setDirEditing] = useState(false)
+
+  const used = stats.data?.total_size ?? 0
+  const max = stats.data?.max_size ?? 0
+  const ratio = max > 0 ? Math.min(1, used / max) : 0
+  // 后端可能存着一个不在档位里的上限（被别的客户端设过）：补一项，别让它显示成别的档
+  const sizeOptions = CACHE_SIZE_STEPS.some((step) => step.value === max)
+    ? CACHE_SIZE_STEPS
+    : [...CACHE_SIZE_STEPS, { value: max, label: cacheSizeLabel(max) }]
+
+  /** 配置写入统一走这里：后端 PUT 收的是完整配置，写完回读，界面永远显示真正落下的值 */
+  const writeConfig = (patch: Partial<CacheConfigInput>): void => {
+    const current = config.data
+    if (!current) return
+    setBusy('config')
+    void updateCacheConfig(requireClient(), {
+      max_size: patch.max_size ?? current.max_size,
+      cache_dir: patch.cache_dir ?? current.cache_dir,
+      transcode_format: patch.transcode_format ?? current.transcode_format,
+      transcode_quality: patch.transcode_quality ?? current.transcode_quality
+    })
+      .then(() => {
+        config.reload()
+        // 上限变了，占用比例跟着变
+        stats.reload()
+      })
+      .catch((error: unknown) =>
+        toast('保存失败', 'error', error instanceof Error ? error.message : undefined)
+      )
+      .finally(() => setBusy(null))
+  }
+
+  return (
+    <>
+      <Card
+        title="服务端音乐缓存"
+        action={
+          <button
+            type="button"
+            className="btn"
+            data-size="sm"
+            onClick={() => {
+              config.reload()
+              stats.reload()
+            }}
+          >
+            <IconRefresh size={14} />
+            刷新
+          </button>
+        }
+      >
+        <Row
+          server
+          block
+          title="占用"
+          desc={
+            stats.error
+              ? `读取失败：${stats.error}`
+              : `${formatCount(stats.data?.file_count ?? 0)} 个文件${
+                  max > 0 ? `，已用 ${Math.round(ratio * 100)}%` : '，未设上限'
+                }`
+          }
+        >
+          <div className="stat-list">
+            <div className="stat-row">
+              <span>已用</span>
+              <span className="stat-row-value">{formatBytes(used)}</span>
+            </div>
+            <div className="stat-row">
+              <span>上限</span>
+              <span className="stat-row-value">{cacheSizeLabel(max)}</span>
+            </div>
+            <div className="stat-row">
+              <span>文件数</span>
+              <span className="stat-row-value">{formatCount(stats.data?.file_count ?? 0)}</span>
+            </div>
+          </div>
+          {/* 不限时没有分母，进度条无从谈起，索性不画 */}
+          {max > 0 ? (
+            <div className="progress-track" style={{ marginTop: 10 }}>
+              <div
+                className="progress-fill"
+                data-tone={ratio >= 0.9 ? 'danger' : undefined}
+                style={{ width: `${Math.round(ratio * 100)}%` }}
+              />
+            </div>
+          ) : null}
+        </Row>
+
+        <Row
+          server
+          title="最大缓存大小"
+          desc="超出后按最近最少使用淘汰旧文件；选「不限」缓存会一直长下去"
+        >
+          <select
+            className="input"
+            style={{ width: 150 }}
+            value={String(max)}
+            disabled={config.loading || busy === 'config'}
+            aria-label="最大缓存大小"
+            onChange={(event) => writeConfig({ max_size: Number(event.target.value) })}
+          >
+            {sizeOptions.map((step) => (
+              <option key={step.value} value={String(step.value)}>
+                {step.label}
+              </option>
+            ))}
+          </select>
+        </Row>
+
+        <Row
+          server
+          title="缓存目录"
+          desc={
+            <span className="mono selectable">
+              {config.data?.cache_dir || `${config.data?.default_cache_dir ?? ''}（默认）`}
+            </span>
+          }
+        >
+          <div className="row" style={{ gap: 8 }}>
+            <button
+              type="button"
+              className="btn"
+              data-size="sm"
+              disabled={config.loading}
+              onClick={() => setDirEditing(true)}
+            >
+              <IconEdit size={14} />
+              修改
+            </button>
+            <button
+              type="button"
+              className="btn"
+              data-size="sm"
+              disabled={config.loading || !config.data?.cache_dir || busy === 'config'}
+              onClick={() => writeConfig({ cache_dir: '' })}
+            >
+              恢复默认
+            </button>
+          </div>
+        </Row>
+
+        <Row
+          server
+          title="缓存转码格式"
+          desc="网络歌曲落盘时统一转成这个格式；「原始」按上游原格式存。转码需要后端有 ffmpeg"
+        >
+          <SettingSelect
+            ariaLabel="缓存转码格式"
+            width={150}
+            value={config.data?.transcode_format ?? ''}
+            options={TRANSCODE_FORMATS}
+            disabled={config.loading || busy === 'config'}
+            onChange={(next) => writeConfig({ transcode_format: next })}
+          />
+        </Row>
+
+        {/* 码率只对有损格式有意义：选了 FLAC / WAV 还问码率是误导 */}
+        {(config.data?.transcode_format ?? '') !== '' ? (
+          <Row
+            nested
+            server
+            title="转码码率"
+            desc="只对有损格式（MP3 / M4A / OGG）生效；FLAC / WAV 是无损，不受影响"
+          >
+            <SettingSelect
+              ariaLabel="转码码率"
+              width={150}
+              value={config.data?.transcode_quality ?? ''}
+              options={TRANSCODE_QUALITIES}
+              disabled={config.loading || busy === 'config'}
+              onChange={(next) => writeConfig({ transcode_quality: next })}
+            />
+          </Row>
+        ) : null}
+
+        <Row
+          server
+          title="清理缓存"
+          desc="删掉已落盘的缓存文件；曲库、歌单与播放记录都不受影响，下次播放重新拉取"
+        >
+          <button
+            type="button"
+            className="btn"
+            data-variant="danger"
+            disabled={busy === 'clean' || (stats.data?.file_count ?? 0) === 0}
+            onClick={() => {
+              if (!window.confirm(`清理全部缓存（约 ${formatBytes(used)}）？`)) return
+              setBusy('clean')
+              void cleanCache(requireClient())
+                .then(() => {
+                  toast('缓存已清理', 'success')
+                  stats.reload()
+                })
+                .catch((error: unknown) =>
+                  toast('清理失败', 'error', error instanceof Error ? error.message : undefined)
+                )
+                .finally(() => setBusy(null))
+            }}
+          >
+            {busy === 'clean' ? <IconLoader size={15} /> : <IconTrash size={15} />}
+            清理缓存
+          </button>
+        </Row>
+      </Card>
+
+      {dirEditing ? (
+        <CacheDirModal
+          current={config.data?.cache_dir ?? ''}
+          fallback={config.data?.default_cache_dir ?? ''}
+          onSave={(path) => {
+            setDirEditing(false)
+            writeConfig({ cache_dir: path })
+          }}
+          onClose={() => setDirEditing(false)}
+        />
+      ) : null}
+    </>
+  )
+}
+
+/** 改缓存目录：先在弹窗里验证目录可用，再保存 */
+function CacheDirModal({
+  current,
+  fallback,
+  onSave,
+  onClose
+}: {
+  current: string
+  fallback: string
+  onSave: (path: string) => void
+  onClose: () => void
+}): React.JSX.Element {
+  const [path, setPath] = useState(current)
+  const [check, setCheck] = useState<CacheDirCheck | null>(null)
+  const [checking, setChecking] = useState(false)
+  const fieldId = useId()
+
+  const runCheck = (): void => {
+    const target = path.trim()
+    if (!target) return
+    setChecking(true)
+    void validateCacheDir(requireClient(), target)
+      .then(setCheck)
+      .catch((error: unknown) =>
+        setCheck({
+          valid: false,
+          created: false,
+          total_size: 0,
+          free_size: 0,
+          error: error instanceof Error ? error.message : '验证失败'
+        })
+      )
+      .finally(() => setChecking(false))
+  }
+
+  return (
+    <Modal
+      title="缓存目录"
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>
+            取消
+          </button>
+          <button
+            type="button"
+            className="btn"
+            data-variant="primary"
+            disabled={path.trim() === current}
+            onClick={() => onSave(path.trim())}
+          >
+            保存
+          </button>
+        </>
+      }
+    >
+      <div className="field">
+        <label className="field-label" htmlFor={fieldId}>
+          目录路径
+        </label>
+        <input
+          id={fieldId}
+          className="input"
+          value={path}
+          placeholder={fallback}
+          onChange={(event) => {
+            setPath(event.target.value)
+            // 改过之后旧的验证结论就不作数了，别让它挂在那儿
+            setCheck(null)
+          }}
+        />
+        <div className="field-hint">
+          留空表示用后端默认目录（{fallback}
+          ）。换目录不会自动搬走旧缓存，旧目录里的文件得自己清理。
+        </div>
+      </div>
+
+      <div className="row" style={{ gap: 8, marginTop: 12 }}>
+        <button
+          type="button"
+          className="btn"
+          data-size="sm"
+          disabled={checking || !path.trim()}
+          onClick={runCheck}
+        >
+          {checking ? <IconLoader size={14} /> : <IconCheck size={14} />}
+          验证
+        </button>
+        <button
+          type="button"
+          className="btn"
+          data-size="sm"
+          onClick={() => {
+            setPath('')
+            setCheck(null)
+          }}
+        >
+          使用默认
+        </button>
+      </div>
+
+      {check ? (
+        <div
+          className="probe-result"
+          data-state={check.valid ? 'ok' : 'error'}
+          style={{ marginTop: 10 }}
+        >
+          {check.valid ? <IconCheck size={15} /> : <IconAlert size={15} />}
+          <span>
+            {check.valid
+              ? `可用${check.created ? '（已创建目录）' : ''} · 所在磁盘剩余 ${formatBytes(check.free_size)}`
+              : (check.error ?? '这个目录不可用')}
+          </span>
+        </div>
+      ) : null}
+    </Modal>
+  )
+}
+
+/* ───────────────────────────── 网络设置 ───────────────────────────── */
+
+function NetworkSettings(): React.JSX.Element {
+  const { settings, patch } = useSettings()
+  const httpProxy = useAsync(() => getHttpProxy(requireClient()), [])
+  const githubProxy = useAsync(() => getGithubProxy(requireClient()), [])
+  const allowlist = useAsync(() => getProxyAllowlist(requireClient()), [])
+  const hls = useAsync(() => getHlsProxyEnabled(requireClient()), [])
+  const [editing, setEditing] = useState<'http' | 'github' | 'allowlist' | null>(null)
+
+  /** 手动弹窗里的「保存」都落到这里：写成功后回读，失败弹提示 */
+  const saveProxy = (which: 'http' | 'github' | 'allowlist', value: string): void => {
+    setEditing(null)
+    const write =
+      which === 'http'
+        ? setHttpProxy(requireClient(), value.trim())
+        : which === 'github'
+          ? setGithubProxy(requireClient(), value.trim())
+          : setProxyAllowlist(
+              requireClient(),
+              value
+                .split('\n')
+                .map((line) => line.trim())
+                .filter(Boolean)
+            )
+    void write
+      .then(() => {
+        if (which === 'http') httpProxy.reload()
+        else if (which === 'github') githubProxy.reload()
+        else allowlist.reload()
+        toast('已保存', 'success')
+      })
+      .catch((error: unknown) =>
+        toast('保存失败', 'error', error instanceof Error ? error.message : undefined)
+      )
+  }
+
+  return (
+    <>
+      <Card title="代理">
+        <Row
+          server
+          title="HTTP 代理"
+          desc={
+            httpProxy.data
+              ? `当前：${httpProxy.data}`
+              : '未设置（直连）。填了之后后端访问外链（如导入歌单、抓取封面）都走它'
+          }
+        >
+          <button type="button" className="btn" data-size="sm" onClick={() => setEditing('http')}>
+            <IconEdit size={14} />
+            修改
+          </button>
+        </Row>
+
+        <Row
+          server
+          title="GitHub 加速代理"
+          desc={githubProxy.data ? `当前：${githubProxy.data}` : '未设置。只在检查服务端更新时用到'}
+        >
+          <button type="button" className="btn" data-size="sm" onClick={() => setEditing('github')}>
+            <IconEdit size={14} />
+            修改
+          </button>
+        </Row>
+
+        <Row
+          server
+          title="私网代理白名单"
+          desc={
+            (allowlist.data?.length ?? 0) > 0
+              ? `已放行 ${allowlist.data?.length} 条：${allowlist.data?.join('、')}`
+              : '未设置。后端默认拒绝代理私网 / 回环地址（这是 SSRF 防护），要代理内网资源才需要在这里放行'
+          }
+        >
+          <button
+            type="button"
+            className="btn"
+            data-size="sm"
+            onClick={() => setEditing('allowlist')}
+          >
+            <IconEdit size={14} />
+            修改
+          </button>
+        </Row>
+
+        <Row server title="HLS 代理" desc="播放 m3u8 时由服务端代理切片，解决跨域与防盗链">
+          {hls.loading ? (
+            <IconLoader size={16} />
+          ) : (
+            <Switch
+              ariaLabel="HLS 代理"
+              checked={hls.data ?? false}
+              onChange={(checked) => {
+                void setHlsProxyEnabled(requireClient(), checked)
+                  .then(() => hls.reload())
+                  .catch((error: unknown) =>
+                    toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
+                  )
+              }}
+            />
+          )}
+        </Row>
+      </Card>
+
+      <Card title="安全">
+        <Row
+          title="忽略 SSL 证书校验"
+          desc="自签证书或内网证书才需要打开。开启后任何证书都会被接受，中间人能读到与服务器之间的全部内容"
+        >
+          <Switch
+            ariaLabel="忽略 SSL 证书校验"
+            checked={settings.allowInsecureTls}
+            onChange={(checked) => {
+              if (
+                checked &&
+                !window.confirm(
+                  '开启后不再校验服务器证书：中间人可以读到你的登录凭据与所有请求内容。确定继续？'
+                )
+              )
+                return
+              void patch({ allowInsecureTls: checked })
+            }}
+          />
+        </Row>
+      </Card>
+
+      {editing === 'http' || editing === 'github' ? (
+        <TextPromptModal
+          title={editing === 'http' ? 'HTTP 代理' : 'GitHub 加速代理'}
+          label="代理地址"
+          placeholder="http://192.168.1.1:7890"
+          hint="留空表示不使用代理。支持 http / https / socks5。"
+          initial={editing === 'http' ? (httpProxy.data ?? '') : (githubProxy.data ?? '')}
+          onSave={(value) => saveProxy(editing, value)}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
+
+      {editing === 'allowlist' ? (
+        <TextPromptModal
+          title="私网代理白名单"
+          label="放行的地址（每行一条）"
+          placeholder={'192.168.1.0/24\n10.0.0.8'}
+          hint="每条可以是单个 IP 或 CIDR 网段。只在命中白名单时后端才允许代理访问私网地址，其余仍按 SSRF 防护拒绝。"
+          initial={(allowlist.data ?? []).join('\n')}
+          multiline
+          onSave={(value) => saveProxy('allowlist', value)}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
+    </>
+  )
+}
+
+/**
+ * 单 / 多行文本输入弹窗。
+ *
+ * 代理地址、白名单这些是「一整串值」，直接内嵌在设置行右侧会让行高跳动，也让「保存」
+ * 失去明确的确认点 —— 统一走弹窗。
+ */
+function TextPromptModal({
+  title,
+  label,
+  placeholder,
+  hint,
+  initial,
+  multiline,
+  onSave,
+  onClose
+}: {
+  title: string
+  label: string
+  placeholder: string
+  hint: string
+  initial: string
+  multiline?: boolean
+  onSave: (value: string) => void
+  onClose: () => void
+}): React.JSX.Element {
+  const [value, setValue] = useState(initial)
+  const fieldId = useId()
+
+  return (
+    <Modal
+      title={title}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className="btn" onClick={onClose}>
+            取消
+          </button>
+          <button
+            type="button"
+            className="btn"
+            data-variant="primary"
+            disabled={value === initial}
+            onClick={() => onSave(value)}
+          >
+            保存
+          </button>
+        </>
+      }
+    >
+      <div className="field">
+        <label className="field-label" htmlFor={fieldId}>
+          {label}
+        </label>
+        {multiline ? (
+          <textarea
+            id={fieldId}
+            className="input"
+            rows={6}
+            value={value}
+            placeholder={placeholder}
+            style={{ height: 'auto', padding: '8px 12px', resize: 'vertical' }}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        ) : (
+          <input
+            id={fieldId}
+            className="input"
+            value={value}
+            placeholder={placeholder}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        )}
+        <div className="field-hint">{hint}</div>
+      </div>
+    </Modal>
+  )
+}
+
+/* ───────────────────────────── 数据管理 ───────────────────────────── */
+
+/** 备份文件名里的日期戳：2026-10-13 */
+function dateStamp(): string {
+  const now = new Date()
+  const pad = (value: number): string => String(value).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
+function DataSettings(): React.JSX.Element {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [result, setResult] = useState<PlaylistImportResult | null>(null)
+
+  const doExport = (): void => {
+    setBusy('export')
+    void exportPlaylists(requireClient())
+      .then((data) => {
+        // 写盘交给主进程（渲染层没有文件系统权限）；备份就是一份 JSON 文档
+        return window.songloft.files.save(
+          `songloft-playlists-${dateStamp()}.json`,
+          JSON.stringify(data, null, 2)
+        )
+      })
+      .then((saved) => {
+        if (saved.saved) toast('已导出', 'success', saved.path ?? undefined)
+      })
+      .catch((error: unknown) =>
+        toast('导出失败', 'error', error instanceof Error ? error.message : undefined)
+      )
+      .finally(() => setBusy(null))
+  }
+
+  const doImport = (): void => {
+    setBusy('import')
+    setResult(null)
+    void window.songloft.files
+      .open()
+      .then((file) => (file ? importPlaylists(requireClient(), file.name, file.contents) : null))
+      .then((imported) => {
+        if (!imported) return
+        setResult(imported)
+        toast(
+          '导入完成',
+          'success',
+          `新建 ${imported.playlists_created} 个歌单 · 匹配 ${imported.songs_matched} 首歌`
+        )
+      })
+      .catch((error: unknown) =>
+        toast('导入失败', 'error', error instanceof Error ? error.message : undefined)
+      )
+      .finally(() => setBusy(null))
+  }
+
+  return (
+    <>
+      <Card title="歌单备份">
+        <Row title="导出歌单" desc="把全部歌单连歌曲关系导出成一份 JSON，可用于换服务器或留档">
+          <button
+            type="button"
+            className="btn"
+            data-variant="success"
+            disabled={busy === 'export'}
+            onClick={doExport}
+          >
+            {busy === 'export' ? <IconLoader size={15} /> : <IconDownload size={15} />}
+            导出
+          </button>
+        </Row>
+
+        <Row title="导入歌单" desc="从备份 JSON 恢复；同名歌单并入已有，不会重复创建">
+          <button type="button" className="btn" disabled={busy === 'import'} onClick={doImport}>
+            {busy === 'import' ? <IconLoader size={15} /> : <IconUpload size={15} />}
+            导入
+          </button>
+        </Row>
+
+        {result ? (
+          <Row
+            block
+            title="上次导入结果"
+            desc="同名歌单按「并入」处理，所以「合并」那一项通常不为零"
+          >
+            <div className="stat-list">
+              <div className="stat-row">
+                <span>新建歌单</span>
+                <span className="stat-row-value">{result.playlists_created}</span>
+              </div>
+              <div className="stat-row">
+                <span>合并歌单</span>
+                <span className="stat-row-value">{result.playlists_merged}</span>
+              </div>
+              <div className="stat-row">
+                <span>新增歌曲</span>
+                <span className="stat-row-value">{result.songs_created}</span>
+              </div>
+              <div className="stat-row">
+                <span>匹配到已有歌曲</span>
+                <span className="stat-row-value">{result.songs_matched}</span>
+              </div>
+              <div className="stat-row">
+                <span>跳过</span>
+                <span className="stat-row-value">{result.songs_skipped}</span>
+              </div>
+            </div>
+          </Row>
+        ) : null}
+      </Card>
+    </>
+  )
+}
+
 /* ───────────────────────────── 服务器 ───────────────────────────── */
 
 function ServerSettings(): React.JSX.Element {
@@ -1797,9 +2548,54 @@ function AccountSettings(): React.JSX.Element {
   )
 }
 
-/* ───────────────────────────── 关于 ───────────────────────────── */
+/* ───────────────────────────── 快捷键 ───────────────────────────── */
 
-/** 「关于」里要打开的两个地址：本仓库在前，上游原项目在后 */
+function ShortcutsSettings(): React.JSX.Element {
+  return (
+    <Card title="快捷键">
+      <Row title="Ctrl / Cmd + K" desc="打开命令面板：搜索歌曲、跳转页面、控制播放">
+        <span className="badge">全局</span>
+      </Row>
+      <Row
+        title="Ctrl / Cmd + ,"
+        desc="打开设置（走应用菜单的加速键，窗口无边框看不到菜单栏，键仍在）"
+      >
+        <span className="badge">全局</span>
+      </Row>
+      <Row title="空格" desc="播放 / 暂停（输入框内不生效）">
+        <span className="badge">播放</span>
+      </Row>
+      <Row title="Ctrl / Cmd + ← →" desc="上一首 / 下一首">
+        <span className="badge">播放</span>
+      </Row>
+      <Row title="↑ / ↓" desc="音量增减 5%">
+        <span className="badge">播放</span>
+      </Row>
+      <Row title="f" desc="收藏 / 取消收藏当前曲目（输入框内不生效）">
+        <span className="badge">收藏</span>
+      </Row>
+      <Row title="Ctrl / Cmd + L" desc="打开歌词面板；再按一次收起">
+        <span className="badge">面板</span>
+      </Row>
+      <Row title="Ctrl / Cmd + F" desc="聚焦到搜索框">
+        <span className="badge">导航</span>
+      </Row>
+      <Row title="Alt + ←" desc="返回上一页">
+        <span className="badge">导航</span>
+      </Row>
+      <Row
+        title="媒体键 / 托盘"
+        desc="键盘上的播放暂停、上一首、下一首键直接接管；最小化到托盘后仍可控制"
+      >
+        <IconSliders size={15} />
+      </Row>
+    </Card>
+  )
+}
+
+/* ───────────────────────────── 关于与更新 ───────────────────────────── */
+
+/** 关于页要打开的两个项目地址：本仓库在前，上游原项目在后 */
 const ABOUT_LINKS: { href: string; label: string }[] = [
   { href: REPO_URL, label: '本仓库' },
   { href: UPSTREAM_URL, label: '原项目' }
@@ -1860,32 +2656,72 @@ function AboutSettings(): React.JSX.Element {
         )}
       </Card>
 
-      <Card title="快捷键">
-        <Row title="Ctrl / Cmd + K" desc="打开命令面板：搜索歌曲、跳转页面、控制播放">
-          <span className="badge">全局</span>
-        </Row>
-        <Row title="空格" desc="播放 / 暂停（输入框内不生效）">
-          <span className="badge">播放</span>
-        </Row>
-        <Row title="Ctrl / Cmd + ← →" desc="上一首 / 下一首">
-          <span className="badge">播放</span>
-        </Row>
-        <Row title="↑ / ↓" desc="音量增减 5%">
-          <span className="badge">播放</span>
-        </Row>
-        <Row title="Ctrl / Cmd + F" desc="聚焦到搜索框">
-          <span className="badge">导航</span>
-        </Row>
-        <Row title="Alt + ←" desc="返回上一页">
-          <span className="badge">导航</span>
-        </Row>
-        <Row
-          title="媒体键 / 托盘"
-          desc="键盘上的播放暂停、上一首、下一首键直接接管；最小化到托盘后仍可控制"
-        >
-          <IconSliders size={15} />
-        </Row>
-      </Card>
+      <UpdateCard />
     </>
+  )
+}
+
+/**
+ * 更新检查。
+ *
+ * 桌面端**只查不升**：升级是把服务器上的二进制换掉，得在服务器那侧做（Docker 重新拉镜像 /
+ * 命令行替换），客户端替它做主反而容易把一份跑得好好的服务端换坏。所以这里把「有没有新版本、
+ * 新在哪」讲清楚，再给一条发布说明的链接。
+ */
+function UpdateCard(): React.JSX.Element {
+  const [check, setCheck] = useState<ServerUpgradeCheck | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const run = (): void => {
+    setBusy(true)
+    void checkServerUpgrade(requireClient())
+      .then(setCheck)
+      .catch((error: unknown) =>
+        toast('检查更新失败', 'error', error instanceof Error ? error.message : undefined)
+      )
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <Card title="更新">
+      <Row
+        title="检查服务端更新"
+        desc={
+          check
+            ? check.has_update
+              ? `有新版本：${formatVersion(check.current_version)} → ${formatVersion(check.latest_version)}${
+                  check.is_docker ? ' · 服务端跑在容器里，拉新镜像重启即可' : ''
+                }`
+              : `已是最新（${formatVersion(check.current_version)}）`
+            : '查一下服务端有没有新版本；不会自动升级'
+        }
+      >
+        <button type="button" className="btn" disabled={busy} onClick={run}>
+          {busy ? <IconLoader size={15} /> : <IconRefresh size={15} />}
+          检查
+        </button>
+      </Row>
+
+      {check?.has_update && check.release_notes ? (
+        <Row block title="新版本说明" desc={check.release_notes}>
+          <span />
+        </Row>
+      ) : null}
+
+      <Row
+        title="客户端更新"
+        desc="桌面端从 GitHub Releases 分发：有新版本时到发布页下载，或由包管理器升级"
+      >
+        <button
+          type="button"
+          className="btn"
+          data-size="sm"
+          onClick={() => void window.songloft.shell.openExternal(`${REPO_URL}/releases`)}
+        >
+          <IconExternal size={14} />
+          打开发布页
+        </button>
+      </Row>
+    </Card>
   )
 }

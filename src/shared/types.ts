@@ -403,3 +403,62 @@ export interface CleanResult {
   file_not_found: number
   in_excluded_dir: number
 }
+
+/* ───────────────────────────── 缓存管理 ───────────────────────────── */
+
+/** `/cache-manage/stats`：服务端音乐缓存占用 */
+export interface CacheStats {
+  /** 已占用字节 */
+  total_size: number
+  file_count: number
+  /** 上限字节；0 = 不限 */
+  max_size: number
+}
+
+/** `/cache-manage/config`：`cache_dir` 为空表示用默认目录，`max_size` 为 0 表示不限 */
+export interface CacheConfig {
+  max_size: number
+  cache_dir: string
+  /** 只读：后端认的默认目录，用于展示与「恢复默认」 */
+  default_cache_dir: string
+  /** '' = 不转码、按上游原格式落盘（默认） */
+  transcode_format: string
+  /** '' = 最高质量；只有损格式（mp3/m4a/ogg）有意义 */
+  transcode_quality: string
+}
+
+/** 可写入的那一半（`default_cache_dir` 只读，不参与提交） */
+export type CacheConfigInput = Omit<CacheConfig, 'default_cache_dir'>
+
+/** `/cache-manage/validate-dir`：这个目录能不能用作缓存 */
+export interface CacheDirCheck {
+  valid: boolean
+  /** 验证过程中把目录建出来了 */
+  created: boolean
+  total_size: number
+  free_size: number
+  error?: string
+}
+
+/* ───────────────────────── 更新检查（关于与更新）───────────────────────── */
+
+/** `/upgrade/check` 里桌面端真正用得到的那几个字段 */
+export interface ServerUpgradeCheck {
+  has_update: boolean
+  current_version: string
+  latest_version: string
+  release_notes: string
+  /** 服务器跑在容器里（升级方式与裸机不同） */
+  is_docker: boolean
+}
+
+/* ───────────────────────── 歌单备份（数据管理）───────────────────────── */
+
+/** `/playlists/import` 的返回：逐项说明这批备份做了什么 */
+export interface PlaylistImportResult {
+  playlists_created: number
+  playlists_merged: number
+  songs_created: number
+  songs_matched: number
+  songs_skipped: number
+}

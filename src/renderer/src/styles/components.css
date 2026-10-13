@@ -1911,6 +1911,11 @@ select.input option {
   transition: width var(--dur-3) var(--ease);
 }
 
+/* 占用逼近上限（缓存 >90%）时换成警示色：快写满盘这件事得看得出来 */
+.progress-fill[data-tone='danger'] {
+  background: var(--danger);
+}
+
 /* ── 指纹统计 / 失败清单（重复歌曲检测面板） ───────────────────────────── */
 
 .stat-list {

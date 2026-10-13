@@ -9,6 +9,10 @@ import type {
   AudioTrackInfo,
   AutoScanSetting,
   BackendVersion,
+  CacheConfig,
+  CacheConfigInput,
+  CacheDirCheck,
+  CacheStats,
   CleanResult,
   DirectoryListResponse,
   DuplicatesResult,
@@ -22,6 +26,7 @@ import type {
   MetadataRefreshProgress,
   MusicPathSetting,
   Playlist,
+  PlaylistImportResult,
   PlaylistListResponse,
   PlaylistMode,
   PlaylistType,
@@ -31,6 +36,7 @@ import type {
   SongFacetResponse,
   SongListResponse,
   SongQuery,
+  ServerUpgradeCheck,
   SongType,
   TokenListResponse,
   VolumeNormalizeSetting
@@ -589,6 +595,134 @@ export function setVolumeNormalize(
   setting: VolumeNormalizeSetting
 ): Promise<void> {
   return client.request<void>('/settings/volume-normalize', { method: 'PUT', body: setting })
+}
+
+/* ───────────────────────── 缓存管理（/cache-manage/*）───────────────────────── */
+
+export function getCacheStats(client: ApiClient): Promise<CacheStats> {
+  return client.request<Partial<CacheStats>>('/cache-manage/stats').then((res) => ({
+    total_size: res.total_size ?? 0,
+    file_count: res.file_count ?? 0,
+    max_size: res.max_size ?? 0
+  }))
+}
+
+export function getCacheConfig(client: ApiClient): Promise<CacheConfig> {
+  return client.request<Partial<CacheConfig>>('/cache-manage/config').then((res) => ({
+    max_size: res.max_size ?? 0,
+    cache_dir: res.cache_dir ?? '',
+    default_cache_dir: res.default_cache_dir ?? '',
+    transcode_format: res.transcode_format ?? '',
+    transcode_quality: res.transcode_quality ?? ''
+  }))
+}
+
+/** PUT 收的是完整配置：字段都是「空 = 用默认」的语义，少传一个就等于把它清空 */
+export function updateCacheConfig(client: ApiClient, config: CacheConfigInput): Promise<void> {
+  return client.request<void>('/cache-manage/config', { method: 'PUT', body: config })
+}
+
+/** 清空已落盘的音乐缓存（同步接口，缓存大时会等几秒） */
+export function cleanCache(client: ApiClient): Promise<void> {
+  return client.request<void>('/cache-manage/clean', { method: 'POST' })
+}
+
+export function validateCacheDir(client: ApiClient, path: string): Promise<CacheDirCheck> {
+  return client
+    .request<Partial<CacheDirCheck>>('/cache-manage/validate-dir', {
+      method: 'POST',
+      body: { path }
+    })
+    .then((res) => ({
+      valid: res.valid ?? false,
+      created: res.created ?? false,
+      total_size: res.total_size ?? 0,
+      free_size: res.free_size ?? 0,
+      error: res.error
+    }))
+}
+
+/* ───────────────────────── 网络设置（代理）───────────────────────── */
+
+export function getHttpProxy(client: ApiClient): Promise<string> {
+  return client.request<{ proxy?: string }>('/settings/http-proxy').then((res) => res.proxy ?? '')
+}
+
+export function setHttpProxy(client: ApiClient, proxy: string): Promise<void> {
+  return client.request<void>('/settings/http-proxy', { method: 'PUT', body: { proxy } })
+}
+
+export function getGithubProxy(client: ApiClient): Promise<string> {
+  return client.request<{ proxy?: string }>('/settings/github-proxy').then((res) => res.proxy ?? '')
+}
+
+export function setGithubProxy(client: ApiClient, proxy: string): Promise<void> {
+  return client.request<void>('/settings/github-proxy', { method: 'PUT', body: { proxy } })
+}
+
+export function getProxyAllowlist(client: ApiClient): Promise<string[]> {
+  return client
+    .request<{ allowlist?: string[] }>('/settings/proxy-private-allowlist')
+    .then((res) => res.allowlist ?? [])
+}
+
+export function setProxyAllowlist(client: ApiClient, allowlist: string[]): Promise<void> {
+  return client.request<void>('/settings/proxy-private-allowlist', {
+    method: 'PUT',
+    body: { allowlist }
+  })
+}
+
+/* ───────────────────────── 数据管理（歌单备份）───────────────────────── */
+
+/**
+ * 导出歌单备份。
+ *
+ * 返回的是**序列化好的 JSON 文本**而不是对象：调用方要把它整份写盘，重新 stringify 一遍
+ * 只会多一次大对象的内存搬运。（能用 Authorization 头，不必像封面那样退到查询参数。）
+ */
+export function exportPlaylists(client: ApiClient): Promise<unknown> {
+  return client.request<unknown>('/playlists/export')
+}
+
+export function importPlaylists(
+  client: ApiClient,
+  name: string,
+  contents: string
+): Promise<PlaylistImportResult> {
+  const form = new FormData()
+  // 字段名必须是 file：后端按 multipart 的 file 字段取文件
+  form.append('file', new Blob([contents], { type: 'application/json' }), name)
+  return client
+    .request<Partial<PlaylistImportResult>>('/playlists/import', {
+      method: 'POST',
+      formData: form
+    })
+    .then((res) => ({
+      playlists_created: res.playlists_created ?? 0,
+      playlists_merged: res.playlists_merged ?? 0,
+      songs_created: res.songs_created ?? 0,
+      songs_matched: res.songs_matched ?? 0,
+      songs_skipped: res.songs_skipped ?? 0
+    }))
+}
+
+/* ───────────────────────── 更新检查 ───────────────────────── */
+
+/**
+ * 问服务端有没有新版本。
+ *
+ * 只查不升：升级是把服务器上的二进制换掉，得在服务器那边做（Docker / 命令行）。
+ * 桌面端负责把「有没有新版本、新在哪」讲清楚，顺带给出发布说明。
+ */
+export function checkServerUpgrade(client: ApiClient): Promise<ServerUpgradeCheck> {
+  return client.request<Partial<ServerUpgradeCheck>>('/upgrade/check').then((res) => ({
+    has_update: res.has_update ?? false,
+    current_version: res.current_version ?? '',
+    latest_version: res.latest_version ?? '',
+    release_notes: res.release_notes ?? '',
+    is_docker: res.is_docker ?? false
+  }))
 }
 
 export function getHlsProxyEnabled(client: ApiClient): Promise<boolean> {
