@@ -197,7 +197,7 @@ export function PlaylistsPage(): React.JSX.Element {
               data-pinned={Boolean(playlist.pinned_at)}
               role="button"
               tabIndex={0}
-              title={playlist.name}
+              data-tip={playlist.name}
               onClick={() => navigate({ name: 'playlist', id: playlist.id })}
               onContextMenu={(event) => openMenuFromEvent(event, menuFor(playlist))}
             >

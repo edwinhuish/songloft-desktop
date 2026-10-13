@@ -119,7 +119,7 @@ export function FoldersView({ path }: { path: string }): React.JSX.Element {
               className="folder-row"
               role="button"
               tabIndex={0}
-              title={folder.path}
+              data-tip={folder.path}
               onClick={() => navigate({ name: 'folders', path: folder.path })}
             >
               <IconFolder size={18} />

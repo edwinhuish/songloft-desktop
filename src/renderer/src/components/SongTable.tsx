@@ -196,7 +196,7 @@ export function SongTable({
                   type="button"
                   data-active={active}
                   onClick={() => cycleSort(column.sortField!)}
-                  title={`按${column.label ?? ''}排序`}
+                  data-tip={`按${column.label ?? ''}排序`}
                 >
                   {column.label}
                   {active ? <span>{sort?.order === 'asc' ? '↑' : '↓'}</span> : null}
@@ -397,7 +397,7 @@ function SongRow({
         column.key === 'actions' ? (
           <div key="actions" className="song-actions" style={{ justifyContent: 'flex-end' }}>
             {reorderable ? (
-              <span className="queue-drag" title="拖动调整顺序" style={{ width: 24 }}>
+              <span className="queue-drag" data-tip="拖动调整顺序" style={{ width: 24 }}>
                 <IconGrip size={14} />
               </span>
             ) : null}
@@ -406,7 +406,7 @@ function SongRow({
               className="icon-btn"
               data-active={favorited}
               aria-label={favorited ? '取消收藏' : '收藏'}
-              title={favorited ? '取消收藏' : '收藏'}
+              data-tip={favorited ? '取消收藏' : '收藏'}
               onClick={(event) => {
                 event.stopPropagation()
                 void toggleFavorite(song)
@@ -418,7 +418,7 @@ function SongRow({
               type="button"
               className="icon-btn"
               aria-label="更多操作"
-              title="更多操作"
+              data-tip="更多操作"
               onClick={(event) => {
                 event.stopPropagation()
                 onMoreClick(event)

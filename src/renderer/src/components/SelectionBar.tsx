@@ -93,7 +93,7 @@ export function SelectionBar({
           className="btn"
           data-size="sm"
           disabled={!canPlay}
-          title={canPlay ? '播放选中歌曲' : '全选模式下不加载歌曲内容，无法直接播放'}
+          data-tip={canPlay ? '播放选中歌曲' : '全选模式下不加载歌曲内容，无法直接播放'}
           onClick={() => songs && void playSongs(songs, 0)}
         >
           <IconPlay size={14} />
@@ -104,7 +104,7 @@ export function SelectionBar({
           className="btn"
           data-size="sm"
           disabled={!canPlay}
-          title={canPlay ? '加入播放队列' : '全选模式下不加载歌曲内容，无法加入队列'}
+          data-tip={canPlay ? '加入播放队列' : '全选模式下不加载歌曲内容，无法加入队列'}
           onClick={() => {
             if (!songs) return
             addToQueue(songs)

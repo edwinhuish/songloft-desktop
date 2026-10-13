@@ -304,6 +304,9 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
   `pnpm run desktop:install`（显式命令，§8.11）。
 * 不要给渲染层开 Node 能力，也不要为了省事把 `contextIsolation` / `sandbox` 关掉。
 * 不要在渲染层把 token 拼进请求头去取封面/音频 —— 那两处只能走查询参数。
+* 不要在 DOM 元素上写 `title=` 当提示：那是浏览器自带的黑框，配色不跟主题、出现时机也不受控。
+  一律写 `data-tip="…"`，由 `components/Tooltip.tsx` 的全局浮层统一显示（图标按钮仍要留
+  `aria-label`，浮层是 `aria-hidden` 的，不承担可访问名）。
 * 不要把 `build/` 当运行期资源目录。
 * 不要在 `shared/` 里引入副作用或 electron 依赖。
 * 不要为了让 `format:check` 通过而给文件加 `prettier-ignore` —— 直接跑 `pnpm run format`。

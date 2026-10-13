@@ -295,7 +295,7 @@ function AppearanceSettings(): React.JSX.Element {
                 key={preset}
                 type="button"
                 aria-label={`使用强调色 ${preset}`}
-                title={preset}
+                data-tip={preset}
                 onClick={() => void patch({ accent: preset, accentFromCover: false })}
                 style={{
                   width: 26,
@@ -1054,7 +1054,7 @@ function LibrarySettings(): React.JSX.Element {
                 data-variant="success"
                 style={{ flex: 1 }}
                 disabled={busy === 'scan'}
-                title="扫描尚未入库的新文件（已在库里的按修改时间跳过）"
+                data-tip="扫描尚未入库的新文件（已在库里的按修改时间跳过）"
                 onClick={() =>
                   void run(
                     'scan',
@@ -1074,7 +1074,7 @@ function LibrarySettings(): React.JSX.Element {
                 className="btn"
                 style={{ flex: 'none' }}
                 disabled={busy === 'force'}
-                title="忽略缓存：已入库的文件也重新读一遍元数据（改了「标题来源」就该跑它），慢"
+                data-tip="忽略缓存：已入库的文件也重新读一遍元数据（改了「标题来源」就该跑它），慢"
                 onClick={() =>
                   void run(
                     'force',
@@ -1310,7 +1310,7 @@ function LibrarySettings(): React.JSX.Element {
                   data-variant="success"
                   style={{ flex: 1 }}
                   disabled={busy === 'fingerprint' || !fingerprints.data?.chromaprint_available}
-                  title="只算还没有指纹的歌曲，已算好的不动"
+                  data-tip="只算还没有指纹的歌曲，已算好的不动"
                   onClick={() => void startFingerprint({})}
                 >
                   {busy === 'fingerprint' ? <IconLoader size={15} /> : <IconRefresh size={15} />}
@@ -1325,7 +1325,7 @@ function LibrarySettings(): React.JSX.Element {
                     !fingerprints.data?.chromaprint_available ||
                     (fingerprints.data?.failed ?? 0) === 0
                   }
-                  title="只重试失败过的歌曲（已算好的保留）"
+                  data-tip="只重试失败过的歌曲（已算好的保留）"
                   onClick={() => void startFingerprint({ retryFailed: true })}
                 >
                   <IconAlert size={15} />
@@ -1336,7 +1336,7 @@ function LibrarySettings(): React.JSX.Element {
                   className="btn"
                   style={{ flex: 'none' }}
                   disabled={busy === 'fingerprint' || !fingerprints.data?.chromaprint_available}
-                  title="清空所有已有指纹、从头全算一遍（慢，只在换了算法/后端升级后需要）"
+                  data-tip="清空所有已有指纹、从头全算一遍（慢，只在换了算法/后端升级后需要）"
                   onClick={() => {
                     if (
                       !window.confirm(
@@ -1381,7 +1381,7 @@ function LibrarySettings(): React.JSX.Element {
                   className="btn"
                   style={{ flex: 'none' }}
                   disabled={(fingerprints.data?.failed ?? 0) === 0}
-                  title="看是哪些歌曲算不出指纹、为什么"
+                  data-tip="看是哪些歌曲算不出指纹、为什么"
                   onClick={() => {
                     setFpFailedOpen(true)
                     setFpFailedLoading(true)

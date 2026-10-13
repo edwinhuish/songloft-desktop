@@ -164,7 +164,7 @@ export function ExcludeDirsEditor({
               key={item}
               type="button"
               className="chip"
-              title={`移除 ${item}`}
+              data-tip={`移除 ${item}`}
               aria-label={`移除排除项 ${item}`}
               onClick={() => remove(item)}
             >
@@ -263,7 +263,7 @@ function DirNode({
           type="button"
           className="dir-name"
           aria-pressed={active}
-          title={entry.path}
+          data-tip={entry.path}
           onClick={() => context.onToggle(entry.path)}
         >
           <IconFolder size={15} />

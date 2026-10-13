@@ -25,7 +25,7 @@ import { useSettings } from '@/state/useSettings'
 import { useUi } from '@/state/useUi'
 import { useToasts } from '@/state/useToasts'
 import { Cover } from './primitives'
-import { hideTip, showTip } from './Tooltip'
+import { TIP_ATTR } from './Tooltip'
 
 export function Sidebar(): React.JSX.Element {
   const { route, navigate, sidebarCollapsed, toggleSidebar } = useUi()
@@ -33,13 +33,10 @@ export function Sidebar(): React.JSX.Element {
    * 折叠态只剩图标，名字改由全局浮层交代（见 Tooltip.tsx：浮层必须渲染到滚动容器之外，
    * 否则会被歌单列表的 overflow 剪掉）；展开态文字就摆在那儿，**什么都不挂**。
    *
-   * 展开态刻意不用 `title` 兜底：那是浏览器自带的黑框，出现时机与停留时长都不受控
-   * （鼠标挪开之后它还可能挂一会儿），和这套浮层语言是两回事。
+   * 浮层与全应用其余提示是同一套（`data-tip`），行为与配色只有一份。
    */
-  const tip = (label: string): React.ComponentProps<'button'> =>
-    sidebarCollapsed
-      ? { onMouseEnter: (event) => showTip(event, label), onMouseLeave: hideTip }
-      : {}
+  const tip = (label: string): { [TIP_ATTR]?: string } =>
+    sidebarCollapsed ? { [TIP_ATTR]: label } : {}
   const { playlists, load, create } = usePlaylists()
   const { patch } = useSettings()
   const push = useToasts((s) => s.push)

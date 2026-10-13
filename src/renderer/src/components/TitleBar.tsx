@@ -160,7 +160,7 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
           <button
             type="button"
             className="icon-btn"
-            title="导航菜单"
+            data-tip="导航菜单"
             aria-label="导航菜单"
             aria-haspopup="menu"
             aria-expanded={navMenuOpen}
@@ -188,7 +188,7 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
           <button
             type="button"
             className="win-btn"
-            title="搜索与命令（Ctrl+K）"
+            data-tip="搜索与命令（Ctrl+K）"
             aria-label="打开命令面板"
             onClick={() => setPaletteOpen(true)}
           >
@@ -198,7 +198,7 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
         <button
           type="button"
           className="win-btn"
-          title="最小化"
+          data-tip="最小化"
           aria-label="最小化"
           onClick={() => void window.songloft.window.minimize()}
         >
@@ -207,7 +207,7 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
         <button
           type="button"
           className="win-btn"
-          title={state.maximized ? '还原' : '最大化'}
+          data-tip={state.maximized ? '还原' : '最大化'}
           aria-label={state.maximized ? '还原' : '最大化'}
           onClick={() => void window.songloft.window.toggleMaximize()}
         >
@@ -217,7 +217,7 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
           type="button"
           className="win-btn"
           data-variant="close"
-          title="关闭"
+          data-tip="关闭"
           aria-label="关闭"
           onClick={() => void window.songloft.window.close()}
         >

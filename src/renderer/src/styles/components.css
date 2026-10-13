@@ -1389,16 +1389,20 @@ select.input option {
   color: var(--text-2);
 }
 
-/* 挂在 App 根部的单例小提示（折叠侧栏里的图标名）。
-   为什么不做在元素自己的伪元素上：歌单列表是滚动容器，而滚动容器的 overflow 一定
-   会剪掉伸出它之外的伪元素，且两个轴不能只放开一个 —— 一个轴是 visible、另一个是
-   auto 时，visible 会被算成 auto，照样剪。 */
+/*
+ * 挂在 App 根部的单例小提示（折叠侧栏里的图标名、各种按钮的一句话说明）。
+ *
+ * 为什么不做在元素自己的伪元素上：歌单列表是滚动容器，而滚动容器的 overflow 一定
+ * 会剪掉伸出它之外的伪元素，且两个轴不能只放开一个 —— 一个轴是 visible、另一个是
+ * auto 时，visible 会被算成 auto，照样剪。
+ *
+ * 位置由 JS 算好后写进 inline style（见 Tooltip.tsx），这里只管外观：
+ * 全部颜色走主题 token，浅色/深色各自成立，不再出现浏览器自带的黑框。
+ */
 .tip {
   position: fixed;
   /* 高于提示条(300)与右键菜单(200)：它只是个装饰，不该被别的浮层压住 */
   z-index: 400;
-  /* 锚点是被提示元素的右缘中点，所以自身要往上挪半个高度 */
-  transform: translateY(-50%);
   padding: 5px 9px;
   border: 1px solid var(--line-2);
   border-radius: var(--r-xs);
@@ -1408,8 +1412,12 @@ select.input option {
   box-shadow: var(--shadow-2);
   color: var(--text-1);
   font-size: 12.5px;
+  line-height: 1.5;
   font-weight: 520;
-  white-space: nowrap;
+  /* 提示里既有「上一首」这种四个字，也有整句说明与长路径：给个上限让它换行，
+     而不是一条横穿屏幕的长条。长路径中间没有空格，得允许在任意字符处断开 */
+  max-width: 340px;
+  overflow-wrap: anywhere;
   pointer-events: none;
 }
 

@@ -198,7 +198,7 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
             className="btn"
             data-size="sm"
             style={{ position: 'absolute', right: 10, bottom: 10 }}
-            title="上传本地图片作为封面（≤8MB）"
+            data-tip="上传本地图片作为封面（≤8MB）"
             onClick={() => pickCover(playlistId)}
           >
             <IconUpload size={14} />
@@ -259,7 +259,7 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
               type="button"
               className="btn"
               onClick={() => void list.refresh()}
-              title="重新拉取歌单内容"
+              data-tip="重新拉取歌单内容"
             >
               <IconRefresh size={15} />
               刷新
@@ -290,7 +290,7 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
                       )
                     })
                   }}
-                  title={meta?.pinned_at ? '取消置顶' : '置顶到歌单列表最前'}
+                  data-tip={meta?.pinned_at ? '取消置顶' : '置顶到歌单列表最前'}
                 >
                   <IconPin size={15} />
                   {meta?.pinned_at ? '取消置顶' : '置顶'}
@@ -325,7 +325,7 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
             <button
               type="button"
               className="btn"
-              title="隐藏后不出现在歌单列表里（可用「显示隐藏的歌单」找回）"
+              data-tip="隐藏后不出现在歌单列表里（可用「显示隐藏的歌单」找回）"
               onClick={() => void playlistsStore.setHidden(playlistId, true)}
             >
               <IconEyeOff size={15} />
@@ -355,7 +355,7 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
                 preset?.defaultOrder ?? 'asc'
               ).catch(() => undefined)
             }}
-            title="视图排序（不改动歌单本身）"
+            data-tip="视图排序（不改动歌单本身）"
           >
             {VIEW_SORTS.map((v) => (
               <option key={v.value} value={v.value}>
@@ -368,7 +368,7 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
             className="btn"
             data-size="sm"
             onClick={() => applySort(sort)}
-            title="点击在升序/降序之间切换"
+            data-tip="点击在升序/降序之间切换"
           >
             {order === 'asc' ? '升序 ↑' : '降序 ↓'}
           </button>
@@ -399,7 +399,7 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
               if (preset) void permanentSort(preset.action, preset.label)
               event.target.value = ''
             }}
-            title="服务端永久排序（会真的改写歌单顺序，不可撤销）"
+            data-tip="服务端永久排序（会真的改写歌单顺序，不可撤销）"
           >
             <option value="">永久排序…</option>
             {PERMANENT_SORTS.map((p) => (

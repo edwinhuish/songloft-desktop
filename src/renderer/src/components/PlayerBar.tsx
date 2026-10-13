@@ -145,7 +145,7 @@ export function PlayerBar(): React.JSX.Element {
           type="button"
           onClick={() => togglePanel('now-playing')}
           style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer' }}
-          title="查看正在播放"
+          data-tip="查看正在播放"
         >
           <Cover coverUrl={song?.cover_url} width={112} size={54} radius={10} />
         </button>
@@ -160,7 +160,7 @@ export function PlayerBar(): React.JSX.Element {
             type="button"
             className="icon-btn"
             data-active={favorited}
-            title={favorited ? '取消收藏' : '收藏'}
+            data-tip={favorited ? '取消收藏' : '收藏'}
             aria-label={favorited ? '取消收藏' : '收藏'}
             onClick={() => void toggleFavorite(song)}
           >
@@ -175,7 +175,7 @@ export function PlayerBar(): React.JSX.Element {
           type="button"
           className="icon-btn"
           data-active={player.playMode === 'random'}
-          title={MODE_LABEL[player.playMode]}
+          data-tip={MODE_LABEL[player.playMode]}
           aria-label={MODE_LABEL[player.playMode]}
           onClick={() => player.cyclePlayMode()}
         >
@@ -185,7 +185,7 @@ export function PlayerBar(): React.JSX.Element {
         <button
           type="button"
           className="icon-btn"
-          title="上一首"
+          data-tip="上一首"
           aria-label="上一首"
           disabled={!song}
           onClick={() => void player.previous()}
@@ -196,7 +196,7 @@ export function PlayerBar(): React.JSX.Element {
         <button
           type="button"
           className="play-btn"
-          title={player.playing ? '暂停' : '播放'}
+          data-tip={player.playing ? '暂停' : '播放'}
           aria-label={player.playing ? '暂停' : '播放'}
           disabled={!song}
           onClick={() => void player.toggle()}
@@ -207,7 +207,7 @@ export function PlayerBar(): React.JSX.Element {
         <button
           type="button"
           className="icon-btn"
-          title="下一首"
+          data-tip="下一首"
           aria-label="下一首"
           disabled={!song}
           onClick={() => void player.next(false)}
@@ -228,7 +228,7 @@ export function PlayerBar(): React.JSX.Element {
             style={{ width: 96, height: 30, fontSize: 12 }}
             value={player.activeTrack}
             onChange={(event) => void player.setActiveTrack(Number(event.target.value))}
-            title="切换音轨（原唱 / 伴奏）"
+            data-tip="切换音轨（原唱 / 伴奏）"
           >
             {player.tracks.map((track) => (
               <option key={track.index} value={track.index}>
@@ -242,7 +242,7 @@ export function PlayerBar(): React.JSX.Element {
           type="button"
           className="icon-btn"
           data-active={panelOpen && panelTab === 'now-playing'}
-          title="歌词面板"
+          data-tip="歌词面板"
           aria-label="歌词面板"
           onClick={() => togglePanel('now-playing')}
         >
@@ -253,7 +253,7 @@ export function PlayerBar(): React.JSX.Element {
           type="button"
           className="icon-btn"
           data-active={panelOpen && panelTab === 'queue'}
-          title="播放队列"
+          data-tip="播放队列"
           aria-label="播放队列"
           onClick={() => togglePanel('queue')}
         >
@@ -264,7 +264,7 @@ export function PlayerBar(): React.JSX.Element {
           <button
             type="button"
             className="icon-btn"
-            title={player.muted ? '取消静音' : '静音'}
+            data-tip={player.muted ? '取消静音' : '静音'}
             aria-label={player.muted ? '取消静音' : '静音'}
             onClick={() => player.toggleMute()}
           >

@@ -200,7 +200,7 @@ function LibraryView(): React.JSX.Element {
             className="btn"
             data-size="sm"
             data-variant={showHidden ? 'primary' : 'default'}
-            title="包含被隐藏歌单里的歌曲"
+            data-tip="包含被隐藏歌单里的歌曲"
             onClick={() => {
               setShowHidden((v) => !v)
               clearSelection()
@@ -226,7 +226,7 @@ function LibraryView(): React.JSX.Element {
               const [field, order] = event.target.value.split(':')
               setSort({ field: field as SongSort['field'], order: order as 'asc' | 'desc' })
             }}
-            title="排序方式"
+            data-tip="排序方式"
           >
             <option value="added_at:desc">最近加入</option>
             <option value="added_at:asc">最早加入</option>
@@ -322,7 +322,7 @@ function LibraryView(): React.JSX.Element {
                   key={facet.value}
                   type="button"
                   className="card"
-                  title={`只看${FACET_LABELS[browseField]}：${facet.value}`}
+                  data-tip={`只看${FACET_LABELS[browseField]}：${facet.value}`}
                   onClick={() => applyFilter(browseField, facet.value)}
                 >
                   <div className="card-art">

@@ -355,7 +355,7 @@ function ArtistCard({
           type="button"
           className="card-play"
           aria-label={`播放 ${facet.value}`}
-          title="播放该歌手的歌"
+          data-tip="播放该歌手的歌"
           onClick={(event) => {
             event.stopPropagation()
             onPlay()

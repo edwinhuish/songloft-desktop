@@ -181,7 +181,7 @@ export function LoginPage(): React.JSX.Element {
                 className="btn"
                 disabled={probing}
                 onClick={() => void handleProbe()}
-                title="只测连通性，不登录"
+                data-tip="只测连通性，不登录"
               >
                 {probing ? <IconLoader size={15} /> : <IconServer size={15} />}
                 探测
@@ -298,7 +298,7 @@ export function LoginPage(): React.JSX.Element {
                           type="button"
                           className="saved-server-main"
                           disabled={busy}
-                          title={`用已保存的凭据登录 ${server.url}`}
+                          data-tip={`用已保存的凭据登录 ${server.url}`}
                           onClick={() => quickLogin(server)}
                         >
                           <span className="saved-server-title">
@@ -310,7 +310,7 @@ export function LoginPage(): React.JSX.Element {
                         <button
                           type="button"
                           className="icon-btn"
-                          title="移除该服务器及其本机凭据"
+                          data-tip="移除该服务器及其本机凭据"
                           aria-label={`移除 ${server.name}`}
                           onClick={() => {
                             if (window.confirm(`移除「${server.name}」及其本机凭据？`))

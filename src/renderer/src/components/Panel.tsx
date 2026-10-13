@@ -29,7 +29,7 @@ export function Panel(): React.JSX.Element | null {
         <button
           type="button"
           className="icon-btn"
-          title="收起面板"
+          data-tip="收起面板"
           aria-label="收起面板"
           onClick={() => setPanelOpen(false)}
         >
@@ -40,7 +40,7 @@ export function Panel(): React.JSX.Element | null {
             type="button"
             className="icon-btn"
             data-active={panelTab === 'now-playing'}
-            title="正在播放"
+            data-tip="正在播放"
             aria-label="正在播放"
             onClick={() => setPanelTab('now-playing')}
           >
@@ -50,7 +50,7 @@ export function Panel(): React.JSX.Element | null {
             type="button"
             className="icon-btn"
             data-active={panelTab === 'queue'}
-            title="播放队列"
+            data-tip="播放队列"
             aria-label="播放队列"
             onClick={() => setPanelTab('queue')}
           >
@@ -188,7 +188,7 @@ function Queue(): React.JSX.Element {
           }}
           onDragEnd={() => setDragIndex(null)}
         >
-          <span className="queue-drag" title="拖动调整顺序">
+          <span className="queue-drag" data-tip="拖动调整顺序">
             <IconMusic size={14} />
           </span>
           <Cover coverUrl={song.cover_url} width={72} size={38} radius={8} />
@@ -202,7 +202,7 @@ function Queue(): React.JSX.Element {
               type="button"
               className="icon-btn"
               style={{ width: 26, height: 26 }}
-              title="从队列移除"
+              data-tip="从队列移除"
               aria-label="从队列移除"
               onClick={() => removeFromQueue([index])}
             >

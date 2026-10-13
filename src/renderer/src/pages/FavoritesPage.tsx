@@ -68,7 +68,7 @@ export function FavoritesPage(): React.JSX.Element {
             type="button"
             className="btn"
             disabled={list.songs.length === 0}
-            title="打乱顺序播放"
+            data-tip="打乱顺序播放"
             onClick={() => {
               const shuffled = [...list.songs]
               for (let i = shuffled.length - 1; i > 0; i -= 1) {
