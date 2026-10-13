@@ -19,6 +19,7 @@ import {
   type TraySnapshot
 } from '@shared/ipc'
 import { installAppMenu } from './app-menu'
+import { openTextFile, saveTextFile } from './files'
 import { registerMediaKeys } from './media-keys'
 import { fetchCoverBytes, probeServer } from './probe'
 import { ConfigStore } from './store'
@@ -248,6 +249,10 @@ function registerIpcHandlers(): void {
     if (/^https?:\/\//i.test(url)) return shell.openExternal(url)
     return Promise.resolve()
   })
+  ipcMain.handle(IPC.fileSave, (_event, suggestedName: string, contents: string) =>
+    saveTextFile(mainWindow, suggestedName, contents)
+  )
+  ipcMain.handle(IPC.fileOpen, () => openTextFile(mainWindow))
   ipcMain.handle(IPC.colorExtract, (_event, url: string) => fetchCoverBytes(url))
   ipcMain.handle(IPC.appInfo, (): AppInfo => ({
     name: app.getName(),

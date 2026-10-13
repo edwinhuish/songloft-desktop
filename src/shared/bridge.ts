@@ -8,6 +8,8 @@
 import type {
   AppInfo,
   AppSettings,
+  FileOpenResult,
+  FileSaveResult,
   MediaCommand,
   ServerEntry,
   ServerProbeResult,
@@ -53,6 +55,12 @@ export interface SongloftBridge {
   }
   shell: {
     openExternal(url: string): Promise<void>
+  }
+  files: {
+    /** 弹保存框把文本写盘；用户取消时 saved 为 false */
+    save(suggestedName: string, contents: string): Promise<FileSaveResult>
+    /** 弹打开框读文本；取消返回 null */
+    open(): Promise<FileOpenResult | null>
   }
   app: {
     info(): Promise<AppInfo>

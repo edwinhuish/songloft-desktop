@@ -11,7 +11,15 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 import { IPC } from '@shared/ipc'
-import type { AppSettings, MediaCommand, ServerEntry, TraySnapshot, WindowState } from '@shared/ipc'
+import type {
+  AppSettings,
+  FileOpenResult,
+  FileSaveResult,
+  MediaCommand,
+  ServerEntry,
+  TraySnapshot,
+  WindowState
+} from '@shared/ipc'
 import type { CoverBytes, SongloftBridge, StoredCredentials } from '@shared/bridge'
 
 function subscribe<T>(channel: string, handler: (payload: T) => void): () => void {
@@ -50,6 +58,11 @@ const bridge: SongloftBridge = {
   },
   shell: {
     openExternal: (url) => ipcRenderer.invoke(IPC.openExternal, url) as Promise<void>
+  },
+  files: {
+    save: (suggestedName, contents) =>
+      ipcRenderer.invoke(IPC.fileSave, suggestedName, contents) as Promise<FileSaveResult>,
+    open: () => ipcRenderer.invoke(IPC.fileOpen) as Promise<FileOpenResult | null>
   },
   app: {
     info: () => ipcRenderer.invoke(IPC.appInfo)

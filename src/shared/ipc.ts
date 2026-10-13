@@ -33,6 +33,10 @@ export const IPC = {
   windowGetState: 'window:get-state',
   trayUpdate: 'tray:update',
   openExternal: 'shell:open-external',
+  /** 弹保存框把文本写盘（导出歌单备份；渲染层没有文件系统权限） */
+  fileSave: 'file:save',
+  /** 弹打开框读文本（导入歌单备份）；取消返回 null */
+  fileOpen: 'file:open',
   /** 主进程代取封面字节（canvas 取主色需要，绕开跨域画布污染） */
   colorExtract: 'cover:extract',
   appInfo: 'app:info',
@@ -65,6 +69,18 @@ export interface TraySnapshot {
   artist: string | null
   playing: boolean
   favorite: boolean
+}
+
+/** 写盘结果：用户取消对话框时为 saved=false */
+export interface FileSaveResult {
+  saved: boolean
+  path: string | null
+}
+
+/** 读到的文件（只回文本内容，路径不出主进程） */
+export interface FileOpenResult {
+  name: string
+  contents: string
 }
 
 export interface ServerProbeResult {
