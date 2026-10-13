@@ -1153,7 +1153,7 @@ function LibrarySettings(): React.JSX.Element {
               <button
                 type="button"
                 className="btn"
-                data-variant="success"
+                data-variant="primary"
                 style={{ flex: 1 }}
                 disabled={busy === 'scan'}
                 data-tip="扫描尚未入库的新文件（已在库里的按修改时间跳过）"
@@ -1275,7 +1275,7 @@ function LibrarySettings(): React.JSX.Element {
             <button
               type="button"
               className="btn"
-              data-variant="success"
+              data-variant="primary"
               style={{ width: '100%' }}
               disabled={busy === 'refresh'}
               onClick={() =>
