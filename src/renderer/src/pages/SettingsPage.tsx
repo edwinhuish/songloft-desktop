@@ -303,6 +303,15 @@ function PlaybackSettings(): React.JSX.Element {
   const normalize = useAsync(() => getVolumeNormalize(requireClient()), [])
   const hls = useAsync(() => getHlsProxyEnabled(requireClient()), [])
 
+  // 「音量均衡」的开关在服务端，本机的 volumeNormalize 只是它的镜像 ——
+  // 音频 URL 由 audio 元素直接请求，拼装时没机会再问一次服务端。
+  // 所以服务端状态一到（或被别的设备改过）就把本机对齐，两处不再各说各话。
+  const serverNormalize = normalize.data?.enabled
+  useEffect(() => {
+    if (serverNormalize === undefined || serverNormalize === settings.volumeNormalize) return
+    void patch({ volumeNormalize: serverNormalize })
+  }, [serverNormalize, settings.volumeNormalize, patch])
+
   return (
     <>
       <Card title="播放">
@@ -360,28 +369,25 @@ function PlaybackSettings(): React.JSX.Element {
 
         <Row
           server
-          title="响度归一化（EBU R128）"
-          desc={
-            <>
-              服务端统一各首歌的响度，杂食歌单不用一直调音量
-              <br />
-              需要后端安装 FFmpeg，未安装时开关不生效
-            </>
-          }
+          title="音量均衡"
+          desc="启用 EBU R128 响度均衡，消除不同音源之间的音量差异。需要 ffmpeg，会增加 CPU 和首次播放延迟"
         >
           {normalize.loading ? (
             <IconLoader size={16} />
           ) : (
             <Switch
-              ariaLabel="响度归一化"
+              ariaLabel="音量均衡"
               checked={normalize.data?.enabled ?? false}
               onChange={(checked) => {
                 void setVolumeNormalize(requireClient(), {
                   enabled: checked,
                   loudness: normalize.data?.loudness ?? -16
                 })
+                  // 本机镜像一起写：不然要等下一次拉设置才跟上，中间这段时间
+                  // 界面已经是「开」，音频 URL 里却没带 normalize=1
+                  .then(() => patch({ volumeNormalize: checked }))
                   .then(() => normalize.reload())
-                  .then(() => toast(checked ? '已开启响度归一化' : '已关闭响度归一化', 'success'))
+                  .then(() => toast(checked ? '已开启音量均衡' : '已关闭音量均衡', 'success'))
                   .catch((error: unknown) =>
                     toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
                   )
@@ -406,17 +412,6 @@ function PlaybackSettings(): React.JSX.Element {
               }}
             />
           )}
-        </Row>
-
-        <Row
-          title="本机音频归一化参数"
-          desc="把 normalize=1 一并交给后端音频端点（与上面那个开关是两件事）"
-        >
-          <Switch
-            ariaLabel="本机音频归一化参数"
-            checked={settings.volumeNormalize}
-            onChange={(checked) => void patch({ volumeNormalize: checked })}
-          />
         </Row>
       </Card>
 
