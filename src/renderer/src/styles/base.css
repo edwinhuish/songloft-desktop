@@ -326,14 +326,25 @@ a {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  /* 默认不参与伸缩：窗口变矮时该挨压的只有歌单列表，导航项被挤扁、图标行折行
+     都比「歌单区出现滚动条」难看得多（下面那条规则再把歌单组改回可伸缩）。 */
+  flex: none;
 }
 
 /* 导航区（首页…最近播放）与「我的歌单」区之间的分隔线。
    展开态也需要：两段的间距只有 .sidebar 的 gap 那 6px，扫一眼分不清「最近播放」
    和下面那串歌单是同一级、还是两件事。折叠态更是必须 —— 标题淡出、加号退出后
-   只剩一列图标，没有这条线就完全看不出分组边界。 */
+   只剩一列图标，没有这条线就完全看不出分组边界。
+
+   ★ 顺带定下「我的歌单」的高度：两组里只有它吃剩余空间，于是它是有界高度，
+   里面的 .sidebar-playlists 才谈得上滚动。min-height: 0 不能省 —— flex 子项的
+   自动最小尺寸等于内容高度，不减到 0 的话这一组照样撑到内容那么高，
+   overflow-y: auto 永不触发，多出来的歌单被 .sidebar 的 overflow: hidden 剪掉，
+   既不滚动也不报错。 */
 .nav-group + .nav-group {
   border-top: 1px solid var(--line-1);
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .nav-label {
@@ -529,16 +540,23 @@ a {
   overflow-x: hidden;
   margin-left: -12px;
   padding: 0 0 4px 12px;
+  /* 滚到头之后把滚动「续」给外层是触控板上的常见困扰：侧栏只有这一块能滚，
+     续出去只会让人以为整个侧栏在动。标准属性，各引擎都认；
+     -webkit-overflow-scrolling 是 iOS Safari 的旧开关，Chromium 里是空操作。 */
+  overscroll-behavior: contain;
 }
 
 .sidebar-foot {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  /* 钉死在侧栏最底部。「我的歌单」那一段是内容高度，不会自己撑满侧栏，剩下的空间
-     原先就白白留在底部区**下面** —— 于是「设置 / 收起侧栏」悬在半空、下面空一大截。
-     auto 外边距把这截余量全部收在底部区上方，它就永远贴着底边。 */
+  /* 钉死在侧栏最底部。现在余量是被「我的歌单」那一段吃掉的（见 .nav-group + .nav-group），
+     底部区自然就贴在它下面；auto 外边距留着当兜底 —— 万一上面那组不再伸缩，
+     它仍能把余量收在自己上方，而不是让「收起侧栏」悬在半空。 */
   margin-top: auto;
+  /* 同样是「别挨压」：窗口极矮时若连它也被压缩，按钮会被 .sidebar 的 overflow 剪掉，
+     整条收起/展开的入口就凭空消失了。 */
+  flex: none;
   padding-top: 10px;
   border-top: 1px solid var(--line-1);
 }
