@@ -238,6 +238,29 @@ window.__t = {
       const b = bar.getBoundingClientRect();
       return f.width > 0 && f.top <= b.top + 1 && f.bottom >= b.bottom - 1;
     })(),
+    /*
+     * 满窗播放时标题栏有没有**跟着换底色**：它得变成透明、关掉自己的毛玻璃、收掉分隔线
+     * （那层底色由播放器铺到它底下，见 components.css 的 .shell[data-fullplayer]）。
+     * 纯 CSS 的行为，不断言就会静默回退成那条颜色对不上的横带。
+     */
+    titlebarFollowsPlayer: (() => {
+      const bar = document.querySelector('.titlebar');
+      if (!bar || !document.querySelector('.fullplayer')) return false;
+      const cs = getComputedStyle(bar);
+      return (
+        cs.backgroundColor === 'rgba(0, 0, 0, 0)' &&
+        cs.backdropFilter === 'none' &&
+        cs.borderBottomColor === 'rgba(0, 0, 0, 0)'
+      );
+    })(),
+    /* 收起之后标题栏要回到原来那一份（玻璃底 + 毛玻璃）。只断言「满窗时是透明的」的话，
+       把标题栏写死成永远透明也照样绿 —— 这一条挡的就是那种改法。 */
+    titlebarGlass: (() => {
+      const bar = document.querySelector('.titlebar');
+      if (!bar) return false;
+      const cs = getComputedStyle(bar);
+      return cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backdropFilter !== 'none';
+    })(),
     // 折叠侧栏的居中偏差（px），回归"封面被 auto 外边距顶到左边"
     offCenter: window.__t.offCenter(),
     cardTitles: window.__t.cardTitles(),
@@ -676,8 +699,9 @@ const STEPS = [
   ],
   // ── 满窗播放 ───────────────────────────────────────────────────────────
   // 底栏那颗封面点一下 = 进满窗播放（大封面 + 歌曲信息 + 歌词 + 控制条盖住标题栏以下整块）。
-  // ★ 三件事都要断言：这一层开了；它显示的曲目与底栏是**同一首**（读的是同一个 usePlayer，
-  //   不是复制了一份状态）；它真的盖住了底栏那条（「满窗」这两个字的全部内容）。
+  // ★ 四件事都要断言：这一层开了；它显示的曲目与底栏是**同一首**（读的是同一个 usePlayer，
+  //   不是复制了一份状态）；它真的盖住了底栏那条（「满窗」这两个字的全部内容）；
+  //   标题栏的底色跟着换了（透明 + 关掉毛玻璃 + 收掉分隔线）。
   // 歌词顺带数一遍 —— 上一步刚把面板收起，所以这 10 行只可能来自满窗这一层。
   [
     '38-fullplayer-open',
@@ -687,12 +711,19 @@ const STEPS = [
       fullPlayer: exactly(1),
       fullPlayerSameTrack: exactly(true),
       fullPlayerCoversBar: exactly(true),
+      titlebarFollowsPlayer: exactly(true),
       lyricLines: exactly(10)
     }
   ],
   // Esc 收起。左上角还有一颗「收起满窗播放」，这里验的是全局键那一条 ——
   // 它在 App 的 keydown 里，键盘事件得从 window 派发才到得了。
-  ['39-fullplayer-closed', "window.__t.key('Escape')", 1400, { fullPlayer: exactly(0) }],
+  // 顺带断言标题栏**回到了原来那一份**：只验「满窗时透明」的话，写死成永远透明也能过。
+  [
+    '39-fullplayer-closed',
+    "window.__t.key('Escape')",
+    1400,
+    { fullPlayer: exactly(0), titlebarGlass: exactly(true) }
+  ],
   // 折叠成图标条后，图标与歌单封面必须仍然居中。带计数的项曾因 .nav-count 的
   // auto 外边距吃掉整行自由空间而整体左偏，且**只在折叠态**出现 —— 不断言就会静默复发。
   // 放在命令面板之前：面板的 Escape 绑在它自己的输入框上，从 window 派发关不掉，

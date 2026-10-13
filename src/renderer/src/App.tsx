@@ -362,6 +362,8 @@ function Shell(): React.JSX.Element {
       className="shell"
       data-surface={surface}
       data-mini={mini ? 'true' : undefined}
+      /* 满窗播放：标题栏那一层的底色也跟着换（见 components.css 里 .shell[data-fullplayer]） */
+      data-fullplayer={fullPlayer ? 'true' : undefined}
       /*
         藏起来的正常界面按进迷你之前的尺寸钉住（见 base.css 里 .shell[data-mini] 那段）：
         取的是 useUi 记下的那一份，而不是当前的 window.innerWidth —— 后者已经是 400px 了。
