@@ -295,9 +295,45 @@ export interface DirectoryListResponse {
 /** `/settings/music-path` 的返回体 */
 export interface MusicPathSetting {
   path: string
+  /**
+   * 按「目录名」排除：路径里任何一层目录名精确命中即跳过整棵子树
+   * （后端 `scanner.ShouldExcludeDir` 逐段比较，不是子串匹配）。
+   */
   exclude_dirs: string[]
+  /** 按「路径前缀」排除：等于该路径或位于其下 */
   exclude_paths: string[]
+  /** 只在「自动创建歌单」时生效：这些目录名不出现在歌单里，不影响扫描 */
   auto_create_exclude_dirs: string[]
+}
+
+/* ─────────────────────── 扫描策略（服务端设置） ─────────────────────── */
+
+/**
+ * 自动创建歌单的方式，取值与后端 `models.PlaylistMode*` 一致：
+ *   * `directory` 每个文件夹一个歌单
+ *   * `top_level` 以所有歌曲目录的公共前缀为根，按第一级目录合并
+ *   * `bubble_up` 歌曲同时进入自身目录与所有上级目录的歌单
+ */
+export type PlaylistMode = 'directory' | 'top_level' | 'bubble_up'
+
+/** 扫描时标题的来源：`tag` 读内嵌元数据，`filename` 直接拿文件名 */
+export type ScanTitleSource = 'tag' | 'filename'
+
+/** `/settings/auto-scan`；间隔单位是秒，后端限 60 ~ 86400 */
+export interface AutoScanSetting {
+  enabled: boolean
+  interval_seconds: number
+}
+
+export type MetadataRefreshStatus =
+  'idle' | 'running' | 'cancelling' | 'done' | 'cancelled' | 'failed'
+
+/** `/songs/refresh-metadata/progress` */
+export interface MetadataRefreshProgress {
+  status: MetadataRefreshStatus
+  total: number
+  processed: number
+  failed: number
 }
 
 /* ─────────────────────────── 重复检测 ─────────────────────────── */

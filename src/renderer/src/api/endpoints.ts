@@ -7,6 +7,7 @@
 
 import type {
   AudioTrackInfo,
+  AutoScanSetting,
   BackendVersion,
   CleanResult,
   DirectoryListResponse,
@@ -16,11 +17,14 @@ import type {
   LibraryStats,
   LyricPayload,
   LyricSource,
+  MetadataRefreshProgress,
   MusicPathSetting,
   Playlist,
   PlaylistListResponse,
+  PlaylistMode,
   PlaylistType,
   ScanProgress,
+  ScanTitleSource,
   Song,
   SongFacetResponse,
   SongListResponse,
@@ -580,20 +584,80 @@ export function setTagSyncToFile(client: ApiClient, enabled: boolean): Promise<v
 }
 
 /** 扫描时标题取文件名还是内嵌标签 */
-export function getScanTitleSource(client: ApiClient): Promise<string> {
+export function getScanTitleSource(client: ApiClient): Promise<ScanTitleSource> {
   return client
     .request<{ title_source?: string }>('/settings/scan-title-source')
-    .then((res) => res.title_source ?? 'tag')
+    .then((res) => (res.title_source === 'filename' ? 'filename' : 'tag'))
 }
 
-export function setScanTitleSource(
-  client: ApiClient,
-  titleSource: 'tag' | 'filename'
-): Promise<void> {
+export function setScanTitleSource(client: ApiClient, titleSource: ScanTitleSource): Promise<void> {
   return client.request<void>('/settings/scan-title-source', {
     method: 'PUT',
     body: { title_source: titleSource }
   })
+}
+
+/** 自动创建歌单的「歌单创建方式」。后端对非法值报 400，这里也不猜，落回默认。 */
+export function getScanPlaylistMode(client: ApiClient): Promise<PlaylistMode> {
+  return client.request<{ mode?: string }>('/settings/scan-playlist-mode').then((res) => {
+    const mode = res.mode
+    return mode === 'top_level' || mode === 'bubble_up' || mode === 'directory' ? mode : 'directory'
+  })
+}
+
+export function setScanPlaylistMode(client: ApiClient, mode: PlaylistMode): Promise<void> {
+  return client.request<void>('/settings/scan-playlist-mode', { method: 'PUT', body: { mode } })
+}
+
+/** 扫描后是否自动算音频指纹（默认关：大曲库会长时间占 CPU） */
+export function getScanAutoFingerprint(client: ApiClient): Promise<boolean> {
+  return client
+    .request<{ enabled?: boolean }>('/settings/scan-auto-fingerprint')
+    .then((res) => res.enabled ?? false)
+}
+
+export function setScanAutoFingerprint(client: ApiClient, enabled: boolean): Promise<void> {
+  return client.request<void>('/settings/scan-auto-fingerprint', {
+    method: 'PUT',
+    body: { enabled }
+  })
+}
+
+export function getAutoScan(client: ApiClient): Promise<AutoScanSetting> {
+  return client.request<Partial<AutoScanSetting>>('/settings/auto-scan').then((res) => ({
+    enabled: res.enabled ?? false,
+    // 后端默认 1 小时；越界的值它自己会夹到 [60, 86400]
+    interval_seconds: res.interval_seconds ?? 3600
+  }))
+}
+
+export function setAutoScan(client: ApiClient, setting: AutoScanSetting): Promise<void> {
+  return client.request<void>('/settings/auto-scan', { method: 'PUT', body: setting })
+}
+
+/* ─────────────────────────── 刷新元数据 ─────────────────────────── */
+
+/**
+ * 重新探测「元数据缺失」的歌曲（本地文件 + 已缓存的网络歌曲）。
+ * 后台异步跑，只补空缺、不改写音频文件里的标签，进度与取消走下面两个端点。
+ */
+export function startMetadataRefresh(client: ApiClient): Promise<void> {
+  return client.request<void>('/songs/refresh-metadata', { method: 'POST' })
+}
+
+export function getMetadataRefreshProgress(client: ApiClient): Promise<MetadataRefreshProgress> {
+  return client
+    .request<Partial<MetadataRefreshProgress>>('/songs/refresh-metadata/progress')
+    .then((res) => ({
+      status: res.status ?? 'idle',
+      total: res.total ?? 0,
+      processed: res.processed ?? 0,
+      failed: res.failed ?? 0
+    }))
+}
+
+export function cancelMetadataRefresh(client: ApiClient): Promise<void> {
+  return client.request<void>('/songs/refresh-metadata/cancel', { method: 'POST' })
 }
 
 /* ───────────────────────────── 通用 KV 配置 ───────────────────────────── */
