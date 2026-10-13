@@ -117,7 +117,12 @@ export function MiniPlayer(): React.JSX.Element {
           disabled={!song}
           onClick={() => void player.toggle()}
         >
-          {player.playing ? <IconPause size={12} /> : <IconPlay size={12} />}
+          {/*
+            两颗图标尺寸刻意不同：三角形那个字形本身只占方框的四成宽，而**面积**只有它外接
+            矩形的一半（暂停那两根竖条是实打实的满框），同一个 size 下三角形看着就是小一号。
+            所以播放给 15、暂停给 13 —— 这样两个状态切换时才不会像「图标突然缩了一截」。
+          */}
+          {player.playing ? <IconPause size={13} /> : <IconPlay size={15} />}
         </button>
         <button
           type="button"
