@@ -87,11 +87,22 @@
   --r-xl: 26px;
   --r-pill: 999px;
 
-  /* 玻璃质感强度由 --glass 控制（设置里可调，0 = 纯色不透明）。
-     它是标题栏 / 侧栏 / 右侧抽屉共用的那层「统一浓度」。 */
-  --glass: 62%;
-  --glass-blur: calc(8px + var(--glass) * 0.28);
-  --glass-tint: color-mix(in srgb, var(--bg-1) calc(100% - var(--glass) * 0.7), transparent);
+  /*
+   * 玻璃质感强度由 --glass 控制（设置里可调，0 = 纯色不透明）。
+   * 它是标题栏 / 侧栏 / 右侧抽屉共用的那层「统一浓度」。
+   *
+   * ★ 单位约定：--glass 是**无单位数字 0–100**（settings.glassIntensity 原值，
+   *   由 useSettings 写到 <html> 上）。就因为它是个纯数字，下面两条 calc 必须**自己给出单位**：
+   *     · 乘 `px` 才是模糊半径（blur() 只吃 <length>，`8px + 17.36%` 那种是 <length-percentage>，
+   *       对这个属性非法）；
+   *     · 乘 `%` 才是 color-mix 的占比（那边只吃 <percentage>）。
+   *   两处都漏过单位，而自定义属性不校验、非法值要到「使用处」才退化 —— 曾经
+   *   --glass-tint 与 --glass-blur 双双失效，玻璃面整层变透明且模糊消失，
+   *   而且**控制台一声不响**（回归断言见 scripts/e2e/drive.mjs 的 titlebarGlass）。
+   */
+  --glass: 62;
+  --glass-blur: calc(8px + var(--glass) * 0.28px);
+  --glass-tint: color-mix(in srgb, var(--bg-1) calc(100% - var(--glass) * 0.7%), transparent);
 
   /*
    * 两个**整窗**浓度（设置里可调）：主窗一个、迷你窗一个 —— 配合主进程那个透明窗口
@@ -197,7 +208,7 @@
 
   /* 浅色主题的玻璃底色是纯白（--glass-tint 与三个面各自的底色都吃这一份） */
   --glass-base: #ffffff;
-  --glass-tint: color-mix(in srgb, #ffffff calc(100% - var(--glass) * 0.55), transparent);
+  --glass-tint: color-mix(in srgb, #ffffff calc(100% - var(--glass) * 0.55%), transparent);
 
   --shadow-1: 0 1px 2px rgba(15, 18, 32, 0.08);
   --shadow-2: 0 8px 24px -10px rgba(15, 18, 32, 0.18);

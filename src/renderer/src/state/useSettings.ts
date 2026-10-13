@@ -37,6 +37,11 @@ function applyToDocument(settings: AppSettings, coverAccent: string | null): voi
   const accent = settings.accentFromCover && coverAccent ? coverAccent : settings.accent
   root.style.setProperty('--accent', accent)
   root.style.setProperty('--on-accent', readableTextOn(accent))
+  /*
+   * ★ `--glass` 传的是**无单位数字**（0–100），不是百分比 —— 单位由样式表在使用处补：
+   *   模糊要 `* 0.28px`、color-mix 占比要 `* 0.7%`（见 tokens.css 那一小节的说明）。
+   *   这里若自作主张补上 `%`，那两条 calc 反而双双非法，玻璃底色与模糊会一起静默失效。
+   */
   root.style.setProperty('--glass', String(settings.glassIntensity))
 
   /*
