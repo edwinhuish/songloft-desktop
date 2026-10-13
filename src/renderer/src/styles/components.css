@@ -187,14 +187,14 @@
 }
 
 /* ── 默认封面 ─────────────────────────────────────────────────────────────
-   一类一张图（见 components/CoverArt.tsx）：灰底黑字，三张图共用一块底
+   一类一张图（见 components/CoverArt.tsx）：淡灰底 + 中灰记号，三张图共用一块底
    （tokens.css 的 --cover-art-*），刻意**不**按类型/名字换色相（那版在长列表里太吵），
    类型只由图案区分。于是这里没有 `[data-kind]` 分支：底色对三类是同一套值。 */
 .cover-art {
   position: absolute;
   inset: 0;
-  /* 记号是近黑的实心色（不是原先那层淡淡的「墨」）：灰底上要黑得干脆，才像印刷的色标 */
-  color: color-mix(in srgb, var(--cover-art-ink) var(--cover-art-ink-a), transparent);
+  /* 记号直接用令牌里的灰、不叠透明度：它与底只差一档明度，是「印在浅纸上的灰章」 */
+  color: var(--cover-art-ink);
   background: linear-gradient(150deg, var(--cover-art-bg-1), var(--cover-art-bg-2));
   /* 一圈淡淡的内边：小尺寸下（20px）平涂容易糊进背景，这圈让它有边界感 */
   box-shadow: inset 0 0 0 1px
