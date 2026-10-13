@@ -11,6 +11,13 @@
  *
  * ★ 列表是**无限滚动**（滚到底自动续下一页），不再给「加载更多」按钮：这是「逛」的场景，
  *   让人盯着一颗按钮点，不如让列表跟着滚动自己长出来。
+ *
+ * ★ 卡片网格的形态参考社区插件市场（https://songloft-store.lllh.de）：一张卡 = 一个扩展，
+ *   窄了自动一列、宽了自动多列；卡内自上而下是「图标 + 名称 + 动作」→ 描述 → 标签 →
+ *   作者 / 版本 / 链接。原先是一行拉满整宽的列表行 —— 这一栏在宽窗口下能有上千像素，
+ *   名称与按钮隔着半个屏幕，扫视时对不上。
+ *   配色**不照搬**那个站（它是单主题的玻璃拟态）：这里一律走本仓的主题令牌，
+ *   跟着封面主色与深浅色一起变。
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -346,9 +353,9 @@ export function PluginStore(): React.JSX.Element {
       ) : null}
 
       {!error && entries.length > 0 ? (
-        <ul className="extension-list" style={{ marginTop: 12 }}>
+        <ul className="store-grid">
           {entries.map((entry) => (
-            <StoreRow
+            <StoreCard
               key={registryRowKey(entry)}
               entry={entry}
               pending={pending === registryRowKey(entry)}
@@ -393,9 +400,9 @@ export function PluginStore(): React.JSX.Element {
   )
 }
 
-/* ─────────────────────────────── 单行 ─────────────────────────────── */
+/* ─────────────────────────────── 单张卡片 ─────────────────────────────── */
 
-interface StoreRowProps {
+interface StoreCardProps {
   entry: RegistryEntry
   pending: boolean
   disabled: boolean
@@ -448,61 +455,86 @@ function describeAction(entry: RegistryEntry): StoreAction {
   return { label: '安装', variant: 'primary' }
 }
 
-function StoreRow({ entry, pending, disabled, onInstall }: StoreRowProps): React.JSX.Element {
+function StoreCard({ entry, pending, disabled, onInstall }: StoreCardProps): React.JSX.Element {
   const name = entry.name || entry.entryPath
   const action = describeAction(entry)
 
-  const meta = [
-    `v${entry.version || '—'}`,
-    entry.author,
-    entry.installed && entry.installedVersion && entry.installedVersion !== entry.version
-      ? `本机 v${entry.installedVersion}`
-      : '',
-    entry.description
-  ]
-    .filter(Boolean)
-    .join(' · ')
+  /**
+   * 卡片底部那一行的几段，先拼成**一个**字符串再渲染。
+   *
+   * 摆一排 span 的话逐段折行，窄到一列时看着像几段无关的字；拼起来让浏览器整句折。
+   */
+  const meta = [entry.author || '未知作者', `v${entry.version || '—'}`]
+  if (entry.installed && entry.installedVersion && entry.installedVersion !== entry.version) {
+    meta.push(`本机 v${entry.installedVersion}`)
+  }
 
   return (
-    <li className="extension-row">
-      <StoreIcon entry={entry} name={name} />
+    <li className="store-card">
+      <div className="store-card-top">
+        <StoreIcon entry={entry} name={name} />
 
-      <div className="extension-info">
-        <div className="extension-name">
+        <span className="store-card-name truncate" title={name}>
           {name}
-          {entry.sourceName ? <span className="badge">{entry.sourceName}</span> : null}
-          {action.tone ? (
-            <span className="badge" data-tone={action.tone}>
-              {entry.conflict ? '入口冲突' : '有新版本'}
-            </span>
-          ) : null}
-        </div>
-        <div className="extension-meta truncate">{meta}</div>
-        {entry.conflict && entry.conflictWith ? (
-          <div className="extension-meta truncate">已被 {entry.conflictWith} 占用</div>
+        </span>
+
+        <button
+          type="button"
+          className="btn store-card-action"
+          data-size="sm"
+          data-variant={action.variant}
+          aria-label={action.ariaLabel}
+          data-tip={action.tip}
+          // 四档都可点（「已装且最新」= 重新装一遍）；只有别的卡片正在装时才按住，别让人开第二个
+          disabled={pending || disabled}
+          onClick={onInstall}
+        >
+          {pending ? (
+            <IconLoader size={14} />
+          ) : action.refresh ? (
+            <IconRefresh size={14} />
+          ) : (
+            <IconDownload size={14} />
+          )}
+          {action.label}
+        </button>
+      </div>
+
+      <p className="store-card-desc">{entry.description || '暂无描述'}</p>
+
+      <div className="store-card-tags">
+        {entry.sourceName ? <span className="badge">{entry.sourceName}</span> : null}
+        {action.tone ? (
+          <span className="badge" data-tone={action.tone}>
+            {entry.conflict ? '入口冲突' : '有新版本'}
+          </span>
+        ) : null}
+        {/* entryPath 是撞名时唯一能分辨两条的字段（后端按 entryPath + identity 去重），
+            所以它得在卡片上可见；等宽是为了两条 entryPath 好逐段对照 */}
+        {entry.entryPath ? (
+          <span className="store-card-code truncate" title={entry.entryPath}>
+            {entry.entryPath}
+          </span>
         ) : null}
       </div>
 
-      <button
-        type="button"
-        className="btn"
-        data-size="sm"
-        data-variant={action.variant}
-        aria-label={action.ariaLabel}
-        data-tip={action.tip}
-        // 四档都可点（「已装且最新」= 重新装一遍）；只有别的行正在装时才按住，别让人开第二个
-        disabled={pending || disabled}
-        onClick={onInstall}
-      >
-        {pending ? (
-          <IconLoader size={14} />
-        ) : action.refresh ? (
-          <IconRefresh size={14} />
-        ) : (
-          <IconDownload size={14} />
-        )}
-        {action.label}
-      </button>
+      {entry.conflict && entry.conflictWith ? (
+        <p className="store-card-note">已被 {entry.conflictWith} 占用</p>
+      ) : null}
+
+      <div className="store-card-foot">
+        <span className="truncate">{meta.join(' · ')}</span>
+        {entry.homepage ? (
+          <button
+            type="button"
+            className="store-card-link"
+            // 外链交给系统浏览器：渲染层自己开窗会被主进程的导航围栏拦下（见 main/windows.ts）
+            onClick={() => void window.songloft.shell.openExternal(entry.homepage)}
+          >
+            主页
+          </button>
+        ) : null}
+      </div>
     </li>
   )
 }
@@ -539,12 +571,12 @@ function StoreIcon({ entry, name }: { entry: RegistryEntry; name: string }): Rea
         className="plugin-icon"
         src={src}
         alt=""
-        width={34}
-        height={34}
+        width={40}
+        height={40}
         onError={() => setBroken(true)}
       />
     )
   }
 
-  return <PluginIconFallback name={name} size={34} />
+  return <PluginIconFallback name={name} size={40} />
 }

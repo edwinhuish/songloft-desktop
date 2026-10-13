@@ -2333,6 +2333,140 @@ select.input option {
   margin-left: auto;
 }
 
+/* ── 商店卡片网格 ────────────────────────────────────────────────────── */
+
+/*
+ * 展示形式参考社区插件市场（songloft-store.lllh.de）：一张卡 = 一个扩展，宽了自动多排一列。
+ * 配色不照搬那边（单主题的玻璃拟态），一律走本仓的主题令牌。
+ *
+ * ★ 列宽下限写成 min(100%, 340px) 而不是光一个 340px：扩展内容面最窄时会窄于 340，
+ *   写死下限会把网格撑出横向滚动条。340 是「名称 + 动作按钮 + 两行描述」读得下来的下限。
+ */
+.store-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.store-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  transition:
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+
+/* 悬停只提一档底色，**不做抬升**：整张卡并不可点（能点的只有动作按钮与「主页」），
+   位移会暗示「点卡片能打开详情」，而这里没有详情页 */
+.store-card:hover {
+  background: var(--surface-2);
+  border-color: var(--line-2);
+}
+
+/* 顶行：图标 + 名称 + 动作按钮。名称那一格是唯一可伸缩的（flex: 1 + min-width: 0），
+   长名字因此去省略号，而不是把按钮挤出卡片外 */
+.store-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.store-card .plugin-icon,
+.store-card .plugin-icon-fallback {
+  /* 比插件管理页那些（34px）大一档：这里是「逛」，图标是主要的辨识物 */
+  flex: none;
+  border-radius: 8px;
+}
+
+.store-card-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.store-card-action {
+  flex: none;
+}
+
+/* 描述固定两行的高度：一行描述与四行描述的卡片并排时，卡片高度才不会参差 */
+.store-card-desc {
+  margin: 0;
+  min-height: 39px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.store-card-tags {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* entryPath 是「身份」，与那两枚「状态」标签区分开：等宽 + 底色 */
+.store-card-code {
+  max-width: 100%;
+  padding: 2px 6px;
+  border-radius: var(--r-xs);
+  background: var(--surface-2);
+  color: var(--text-3);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.store-card-note {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--danger);
+}
+
+.store-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* 贴卡片底：描述短的与描述长的，底部这一行都落在同一条线上 */
+  margin-top: auto;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.store-card-foot > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.store-card-link {
+  flex: none;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: var(--text-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease);
+}
+
+.store-card-link:hover {
+  color: var(--text-1);
+}
+
 .extension-list {
   display: flex;
   flex-direction: column;
