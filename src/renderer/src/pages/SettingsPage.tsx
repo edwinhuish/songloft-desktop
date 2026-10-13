@@ -1003,7 +1003,13 @@ function ServerSettings(): React.JSX.Element {
         <Row
           server
           title="响度归一化（EBU R128）"
-          desc="服务端统一各首歌的响度，杂食歌单不用一直调音量"
+          desc={
+            <>
+              服务端统一各首歌的响度，杂食歌单不用一直调音量
+              <br />
+              需要后端安装 FFmpeg，未安装时开关不生效
+            </>
+          }
         >
           {normalize.loading ? (
             <IconLoader size={16} />
