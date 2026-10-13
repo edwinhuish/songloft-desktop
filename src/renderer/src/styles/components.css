@@ -907,11 +907,14 @@
  * 与标题栏（.titlebar 的 -webkit-app-region）同一套做法。
  */
 .mini-bar {
+  /* 这一行上控件的高度。不只是它们自己的尺寸 —— 右上角那三颗窗口钮的**高度上限**
+     也由它推出（见 .mini-window-actions），所以提成变量，避免两处各写一份。 */
+  --mini-ctl-h: 30px;
   position: relative;
   display: flex;
   align-items: center;
   /* 8px 而不是常规那 10/12：这一条横排要放下 7 件东西（封面 / 歌名 / 时长 / 三颗传输键 /
-     歌词）+ 右上角那三颗窗口钮，宽度只有 560px，间距是唯一不牺牲可读性的余量。 */
+     歌词），宽度只有 560px，间距是唯一不牺牲可读性的余量。 */
   gap: 8px;
   padding: 0 12px;
   /* 分界线在条的**下边缘**：收起时它就是窗口下边缘，展开时它是「播放条 / 歌词」的界线。
@@ -952,31 +955,36 @@
 .mini-bar .icon-btn,
 .mini-bar .play-btn {
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: var(--mini-ctl-h);
+  height: var(--mini-ctl-h);
 }
 
 /*
- * 右上角那三颗窗口钮（最小化 / 退出迷你模式 / 关闭）。
- * 与标题栏右端那一组同款（.win-btn，见 base.css），只是各小一档：这一条总高才 64px，
- * 38×30 那套摆进来会顶到上缘、也压住下面那行控件。
- * `align-self: flex-start` 把它们顶到条的上缘 —— 「右上角」正是窗口控制钮在桌面应用里的
- * 固定落点；它们同时是这一行的最后一个 flex item，所以占的横向空间由布局自己让出。
- * 与上一行的间距只剩 2px：三颗本身够小，再拉开就不像一组了。
+ * 右上角那三颗窗口钮（最小化 / 退出迷你模式 / 关闭）。与标题栏右端那一组同款（.win-btn，
+ * 见 base.css），只是各小一档 —— 这一条总高才 64px，38×30 那套摆进来会压住下面那行控件。
+ *
+ * ★ 绝对定位、**不参与那一行的排布**：作为 flex item 时它们是要占横向空间的（把整行往左
+ *   顶 80 多 px），而这一行的横向余量正是歌名在吃。三颗整个落在控件行**上方那条空隙**里 ——
+ *   高度由「条的内容高 - 控件高，再对半分」算出来：控件在条里垂直居中，上方正好空出这么多。
+ *   所以它是「用掉本来就空着的地方」：不占一行、不加外边距、也撑不高条身。
+ *   写死一个像素值就等着漂：改条高或改控件尺寸时它会悄悄压到下面的按钮上，把算式写出来
+ *   则两头一起跟着变。右边距 6px 与标题栏的窗口钮对齐（那是窗口钮在这套界面里的固定边距）。
+ * `gap` 是这一组内部的间距（不落在条的排布里），2px 让三颗读起来是一组而不是散着三颗。
  */
 .mini-window-actions {
+  position: absolute;
+  top: 0;
+  right: 6px;
   display: flex;
   align-items: center;
   gap: 2px;
-  flex: none;
-  align-self: flex-start;
-  margin-top: 2px;
+  height: calc((100% - var(--mini-ctl-h)) / 2);
 }
 
 .mini-bar .win-btn {
-  width: 28px;
-  height: 24px;
-  border-radius: var(--r-xs);
+  width: 24px;
+  height: 100%;
+  border-radius: 4px;
 }
 
 .mini-info {

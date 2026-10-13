@@ -6,13 +6,12 @@
  *   各写一套的话，两处的拖动手感（松手才 seek）与键盘行为迟早分叉。
  * ★ 窗口是无边框的，标题栏此刻正被藏着 —— 拖拽区与那三颗窗口钮（最小化 / 退出迷你模式 /
  *   关闭）都得自己给，少一颗就是「这个窗挪不动 / 回不去 / 关不掉」。三颗照标题栏右端那一组
- *   的样子来（同用 .win-btn，只是各小一档），并排贴条的上缘 —— 右上角是这个动作在桌面
+ *   的样子来（同用 .win-btn，只是各小一档），并排落在条的**右上角** —— 那是这个动作在桌面
  *   应用里的固定位置，两种形态下长相一致，用户不必重新找。
  * ★ 条上那一行只放播放必需的东西（封面 / 歌名 / 时长 / 上一首 / 播放 / 下一首 / 歌词）：
  *   迷你模式的意思就是把它挂在屏幕一角，不该再摆音量条、播放模式、队列那一整套。
- *   正因为横排已经这么满，窗口钮那一组是**这一行的最后一项**而不是绝对定位上去的 ——
- *   参与排布，横向空间就是布局自己让出来的，不必手算右内边距（手算的那种一改按钮尺寸
- *   就会撞在一起，或者白留一条缝）。
+ *   窗口钮那一组因此**不进那一行**（绝对定位，见 .mini-window-actions）：条里那点横向余量
+ *   只有歌名在吃，让三颗去占一行就是把歌名挤窄；它们落在控件行上方本来就空着的那条缝里。
  * ★ 栅格的顺序是「播放条在**上**、歌词在下」（DOM 顺序同此），不是反过来：窗口加高时长的是
  *   下半截（main/windows.ts 的 applyMiniSize 不动位置），歌词摆下面才等于「原地展开」——
  *   摆上面的话一展开这一整排控件就要往下跳 300 多 px。进度线贴在播放条的下边缘，
@@ -126,7 +125,11 @@ export function MiniPlayer(): React.JSX.Element {
         >
           <IconLyrics size={17} />
         </button>
-        {/* 右上角那一组：最小化 / 退出迷你模式 / 关闭（从左至右，与标题栏右端同序） */}
+        {/*
+          右上角那一组：最小化 / 退出迷你模式 / 关闭（从左至右，与标题栏右端同序）。
+          它整个落在控件行上方那条空隙里（高度由 CSS 按条高与控件高算出来），所以那一行
+          的空隙有多高，这里的图标就只能是多大 —— 11px 是这条缝能舒服放下的上限。
+        */}
         <div className="mini-window-actions">
           <button
             type="button"
@@ -135,7 +138,7 @@ export function MiniPlayer(): React.JSX.Element {
             aria-label="最小化"
             onClick={() => void window.songloft.window.minimize()}
           >
-            <IconMinimize size={13} />
+            <IconMinimize size={11} />
           </button>
           <button
             type="button"
@@ -144,7 +147,7 @@ export function MiniPlayer(): React.JSX.Element {
             aria-label="退出迷你模式"
             onClick={() => setMini(false)}
           >
-            <IconRestore size={13} />
+            <IconRestore size={11} />
           </button>
           <button
             type="button"
@@ -154,7 +157,7 @@ export function MiniPlayer(): React.JSX.Element {
             aria-label="关闭"
             onClick={() => void window.songloft.window.close()}
           >
-            <IconClose size={13} />
+            <IconClose size={11} />
           </button>
         </div>
       </footer>
