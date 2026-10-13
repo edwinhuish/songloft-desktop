@@ -278,6 +278,18 @@ function json(res, status, payload) {
   res.end(body)
 }
 
+/** 纯文本响应（导出日志那条是 text/plain 附件正文，不是 JSON） */
+function text(res, status, body) {
+  res.writeHead(status, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Content-Length': Buffer.byteLength(body),
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': '*',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,PATCH,OPTIONS'
+  })
+  res.end(body)
+}
+
 function noContent(res) {
   res.writeHead(204, { 'Access-Control-Allow-Origin': '*' })
   res.end()
@@ -354,6 +366,18 @@ function songsResponse(url) {
   const limit = Number(q.get('limit') ?? 50)
   return { songs: list.slice(offset, offset + limit), total }
 }
+
+/**
+ * 导出日志的样本内容。
+ *
+ * 形状对齐真实后端的 `/logs/export`：**纯文本**、一行一条 slog、字段是 `key=value`。
+ * 之所以强调这点：客户端若按 JSON 解它，会拿到解析失败的兜底值 —— 那种错只有真跑一次才看得见。
+ */
+const LOG_EXPORT_SAMPLE = [
+  '2026-10-13T02:00:00.000Z INFO  app: Songloft 启动 version=v1.2.3',
+  '2026-10-13T02:00:01.000Z INFO  scan: 扫描完成 songs=40',
+  '2026-10-13T02:00:02.000Z WARN  cover: 封面缺失 album="野岸乐队"'
+].join('\n')
 
 /* ─────────────────────── 可变设置（需要回读的） ─────────────────────── */
 
@@ -458,7 +482,9 @@ const mutableSettings = {
   'http-proxy': { proxy: 'http://192.168.1.9:7890' },
   'github-proxy': { proxy: 'https://gh-proxy.example' },
   'proxy-private-allowlist': { allowlist: ['192.168.1.0/24'] },
-  'hls-proxy': { enabled: true }
+  'hls-proxy': { enabled: true },
+  // 日志等级：默认是 info，这里取 debug —— 界面若没真读到端点会显示兜底的 Info，一眼可辨
+  'log-level': { level: 'debug' }
 }
 
 /* ───────────────────────── 缓存配置（可回读） ───────────────────────── */
@@ -862,6 +888,10 @@ const server = createServer((req, res) => {
   // 升级进度：没有升级在跑时后端就是 idle（弹窗打开时会先问一句，别看错当成在升级）
   if (path === '/api/v1/upgrade/progress') {
     return json(res, 200, { status: 'idle', progress: 0, current_step: '' })
+  }
+  // 导出日志：真实后端给的是 text/plain 附件正文（逐行脱敏后的落盘日志），不是 JSON、也不是 zip
+  if (path === '/api/v1/logs/export') {
+    return text(res, 200, LOG_EXPORT_SAMPLE)
   }
 
   // 兜底：把未实现的写操作都当成功，避免界面卡在 loading

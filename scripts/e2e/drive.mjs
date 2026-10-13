@@ -523,12 +523,28 @@ const STEPS = [
       )
     }
   ],
-  // 关于与更新：应用版本来自主进程，后端版本来自探测（/version = v2.13.1），两条链路各占一行
+  /*
+   * 关于与更新：三条链路各验一处 ——
+   *   Electron/Chromium/Node 来自主进程（app.info）；后端版本来自探测（/version = v2.13.1）；
+   *   「Debug」来自 /settings/log-level（默认值是 Info，mock 给的是 debug，于是"没读到端点、
+   *   退回了兜底值"与"读到了"在界面上长得不一样 —— 只看「日志等级」四个字是区分不出来的）。
+   */
   [
     '26-settings-about',
     "window.__t.click('.settings-nav button', '关于与更新')",
-    1800,
-    { settingText: containsAll('Electron', 'Chromium', 'Node', '后端版本', 'v2.13.1') }
+    2200,
+    {
+      settingText: containsAll(
+        'Electron',
+        'Chromium',
+        'Node',
+        '后端版本',
+        'v2.13.1',
+        '日志等级',
+        '导出日志',
+        'Debug'
+      )
+    }
   ],
   /*
    * 服务端升级弹窗：点「检查更新」→ 弹窗自己查一次 → 把两条通道都摆出来。
