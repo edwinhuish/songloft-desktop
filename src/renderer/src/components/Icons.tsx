@@ -393,6 +393,26 @@ export const IconUpload = (p: IconProps) => (
 )
 
 /** 图钉 = 「常驻运行」（钉住不放：空闲检查不卸载它）。与上游 Flutter 端的 push_pin 同义 */
+/** 网格呈现（歌单页的网格 / 列表切换） */
+export const IconGrid = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="4.5" y="4.5" width="6.2" height="6.2" rx="1.7" />
+    <rect x="13.3" y="4.5" width="6.2" height="6.2" rx="1.7" />
+    <rect x="4.5" y="13.3" width="6.2" height="6.2" rx="1.7" />
+    <rect x="13.3" y="13.3" width="6.2" height="6.2" rx="1.7" />
+  </Svg>
+)
+
+/** 列表呈现。行首那三颗点刻意留着 —— 光三条横线就是「菜单」（IconMenu），两者不该长得一样 */
+export const IconRows = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M9 6.5h10M9 12h10M9 17.5h10" />
+    <circle cx="5" cy="6.5" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="5" cy="12" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="5" cy="17.5" r="1.3" fill="currentColor" stroke="none" />
+  </Svg>
+)
+
 export const IconPin = (p: IconProps) => (
   <Svg {...p}>
     <path d="M9 4.5h6l-.8 4.4 3.3 3.3H6.5l3.3-3.3Z" />

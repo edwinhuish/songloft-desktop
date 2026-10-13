@@ -562,6 +562,133 @@
   pointer-events: none;
 }
 
+/* 选中：与置顶同一种标记（同一圈强调色描边），所以用另一个伪元素而不是再叠一层 shadow
+   ——给 .card-art 换掉 box-shadow 会把它原本的那份投影也丢掉 */
+.card[data-selected='true'] .card-art::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--accent);
+  border-radius: var(--r-md);
+  pointer-events: none;
+}
+
+/* ── 多选：勾选框 + 底部操作条 ─────────────────────────────────────────── */
+
+/*
+ * 底部吸附的操作条。曲目多选与歌单多选共用这一套外观（见 SelectionBar 的
+ * SelectionBarShell）。写成类而不是内联样式：两个调用方各持一份内联样式，
+ * 迟早只改一处。
+ */
+.selection-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 -6px;
+  padding: 10px 16px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--bg-2) 92%, transparent);
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-2);
+}
+
+/*
+ * 勾选框。平时藏着 —— 卡片上再常驻一枚框会把封面弄脏；悬停、已勾选、或已经进了多选
+ * 模式时才现形。底色刻意用半透明的深色 + 描边：它常压在封面上，纯色底要么被浅封面吃掉，
+ * 要么在深色封面上糊成一块。
+ */
+.pick {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1.5px solid var(--line-2);
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--bg-0) 45%, transparent);
+  backdrop-filter: blur(6px);
+  color: var(--on-accent);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--dur-1) var(--ease),
+    background var(--dur-1) var(--ease),
+    border-color var(--dur-1) var(--ease);
+}
+
+.pick[data-checked='true'] {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.card:hover .pick,
+.card:focus-within .pick,
+.card[data-selected='true'] .pick,
+.card-grid[data-selecting='true'] .pick,
+.playlist-row:hover .pick,
+.playlist-row:focus-within .pick,
+.playlist-row[data-selected='true'] .pick,
+.playlist-list[data-selecting='true'] .pick {
+  opacity: 1;
+}
+
+/* 网格卡里压在封面左上角；列表行里它是网格的第一列，不用绝对定位 */
+.card-art .pick {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 1;
+}
+
+/* ── 歌单列表（歌单页的「列表」形式）──────────────────────────────────── */
+
+.playlist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/*
+ * 列：勾选框 / 封面 / 文字 / 更多。
+ * 勾选框那一列**永远留着**（内置收藏歌单没有勾选框），否则同一屏里的两种行会左右错开，
+ * 看着像没对齐。
+ */
+.playlist-row {
+  display: grid;
+  grid-template-columns: 20px 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--dur-1) var(--ease);
+}
+
+.playlist-row:hover {
+  background: var(--surface-hover);
+}
+
+.playlist-row[data-selected='true'] {
+  background: var(--accent-softer);
+}
+
+.playlist-row .icon-btn {
+  width: 28px;
+  height: 28px;
+  opacity: 0;
+  transition: opacity var(--dur-1) var(--ease);
+}
+
+.playlist-row:hover .icon-btn,
+.playlist-row:focus-within .icon-btn {
+  opacity: 1;
+}
+
 /* ── 统计条 ───────────────────────────────────────────────────────────── */
 
 .stats-strip {

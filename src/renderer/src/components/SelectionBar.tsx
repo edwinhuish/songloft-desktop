@@ -40,6 +40,41 @@ export interface SelectionBarProps {
   selectAllTotal?: number
 }
 
+export interface SelectionBarShellProps {
+  /** 左侧那枚计数器（各页口径不同：曲目按「首」，歌单按「个」） */
+  label: React.ReactNode
+  onClear: () => void
+  /** 右侧的动作按钮 */
+  children: React.ReactNode
+}
+
+/**
+ * 底部吸附操作条的**外观**。
+ *
+ * 单独抽出来是因为它已经出现在第二处了（歌单页的多选），而两处的动作完全不同：
+ * 曲目那边是播放 / 队列 / 收藏，歌单那边只有删除。只共用壳，不共用动作。
+ */
+export function SelectionBarShell({
+  label,
+  onClear,
+  children
+}: SelectionBarShellProps): React.JSX.Element {
+  return (
+    <div className="selection-bar">
+      <div className="row" style={{ gap: 10, minWidth: 0 }}>
+        {label}
+        <button type="button" className="btn" data-size="sm" data-variant="ghost" onClick={onClear}>
+          <IconClose size={13} />
+          取消选择
+        </button>
+      </div>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 export function SelectionBar({
   ids,
   songs,
@@ -60,107 +95,87 @@ export function SelectionBar({
   const count = selectAll ? (selectAllTotal ?? ids.length) : ids.length
 
   return (
-    <div
-      className="row-between"
-      style={{
-        position: 'sticky',
-        bottom: 0,
-        zIndex: 12,
-        gap: 12,
-        margin: '0 -6px',
-        padding: '10px 16px',
-        borderRadius: 'var(--r-md)',
-        border: '1px solid var(--accent-line)',
-        background: 'color-mix(in srgb, var(--bg-2) 92%, transparent)',
-        backdropFilter: 'blur(16px)',
-        boxShadow: 'var(--shadow-2)'
-      }}
-    >
-      <div className="row" style={{ gap: 10, minWidth: 0 }}>
+    <SelectionBarShell
+      label={
         <span className="badge" data-tone="accent">
           <IconCheck size={12} />
           {selectAll ? `已选中全部 ${count} 首` : `已选 ${count} 首`}
         </span>
-        <button type="button" className="btn" data-size="sm" data-variant="ghost" onClick={onClear}>
-          <IconClose size={13} />
-          取消选择
-        </button>
-      </div>
+      }
+      onClear={onClear}
+    >
+      <button
+        type="button"
+        className="btn"
+        data-size="sm"
+        disabled={!canPlay}
+        data-tip={canPlay ? '播放选中歌曲' : '全选模式下不加载歌曲内容，无法直接播放'}
+        onClick={() => songs && void playSongs(songs, 0)}
+      >
+        <IconPlay size={14} />
+        播放
+      </button>
+      <button
+        type="button"
+        className="btn"
+        data-size="sm"
+        disabled={!canPlay}
+        data-tip={canPlay ? '加入播放队列' : '全选模式下不加载歌曲内容，无法加入队列'}
+        onClick={() => {
+          if (!songs) return
+          addToQueue(songs)
+          toast(`已加入队列 ${songs.length} 首`, 'success')
+        }}
+      >
+        <IconQueue size={14} />
+        加入队列
+      </button>
+      <button type="button" className="btn" data-size="sm" onClick={() => openAddToPlaylist(ids)}>
+        <IconListMusic size={14} />
+        加入歌单
+      </button>
+      <button
+        type="button"
+        className="btn"
+        data-size="sm"
+        onClick={() => {
+          const target = !allFavorited
+          for (const id of ids) void setFavorite(id, target)
+        }}
+      >
+        <IconHeart size={14} filled={allFavorited} />
+        {allFavorited ? '取消收藏' : '收藏'}
+      </button>
 
-      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+      {playlistId != null ? (
         <button
           type="button"
           className="btn"
           data-size="sm"
-          disabled={!canPlay}
-          data-tip={canPlay ? '播放选中歌曲' : '全选模式下不加载歌曲内容，无法直接播放'}
-          onClick={() => songs && void playSongs(songs, 0)}
-        >
-          <IconPlay size={14} />
-          播放
-        </button>
-        <button
-          type="button"
-          className="btn"
-          data-size="sm"
-          disabled={!canPlay}
-          data-tip={canPlay ? '加入播放队列' : '全选模式下不加载歌曲内容，无法加入队列'}
           onClick={() => {
-            if (!songs) return
-            addToQueue(songs)
-            toast(`已加入队列 ${songs.length} 首`, 'success')
+            void removeFromPlaylist(playlistId, ids).then(() => onRemoved?.(ids))
           }}
         >
-          <IconQueue size={14} />
-          加入队列
+          <IconTrash size={14} />
+          从歌单移除
         </button>
-        <button type="button" className="btn" data-size="sm" onClick={() => openAddToPlaylist(ids)}>
-          <IconListMusic size={14} />
-          加入歌单
-        </button>
+      ) : (
         <button
           type="button"
           className="btn"
           data-size="sm"
+          data-variant="danger"
           onClick={() => {
-            const target = !allFavorited
-            for (const id of ids) void setFavorite(id, target)
+            void deleteFromLibrary(ids).then((ok) => {
+              if (ok) onRemoved?.(ids)
+            })
           }}
         >
-          <IconHeart size={14} filled={allFavorited} />
-          {allFavorited ? '取消收藏' : '收藏'}
+          <IconTrash size={14} />
+          从曲库删除
         </button>
-
-        {playlistId != null ? (
-          <button
-            type="button"
-            className="btn"
-            data-size="sm"
-            onClick={() => {
-              void removeFromPlaylist(playlistId, ids).then(() => onRemoved?.(ids))
-            }}
-          >
-            <IconTrash size={14} />
-            从歌单移除
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn"
-            data-size="sm"
-            data-variant="danger"
-            onClick={() => {
-              void deleteFromLibrary(ids).then((ok) => {
-                if (ok) onRemoved?.(ids)
-              })
-            }}
-          >
-            <IconTrash size={14} />
-            从曲库删除
-          </button>
-        )}
-      </div>
-    </div>
+      )}
+    </SelectionBarShell>
   )
 }
 

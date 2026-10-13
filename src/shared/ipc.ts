@@ -197,6 +197,13 @@ export interface AppSettings {
    * 不必再分「默认值」与「临时值」两份（那两份迟早对不上）。
    */
   extensionSidebarState: ExtensionSidebarState
+  /**
+   * 歌单页的呈现形式：封面网格 / 紧凑列表。
+   *
+   * 做成设置而不是页面内 state：桌面端换了形式就该一直记着，下次打开还是这个样子
+   * （与 sidebarCollapsed 同一类「界面偏好」，不是临时值）。
+   */
+  playlistView: 'grid' | 'list'
   /** 记住的播放队列（会话恢复） */
   lastQueue: number[]
   lastQueueIndex: number
@@ -227,6 +234,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoCheckUpdate: true,
   sidebarCollapsed: false,
   extensionSidebarState: 'expanded',
+  // 默认网格：封面是歌单最主要的识别信息（见 PlaylistsPage 的说明）
+  playlistView: 'grid',
   lastQueue: [],
   lastQueueIndex: -1,
   lastQueueContext: null,

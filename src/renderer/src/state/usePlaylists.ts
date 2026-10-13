@@ -11,6 +11,7 @@ import { create } from 'zustand'
 import type { Playlist, PlaylistType, Song } from '@shared/types'
 import {
   addSongsToPlaylist,
+  batchDeletePlaylists,
   createPlaylist,
   deletePlaylist,
   getPlaylistSongIds,
@@ -29,6 +30,16 @@ export const FAVORITE_PLAYLIST_ID = 1
 /** 内置电台收藏歌单 id */
 export const RADIO_FAVORITE_PLAYLIST_ID = 2
 
+/**
+ * 能否删除这个歌单。
+ *
+ * 两个内置收藏歌单后端不给删，所以「有没有删除入口」「多选里能不能勾上」「全选圈哪些」
+ * 都要按这一个口径判断 —— 散成三处判断的话，迟早有一处漏掉，用户勾上了却删不掉。
+ */
+export function isDeletablePlaylist(playlist: Pick<Playlist, 'id'>): boolean {
+  return playlist.id !== FAVORITE_PLAYLIST_ID && playlist.id !== RADIO_FAVORITE_PLAYLIST_ID
+}
+
 interface PlaylistState {
   playlists: Playlist[]
   favoriteIds: Set<number>
@@ -44,6 +55,8 @@ interface PlaylistState {
   }) => Promise<Playlist | null>
   rename: (id: number, payload: { name?: string; description?: string }) => Promise<void>
   remove: (id: number, deleteSongs: boolean) => Promise<void>
+  /** 多选删除。返回是否真的删掉了，让调用方决定要不要清空选择 */
+  removeMany: (ids: number[], deleteSongs?: boolean) => Promise<boolean>
   uploadCover: (id: number, file: File) => Promise<void>
   setPinned: (id: number, pinned: boolean) => Promise<void>
   setHidden: (id: number, hidden: boolean) => Promise<void>
@@ -121,6 +134,22 @@ export const usePlaylists = create<PlaylistState>((set, get) => ({
       toast('歌单已删除', 'success')
     } catch (error) {
       toast('删除失败', 'error', error instanceof Error ? error.message : undefined)
+    }
+  },
+
+  removeMany: async (ids, deleteSongs = false) => {
+    // 内置收藏删不掉：调用方「全选」时可能把它们一并带上，这里兜住而不是信任调用方
+    const targets = ids.filter((id) => isDeletablePlaylist({ id }))
+    if (targets.length === 0) return false
+    try {
+      await batchDeletePlaylists(requireClient(), targets, deleteSongs)
+      const removed = new Set(targets)
+      set((state) => ({ playlists: state.playlists.filter((p) => !removed.has(p.id)) }))
+      toast(`已删除 ${targets.length} 个歌单`, 'success')
+      return true
+    } catch (error) {
+      toast('删除失败', 'error', error instanceof Error ? error.message : undefined)
+      return false
     }
   },
 
