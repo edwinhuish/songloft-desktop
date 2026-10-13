@@ -6,7 +6,7 @@
  * 原 Flutter 端把两类混在同一个长列表里，用户改完不知道到底改了谁。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type { AppInfo, ServerProbeResult } from '@shared/ipc'
 import { REPO_URL, UPSTREAM_URL } from '@shared/links'
@@ -66,7 +66,7 @@ const SECTIONS: { key: SettingsSection; label: string }[] = [
   { key: 'playback', label: '播放与歌词' },
   { key: 'library', label: '曲库与扫描' },
   { key: 'server', label: '服务器' },
-  { key: 'account', label: '账号与设备' },
+  { key: 'account', label: '账号' },
   { key: 'about', label: '关于' }
 ]
 
@@ -114,7 +114,8 @@ export function SettingsPage({ section }: { section: SettingsSection }): React.J
 /* ───────────────────────────── 通用行 ───────────────────────────── */
 
 interface RowProps {
-  title: string
+  /** ReactNode 而非 string：账号页要在标题后面缀「版本 · 耗时」或红色的「断开链接」 */
+  title: React.ReactNode
   desc?: React.ReactNode
   /** 该项是服务端设置（对所有设备生效） */
   server?: boolean
@@ -1006,89 +1007,102 @@ function ServerSettings(): React.JSX.Element {
   )
 }
 
-/* ───────────────────────────── 账号与设备 ───────────────────────────── */
+/* ───────────────────────────── 账号 ───────────────────────────── */
 
 function AccountSettings(): React.JSX.Element {
   const { settings, patch } = useSettings()
-  const {
-    servers,
-    baseUrl,
-    serverName,
-    status,
-    logout,
-    switchServer,
-    forgetServer,
-    refreshServers
-  } = useAuth()
+  const { baseUrl, serverName, username, status, logout, openLogin } = useAuth()
   const [probe, setProbe] = useState<ServerProbeResult | null>(null)
   const [probing, setProbing] = useState(false)
 
-  const active = useMemo(() => servers.find((s) => s.url === baseUrl), [servers, baseUrl])
+  const runProbe = useCallback(async (): Promise<void> => {
+    if (!baseUrl) return
+    setProbing(true)
+    try {
+      setProbe(await window.songloft.servers.probe(baseUrl))
+    } catch (error) {
+      setProbe({
+        ok: false,
+        version: null,
+        healthy: false,
+        error: error instanceof Error ? error.message : '探测失败',
+        elapsedMs: 0
+      })
+    } finally {
+      setProbing(false)
+    }
+  }, [baseUrl])
+
+  // 进页面自动探一次：版本号与连接耗时就是「已连接」这个状态的展示内容，
+  // 不该等用户先点一下「测试连接」才肯出现。
+  useEffect(() => {
+    void runProbe()
+  }, [runProbe])
+
+  // probe 结果是「此刻能不能连上」的可信来源；还没探完时退回登录态判断，
+  // 免得刚进页面就闪一下「断开链接」。
+  const connected = probe ? probe.ok : status === 'authenticated'
+  const meta = [
+    probe?.version ? `v${probe.version}` : null,
+    probe?.elapsedMs ? `${probe.elapsedMs}ms` : null
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   return (
     <>
-      <Card title="当前账号">
-        <Row title="服务器" desc={`${serverName ?? '未知'} · ${baseUrl ?? '—'}`}>
-          <span className="badge" data-tone={status === 'authenticated' ? 'success' : 'default'}>
-            {status === 'authenticated' ? '已登录' : status}
-          </span>
-        </Row>
-        <Row title="退出登录" desc="清除本机保存的访问令牌；服务端会吊销当前令牌">
+      <Card title="账号管理">
+        <Row
+          title={
+            <>
+              {serverName ?? baseUrl ?? '未配置服务器'}
+              {connected ? (
+                meta ? (
+                  <span className="setting-row-meta">{meta}</span>
+                ) : null
+              ) : (
+                <span className="setting-row-meta" data-tone="danger">
+                  断开链接
+                </span>
+              )}
+            </>
+          }
+          desc={
+            baseUrl
+              ? `服务器地址 ${baseUrl}${!connected && probe?.error ? ` · ${probe.error}` : ''}`
+              : '尚未连接任何服务器'
+          }
+        >
           <button
             type="button"
             className="btn"
-            data-variant="danger"
-            onClick={() => {
-              if (window.confirm('退出登录？')) void logout()
-            }}
+            disabled={!baseUrl || probing}
+            onClick={() => void runProbe()}
           >
-            <IconLogout size={15} />
-            退出登录
+            {probing ? <IconLoader size={15} /> : <IconServer size={15} />}
+            测试连接
           </button>
         </Row>
-      </Card>
 
-      <Card title="当前连接">
-        <Row title="服务器" desc={baseUrl ?? '未连接'}>
-          <div className="row" style={{ gap: 8 }}>
-            <button
-              type="button"
-              className="btn"
-              disabled={!baseUrl || probing}
-              onClick={() => {
-                if (!baseUrl) return
-                setProbing(true)
-                setProbe(null)
-                void window.songloft.servers
-                  .probe(baseUrl)
-                  .then(setProbe)
-                  .finally(() => setProbing(false))
-              }}
-            >
-              {probing ? <IconLoader size={15} /> : <IconServer size={15} />}
-              测试连接
+        <Row title={username ?? '未知账号'} desc="当前登录账号，凭据保存在本机">
+          <div className="row" style={{ gap: 6 }}>
+            <button type="button" className="btn" data-size="sm" onClick={openLogin}>
+              切换账号
             </button>
             <button
               type="button"
               className="btn"
+              data-size="sm"
+              data-variant="danger"
               onClick={() => {
-                void refreshServers()
-                toast('已刷新服务器列表', 'success')
+                if (window.confirm('退出登录？')) void logout()
               }}
             >
-              <IconRefresh size={15} />
-              刷新
+              <IconLogout size={15} />
+              退出登录
             </button>
           </div>
         </Row>
-
-        {probe ? (
-          <Row title="测试结果" desc={probe.error ?? `耗时 ${probe.elapsedMs}ms`}>
-            <span className="badge" data-tone={probe.ok ? 'success' : 'danger'}>
-              {probe.ok ? `正常${probe.version ? ` · ${probe.version}` : ''}` : '失败'}
-            </span>
-          </Row>
-        ) : null}
 
         <Row
           title="允许自签 / 无效 TLS 证书"
@@ -1100,54 +1114,6 @@ function AccountSettings(): React.JSX.Element {
             onChange={(checked) => void patch({ allowInsecureTls: checked })}
           />
         </Row>
-      </Card>
-
-      <Card title="已保存的服务器">
-        {servers.length === 0 ? (
-          <Row title="还没有保存任何服务器">
-            <span />
-          </Row>
-        ) : (
-          servers.map((server) => {
-            const isActive = server.url === baseUrl
-            return (
-              <Row
-                key={server.url}
-                title={server.name}
-                desc={`${server.url}${isActive ? ' · 当前使用中' : ''}`}
-              >
-                <div className="row" style={{ gap: 6 }}>
-                  <button
-                    type="button"
-                    className="btn"
-                    data-size="sm"
-                    disabled={isActive}
-                    onClick={() => void switchServer(server.url)}
-                  >
-                    切换
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    title="移除该服务器及其本机凭据"
-                    aria-label={`移除 ${server.name}`}
-                    onClick={() => {
-                      if (window.confirm(`移除「${server.name}」及其本机凭据？`))
-                        void forgetServer(server.url)
-                    }}
-                  >
-                    <IconTrash size={15} />
-                  </button>
-                </div>
-              </Row>
-            )
-          })
-        )}
-        {active ? null : (
-          <Row title="当前地址不在已保存列表里" desc="登录过一次之后就会出现在这里">
-            <span />
-          </Row>
-        )}
       </Card>
     </>
   )

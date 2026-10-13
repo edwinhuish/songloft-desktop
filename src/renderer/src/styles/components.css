@@ -1072,6 +1072,18 @@ select.input option {
   line-height: 1.6;
 }
 
+/* 设置行标题后面的状态后缀：版本号 / 连接耗时 / 「断开链接」 */
+.setting-row-meta {
+  margin-left: 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-4);
+}
+
+.setting-row-meta[data-tone='danger'] {
+  color: var(--danger);
+}
+
 .setting-row-control {
   flex: none;
   display: flex;
