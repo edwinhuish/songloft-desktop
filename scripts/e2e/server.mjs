@@ -387,6 +387,81 @@ function putVolumeNormalize(req, res) {
   })
 }
 
+/* ──────────────────── 扫描设置 / 音乐目录（可回读） ──────────────────── */
+
+/**
+ * 音乐目录与排除目录。形状照真实后端 `MusicPathSetting` 的四个字段。
+ *
+ * ⚠️ 历史 mock 返回的是 `{ path, exists, song_count }` —— 与真实后端完全不符。当时看不出问题，
+ * 因为客户端「排除目录」是个逗号分隔的输入框、从没读过 `exclude_*`。现在排除目录是
+ * 「名称 / 路径 / 歌单」三个列表，读错字段会直接表现为三个空列表，所以必须对齐。
+ *
+ * 三个列表都刻意非空：空数组时「字段读错了」与「本来就没配」长得一模一样。
+ */
+const MUSIC_ROOT = '/music'
+
+const musicPath = {
+  path: MUSIC_ROOT,
+  exclude_dirs: ['@eaDir', 'Covers'],
+  exclude_paths: [`${MUSIC_ROOT}/Downloads`],
+  auto_create_exclude_dirs: ['Downloads']
+}
+
+function putMusicPath(req, res) {
+  void readJsonBody(req).then((body) => {
+    // 真实后端：path 不能为空，否则 400（PUT 是一次覆盖写，三个排除列表必须一起带上）
+    if (body === null || typeof body.path !== 'string' || body.path.trim() === '')
+      return json(res, 400, { error: '音乐根目录不能为空' })
+    Object.assign(musicPath, body)
+    return json(res, 200, { ...musicPath })
+  })
+}
+
+/**
+ * 音乐目录树（`/scan/directories` 懒加载：一次一层）。
+ *
+ * ⚠️ 这里曾返回 `{ directories: ['/music'], music_path: '/music' }`，真实契约是
+ * `{ directories: [{ name, path, has_children }], root }`。同样是「当时没人调用所以看不出来」——
+ * 「路径排除」的目录树用上它之后立刻暴露：`entry.path` 全是 undefined，
+ * React key 重复、点选也拿不到路径。
+ */
+const DIR_TREE = {
+  [MUSIC_ROOT]: ['Albums', 'Live', 'Downloads'],
+  [`${MUSIC_ROOT}/Albums`]: ['Singles', 'Compilations'],
+  [`${MUSIC_ROOT}/Albums/Singles`]: [],
+  [`${MUSIC_ROOT}/Albums/Compilations`]: [],
+  [`${MUSIC_ROOT}/Live`]: [],
+  [`${MUSIC_ROOT}/Downloads`]: []
+}
+
+const DIR_NAMES = ['Albums', 'Live', 'Downloads', 'Singles', 'Compilations', 'Covers', '@eaDir']
+
+/**
+ * 「读回一个开关/枚举」形状的设置。一律做成可回读：PUT 之后再 GET 必须返回刚写进去的值 ——
+ * 客户端的写法正是「PUT 之后 reload 回读」，mock 不回读的话，界面会静默退回旧值，
+ * 于是「到底写没写进去」在 e2e 里永远看不出来。
+ *
+ * 取值刻意多数非默认，理由同上：全默认值时「读错字段」与「读对了」渲染结果一样。
+ */
+const mutableSettings = {
+  'scan-auto-create-playlists': { enabled: true },
+  'scan-playlist-mode': { mode: 'top_level' },
+  'scan-title-source': { title_source: 'filename' },
+  'scan-auto-fingerprint': { enabled: false },
+  'tag-sync-to-file': { enabled: false },
+  'auto-scan': { enabled: true, interval_seconds: 1800 }
+}
+
+function handleMutableSetting(req, res, key) {
+  const current = mutableSettings[key]
+  if (req.method !== 'PUT') return json(res, 200, { ...current })
+  return void readJsonBody(req).then((body) => {
+    if (body === null) return json(res, 400, { error: '请求格式错误' })
+    Object.assign(current, body)
+    return json(res, 200, { ...current })
+  })
+}
+
 /* ─────────────────────────── 路由 ─────────────────────────── */
 
 const server = createServer((req, res) => {
@@ -614,8 +689,18 @@ const server = createServer((req, res) => {
       local_song_count: SONGS.filter((s) => s.type === 'local').length
     })
   }
-  if (path === '/api/v1/scan/directories')
-    return json(res, 200, { directories: ['/music'], music_path: '/music' })
+  if (path === '/api/v1/scan/directories') {
+    const dir = url.searchParams.get('path') || MUSIC_ROOT
+    return json(res, 200, {
+      root: MUSIC_ROOT,
+      directories: (DIR_TREE[dir] ?? []).map((name) => ({
+        name,
+        path: `${dir}/${name}`,
+        has_children: (DIR_TREE[`${dir}/${name}`] ?? []).length > 0
+      }))
+    })
+  }
+  if (path === '/api/v1/scan/dir-names') return json(res, 200, { names: DIR_NAMES })
   if (path === '/api/v1/scan/fingerprints/status') {
     return json(res, 200, {
       chromaprint_available: true,
@@ -626,21 +711,22 @@ const server = createServer((req, res) => {
       auto_enabled: false
     })
   }
+  if (path === '/api/v1/songs/refresh-metadata') return json(res, 202, {})
+  if (path === '/api/v1/songs/refresh-metadata/progress')
+    return json(res, 200, { status: 'idle', total: 0, processed: 0, failed: 0 })
   if (path === '/api/v1/settings/music-path') {
-    return json(res, 200, { path: '/music', exists: true, song_count: SONGS.length })
+    if (req.method === 'PUT') return putMusicPath(req, res)
+    return json(res, 200, { ...musicPath })
   }
   if (path === '/api/v1/settings/volume-normalize') {
     if (req.method === 'PUT') return putVolumeNormalize(req, res)
     return json(res, 200, { ...volumeNormalize })
   }
-  // 形状按 endpoints.ts 的读取函数来：三个布尔开关 + 一个枚举。
-  // 刻意不都返回 false —— 全 false 时「开关初始状态渲染错了」这种缺陷看不出来。
   if (path === '/api/v1/settings/hls-proxy') return json(res, 200, { enabled: true })
-  if (path === '/api/v1/settings/scan-auto-create-playlists')
-    return json(res, 200, { enabled: true })
-  if (path === '/api/v1/settings/tag-sync-to-file') return json(res, 200, { enabled: false })
-  if (path === '/api/v1/settings/scan-title-source')
-    return json(res, 200, { title_source: 'filename' })
+  const settingKey = path.startsWith('/api/v1/settings/')
+    ? path.slice('/api/v1/settings/'.length)
+    : ''
+  if (settingKey in mutableSettings) return handleMutableSetting(req, res, settingKey)
   if (path.startsWith('/api/v1/configs/'))
     return json(res, 200, { key: path.split('/').pop(), value: '' })
 
