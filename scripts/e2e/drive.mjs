@@ -83,12 +83,24 @@ const containsAll = (...names) =>
  *    "SyntaxError: Unexpected identifier"。所以里面的注释一律用普通引号。
  */
 const HELPERS = `
+/**
+ * 「当前这一页里」的元素。
+ *
+ * ⚠️ 原生面的各个页面是**常驻**的（切页只是把离开的那一页藏起来，见 App 的 NativePages）——
+ *    于是全局选择器会同时命中好几页：.song-row / .card / .chip 的计数会把藏在别的页里的
+ *    也一起数进来。这里一律把范围收回「不在 [data-hidden] 子树里」的那一份。
+ *    与 offCenter 限定 .surface-native 是同一个道理（那边防的是两个内容面）。
+ *    —— 新写选择器请走 vis / 这里的助手，别直接 document.querySelector。
+ */
+const vis = (sel) => [...document.querySelectorAll(sel)].filter((e) => !e.closest('[data-hidden="true"]'));
+
 window.__t = {
-  q: (sel) => document.querySelector(sel),
-  qa: (sel) => [...document.querySelectorAll(sel)],
-  byText: (sel, text) => [...document.querySelectorAll(sel)].find((e) => (e.textContent || '').includes(text)) || null,
+  vis: vis,
+  q: (sel) => vis(sel)[0] || null,
+  qa: (sel) => vis(sel),
+  byText: (sel, text) => vis(sel).find((e) => (e.textContent || '').includes(text)) || null,
   click: (sel, text) => {
-    const el = text ? window.__t.byText(sel, text) : document.querySelector(sel);
+    const el = text ? window.__t.byText(sel, text) : window.__t.q(sel);
     if (!el) return 'NOT_FOUND:' + sel + (text ? '/' + text : '');
     el.click();
     return 'OK';
@@ -99,7 +111,7 @@ window.__t = {
    * byText 只认第一个，点不着后面那个。
    */
   clickNth: (sel, text, index) => {
-    const list = [...document.querySelectorAll(sel)].filter((e) => (e.textContent || '').includes(text));
+    const list = vis(sel).filter((e) => (e.textContent || '').includes(text));
     const el = list[index];
     if (!el) return 'NOT_FOUND:' + sel + '/' + text + '#' + index;
     el.click();
@@ -107,7 +119,7 @@ window.__t = {
   },
   /** 按 aria-label 点：标题栏那排是纯图标按钮，byText 够不着它们 */
   clickLabel: (label) => {
-    const el = document.querySelector('[aria-label="' + label + '"]');
+    const el = vis('[aria-label="' + label + '"]')[0];
     if (!el) return 'NOT_FOUND:' + label;
     el.click();
     return 'OK';
@@ -120,7 +132,7 @@ window.__t = {
    *    直接派发 pointerenter 会「什么也没发生」，断言则表现为「二级菜单没打开」。
    */
   hover: (sel, text) => {
-    const el = text ? window.__t.byText(sel, text) : document.querySelector(sel);
+    const el = text ? window.__t.byText(sel, text) : window.__t.q(sel);
     if (!el) return 'NOT_FOUND:' + sel + (text ? '/' + text : '');
     el.dispatchEvent(
       new PointerEvent('pointerover', {
@@ -133,7 +145,7 @@ window.__t = {
     return 'OK';
   },
   dbl: (sel) => {
-    const el = document.querySelector(sel);
+    const el = window.__t.q(sel);
     if (!el) return 'NOT_FOUND';
     el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window }));
     return 'OK';
@@ -171,49 +183,54 @@ window.__t = {
     }, 0);
   },
   /** 分面卡上显示的标题，用来断言"当前是哪一维分面" */
-  cardTitles: () => [...document.querySelectorAll('.card .card-title')].map((e) => (e.textContent || '').trim()),
+  cardTitles: () => vis('.card .card-title').map((e) => (e.textContent || '').trim()),
   /**
    * chip 上的文字，用来断言"当前挂了哪些筛选"。
    * 不能改用个数断言："当前筛选"那一行里还有一个同为 .chip 的「清空全部」按钮。
    */
-  chipTitles: () => [...document.querySelectorAll('.chip')].map((e) => (e.textContent || '').trim()),
+  chipTitles: () => vis('.chip').map((e) => (e.textContent || '').trim()),
   /** 折叠菜单里各项的文字。**顺序也是断言的一部分**（见 equals），所以不能用集合比 */
-  menuTitles: () => [...document.querySelectorAll('.context-menu button')].map((e) => (e.textContent || '').trim()),
+  menuTitles: () => vis('.context-menu button').map((e) => (e.textContent || '').trim()),
   /** 最靠后那一层菜单的条目 —— 二级菜单（如「我的歌单」）要单独看这一层 */
   lastMenuTitles: () => {
-    const panels = [...document.querySelectorAll('.context-menu')];
+    const panels = vis('.context-menu');
     const last = panels[panels.length - 1];
     return last ? [...last.querySelectorAll('button')].map((e) => (e.textContent || '').trim()) : [];
   },
+  /*
+   * ★ 下面一律走 vis()：页面是常驻的，全局计数会把藏在其它页里的元素也数进来
+   *   （.song-row / .card / .chip 尤其明显）。不在页面槽里的东西（播放条、命令面板、
+   *   菜单、弹窗）走 vis 也不受影响 —— 它们本来就在 [data-hidden] 之外。
+   */
   counts: () => ({
-    rows: document.querySelectorAll('.song-row').length,
-    cards: document.querySelectorAll('.card').length,
-    navs: document.querySelectorAll('.nav-item').length,
-    chips: document.querySelectorAll('.chip').length,
-    switches: document.querySelectorAll('[role="switch"]').length,
+    rows: vis('.song-row').length,
+    cards: vis('.card').length,
+    navs: vis('.nav-item').length,
+    chips: vis('.chip').length,
+    switches: vis('[role="switch"]').length,
     // 当前页标题：用来确认「曲库 / 文件夹」是两个标签、同一页（切完标题还得是「曲库」）
-    pageTitle: (document.querySelector('.page-title') || {}).textContent || '',
+    pageTitle: (window.__t.q('.page-title') || {}).textContent || '',
     // 文件夹模式的目录行（与歌曲行是两个不同的容器）
-    folderRows: document.querySelectorAll('.folder-row').length,
+    folderRows: vis('.folder-row').length,
     // 歌词面板：行数用于回归"逐字源只覆盖部分行时不能丢主歌词的行"
-    lyricLines: document.querySelectorAll('.lyric-line').length,
-    lyricWords: document.querySelectorAll('.lyric-word').length,
+    lyricLines: vis('.lyric-line').length,
+    lyricWords: vis('.lyric-word').length,
     // 命令面板：条目数，用于确认 Ctrl+K 真的渲染出了可选项
-    paletteItems: document.querySelectorAll('.palette-item').length,
+    paletteItems: vis('.palette-item').length,
     // 播放队列条目数
-    queueItems: document.querySelectorAll('.queue-item').length,
+    queueItems: vis('.queue-item').length,
     // 面板关闭时整个不渲染，所以数个数就是「开没开」
-    panel: document.querySelectorAll('.panel').length,
+    panel: vis('.panel').length,
     // 折叠菜单里「双面」项（悬浮出二级菜单）的个数。菜单只断言文字的话，
     // 「歌单」从双面项退化成普通跳转项也看不出来 —— 二级菜单就那样静默消失。
-    submenuTriggers: document.querySelectorAll('.context-menu button[aria-haspopup="menu"]').length,
+    submenuTriggers: vis('.context-menu button[aria-haspopup="menu"]').length,
     // 控制栏上的当前曲目。面板关着时，这是「双击真的开始播放了」的唯一可断言口径。
-    playerTitle: (document.querySelector('.playerbar-title') || {}).textContent || '',
+    playerTitle: (window.__t.q('.playerbar-title') || {}).textContent || '',
     /*
      * 满窗播放（点底栏那颗封面进去的那一层）。与「面板」同一个口径：
      * 关着时整块不渲染，所以数个数就是「开没开」。
      */
-    fullPlayer: document.querySelectorAll('.fullplayer').length,
+    fullPlayer: vis('.fullplayer').length,
     /*
      * 满窗里显示的曲目 vs 底栏显示的曲目：**必须是同一首**。
      * 这一层是「同一个播放器的另一种画法」，所以这条挡的是「点进去换了一首歌 /
@@ -221,8 +238,8 @@ window.__t = {
      * 两边都不在时返回 false：不然「满窗根本没开」也会算通过。
      */
     fullPlayerSameTrack: (() => {
-      const full = document.querySelector('.fullplayer-title');
-      const bar = document.querySelector('.playerbar-title');
+      const full = window.__t.q('.fullplayer-title');
+      const bar = window.__t.q('.playerbar-title');
       return !!full && !!bar && full.textContent === bar.textContent;
     })(),
     /*
@@ -231,8 +248,8 @@ window.__t = {
      * 这个功能的名字所承诺的东西。
      */
     fullPlayerCoversBar: (() => {
-      const full = document.querySelector('.fullplayer');
-      const bar = document.querySelector('.playerbar');
+      const full = window.__t.q('.fullplayer');
+      const bar = window.__t.q('.playerbar');
       if (!full || !bar) return false;
       const f = full.getBoundingClientRect();
       const b = bar.getBoundingClientRect();
@@ -244,8 +261,8 @@ window.__t = {
      * 纯 CSS 的行为，不断言就会静默回退成那条颜色对不上的横带。
      */
     titlebarFollowsPlayer: (() => {
-      const bar = document.querySelector('.titlebar');
-      if (!bar || !document.querySelector('.fullplayer')) return false;
+      const bar = window.__t.q('.titlebar');
+      if (!bar || !window.__t.q('.fullplayer')) return false;
       const cs = getComputedStyle(bar);
       return (
         cs.backgroundColor === 'rgba(0, 0, 0, 0)' &&
@@ -256,7 +273,7 @@ window.__t = {
     /* 收起之后标题栏要回到原来那一份（玻璃底 + 毛玻璃）。只断言「满窗时是透明的」的话，
        把标题栏写死成永远透明也照样绿 —— 这一条挡的就是那种改法。 */
     titlebarGlass: (() => {
-      const bar = document.querySelector('.titlebar');
+      const bar = window.__t.q('.titlebar');
       if (!bar) return false;
       const cs = getComputedStyle(bar);
       return cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backdropFilter !== 'none';
@@ -268,38 +285,38 @@ window.__t = {
     menuItems: window.__t.menuTitles(),
     subMenuItems: window.__t.lastMenuTitles(),
     // 菜单里的分割线（渲染成 hr，不是 button，光断言条目文字看不见它）
-    menuDividers: document.querySelectorAll('.context-menu hr').length,
+    menuDividers: vis('.context-menu hr').length,
     // 设置页左侧的分区名（含顺序）。分区是"对标原播放器"定下来的需求，
     // 只算个数的话，少一个分区或换了次序都看不出来。
-    settingsNav: [...document.querySelectorAll('.settings-nav button')].map((e) => (e.textContent || '').trim()),
+    settingsNav: vis('.settings-nav button').map((e) => (e.textContent || '').trim()),
     /*
      * 设置页当前分区的卡片文字。
      * 新分区显示的全是"从服务端读回来的值"，数卡片数/开关数区分不出"读到了"与
      * "接口不存在、画成空壳"——两者渲染出来的结构一模一样。所以按内容断言。
      */
-    settingText: [...document.querySelectorAll('.setting-card')].map((e) => e.textContent || '').join(' '),
+    settingText: vis('.setting-card').map((e) => e.textContent || '').join(' '),
     /*
      * 设置行右侧的小字（.setting-row-meta，版本号渲染在这里）。
      * 必须整串比：断言里写 contains('v2.13.1') 是抓不到 vv2.13.1 的——它本身就包含
      * v2.13.1。这里取出整串，多一个 v 立刻红。
      */
-    metaTags: [...document.querySelectorAll('.setting-row-meta')].map((e) => (e.textContent || '').trim()),
+    metaTags: vis('.setting-row-meta').map((e) => (e.textContent || '').trim()),
     /*
      * 占用进度条。放在缓存管理那一步断言 = 2 条：服务端缓存与本机缓存各一条。
      * 只数个数就够 —— 这里要挡的是"某一侧压根忘了画"，宽度值随实际字节数变，没法钉死。
      * （控制栏的播放进度是另一个类名 .playerbar-progress-fill，不会混进来。）
      */
-    usageBars: document.querySelectorAll('.progress-fill').length,
+    usageBars: vis('.progress-fill').length,
     // 开着的开关数。断言开关"真的翻了"要用它 —— 只断言开关存在，onChange 没接上也照样绿
-    switchesOn: document.querySelectorAll('[role="switch"][aria-checked="true"]').length,
+    switchesOn: vis('[role="switch"][aria-checked="true"]').length,
     // 弹窗（.modal 才是那个面板；.overlay 是一直挂在 DOM 里的遮罩容器，数它没有意义）
-    modals: document.querySelectorAll('.modal').length,
+    modals: vis('.modal').length,
     /*
      * 弹窗的文字（正文 + 底部按钮）。与服务端来的值逐一对照（版本号、发布说明、通道名），
      * 底部那排也一起取：这一版弹窗给的**动作**（上传升级 / 立即升级 / 关闭）本身就是断言对象 ——
      * 比如检查失败时上传入口该留着、非 Docker 时该消失。
      */
-    modalText: [...document.querySelectorAll('.modal-body, .modal-foot')]
+    modalText: vis('.modal-body, .modal-foot')
       .map((e) => e.textContent || '')
       .join(' ')
   })
