@@ -306,6 +306,9 @@ a {
   border-bottom: 1px solid var(--line-1);
   -webkit-app-region: drag;
   z-index: 40;
+  /* 最后一道保险：标题栏里任何一项都不许把布局撑出去。扩展条自己已经有 overflow: hidden，
+     这里再兜一层 —— 免得将来往标题栏里加东西时，无声地把窗口控制按钮顶出可视区。 */
+  overflow: hidden;
 }
 
 .titlebar button,
@@ -318,6 +321,9 @@ a {
   display: flex;
   align-items: center;
   gap: 9px;
+  /* 不参与弹性伸缩：LOGO 与右侧那组窗口按钮是标题栏的固定两端，
+     扩展条再长也不能把它们挤动 */
+  flex: none;
   font-weight: 620;
   font-size: 13px;
   letter-spacing: -0.01em;
@@ -356,17 +362,19 @@ a {
   color: var(--text-1);
 }
 
-/* 扩展入口条占据标题栏中段。
-   ★ `flex: 1 1 auto` 是这套溢出的关键：它吃掉所有余量，于是**它的宽度恰好就是
-     留给入口条的可用宽度** —— 量出来的「能放几个」才和实际露出来的对得上。
-     若改成由内容撑开（flex: none），量到的会是内容宽度而不是可用宽度。
+/* 扩展入口条的可见区。
+   ★ `flex: 1 1 0`（basis 取 **0**）是这条要求的落点：视图区只能是「除去左边 LOGO、
+     右边那组按钮之后剩下的那一块」，**不许由内容撑开**。basis 取 0 意味着入口条的宽度
+     完全不参与弹性基准的计算 —— 它只吃剩下的空间，内容再多也影响不到 LOGO 与窗口按钮
+     的位置。取 `auto` 的话，内容的 max-content 会先撑进基准、再由 flex-shrink 挤回来，
+     过程中会把两侧各挤掉一点（窗口控制按钮于是看着窄了几像素）。
    靠左对齐：按钮紧挨 LOGO，右边空出来的那一大截就是拖拽区。
-   装不下的从**右边**裁掉，被裁掉的由折叠菜单接住（见 hooks/useExtensionStrip）。
+   露不出来的（含只露了一半的）一概从**右边**裁掉，由折叠菜单接住。
 
    `position: relative` 是给测量用的：按钮的 offsetLeft 要相对它来算。 */
 .titlebar-extensions {
   position: relative;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -375,7 +383,7 @@ a {
   overflow: hidden;
 }
 
-/* 宽度由内容决定（图标 + 名称），不再固定 —— 溢出个数因此改成量真实几何，
+/* 标签**按内容取宽**（图标 + 名称），不做统一宽度 —— 溢出个数因此改成量真实几何，
    没有常量需要跟 CSS 对齐了。 */
 .titlebar-ext {
   position: relative;
@@ -384,8 +392,8 @@ a {
   align-items: center;
   gap: 7px;
   height: 30px;
-  /* 名称最长也就到这儿，再长自己省略号。不封顶的话，一个特长名字能把整条吃光，
-     其余扩展全被挤进溢出菜单 */
+  /* 这是**上限**不是宽度：只有名字长到离谱时才封顶，其余各按各的自然宽度。
+     不封顶的话，一个特长名字能把整条吃光，别的扩展全被挤进溢出菜单 */
   max-width: 190px;
   padding: 0 10px;
   border: none;
@@ -461,6 +469,8 @@ a {
   display: flex;
   align-items: center;
   gap: 2px;
+  /* 同 .titlebar-brand：搜索与三个窗口控制按钮是固定宽度的那一端，不许被挤 */
+  flex: none;
 }
 
 .win-btn {

@@ -22,6 +22,14 @@ import { useExtensionStrip } from '@/hooks/useExtensionStrip'
 import { useExtensionRuntime, usePlugins } from '@/state/usePlugins'
 import { useUi } from '@/state/useUi'
 
+/**
+ * 判定「露不露得出来」时留的余量（px）。
+ *
+ * 亚像素宽度会让「刚好贴边」与「被裁掉一个角」差不到 1px，而这两者的后果天差地别：
+ * 判成露着，那个扩展就不进折叠菜单，它便**没有任何入口**了。所以统一往严的那边靠。
+ */
+const CLIP_EPSILON = 1
+
 export function ExtensionStrip(): React.JSX.Element {
   const { ordered, setCapacity, activate } = useExtensionStrip()
   const stripRef = useRef<HTMLDivElement>(null)
@@ -31,7 +39,7 @@ export function ExtensionStrip(): React.JSX.Element {
     if (!node) return
 
     /**
-     * 数一数有几个完整落在可视宽度里。
+     * 数一数有几个**完整**落在可视宽度里。
      *
      * 拿 `offsetLeft` 而不是 `getBoundingClientRect`：后者受祖先可能有的变换影响，
      * 而且每次读取都会强制同步布局。
@@ -45,7 +53,9 @@ export function ExtensionStrip(): React.JSX.Element {
       let count = 0
       for (const child of Array.from(node.children)) {
         const item = child as HTMLElement
-        if (item.offsetLeft + item.offsetWidth > available) break
+        // 留 1px 余量，宁可把一个其实刚好放得下的算成「藏了」，也不能把被裁掉一个角的
+        // 算成「露着」—— 菜单是那些扩展**唯一**的入口，判错一次它就再也点不到了
+        if (item.offsetLeft + item.offsetWidth > available - CLIP_EPSILON) break
         count += 1
       }
       setCapacity(count)
