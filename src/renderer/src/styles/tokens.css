@@ -58,14 +58,17 @@
        缩放只作用于渲染结果，布局盒仍是原尺寸，所以居中计算与折叠动效都不受影响。 */
   --sidebar-w: 272px;
   --sidebar-w-collapsed: 80px;
-  --sidebar-pad-x: 16px;
+  /* 左右空隙拆成两段，但**两段都要一起看**：侧栏边缘 → 列表项胶囊（--sidebar-pad-x），
+     胶囊边缘 → 图标 / 文字（--nav-item-pad-x）。观感上的「左右空了多少」是这两段之和
+     （8 + 8 = 16px），只减其中一段的话，看上去只少了四分之一。 */
+  --sidebar-pad-x: 8px;
   --sidebar-pad-top: 16px;
   --sidebar-pad-bottom: 12px;
   /* 两组（导航 / 歌单）之间、以及组内相邻项之间 */
   --sidebar-group-gap: 8px;
   --nav-item-gap: 4px;
   --nav-item-h: 52px;
-  --nav-item-pad-x: 16px;
+  --nav-item-pad-x: 8px;
   /* 图标与文字之间。图标放大到 1.5× 后视觉上往两侧各溢出 1/4 宽，所以这里也要加宽，
      否则「图标变大」会被吃掉一半 —— 看到的还是原来那么挤。 */
   --nav-gap: 18px;
@@ -172,6 +175,8 @@
   --row-h: 38px;
   --sidebar-w: 244px;
   --sidebar-w-collapsed: 48px;
+  /* ★ 这两项现在比舒适档（8px）略大：舒适档按需求把左右空隙压到了 8px，紧凑档没跟着动 ——
+     要维持「紧凑比舒适更紧」就得一起往下调（比如 5px），但那是另一件事，先留着。 */
   --sidebar-pad-x: 9px;
   --sidebar-pad-top: 10px;
   --sidebar-pad-bottom: 8px;
