@@ -129,6 +129,8 @@ src/
    │                 （「文件夹」不是独立页面，是 LibraryPage 里的一个标签，见 FoldersView）
    ├─ components/    Sidebar / TitleBar / SongTable / PlayerBar / LyricsView / CommandPalette /
    │                 Panel / ContextMenu / Modal / Toasts / SelectionBar /
+   │                 FullPlayer（满窗播放：盖在原生面上的浮层）/
+   │                 MiniPlayer（迷你模式的整窗界面）/
    │                 ExtensionFrame（扩展主框架：左侧栏 + 右内容面）/
    │                 PluginSurface（扩展 webview 栈）/ PluginIcon /
    │                 RegistrySourcesDialog（管理订阅源）
@@ -168,6 +170,20 @@ src/
 
 扩展面里**没有播放条**（宿主播放不会因此中断：音频是模块级对象、不挂在 DOM 上，见
 `state/usePlayer` 的 `audio`），此时控制播放只能靠媒体键 / 托盘 / MPRIS。
+
+**看播放器还有另外两个姿势**，都不属于 `surface`，也别往路由里塞（路由是"去哪一页"，
+它们只是换个姿势看同一个播放器 —— 混进历史会让 Alt+← 退回到"收起满窗播放"这种中间态）：
+
+* **满窗播放**（`useUi.fullPlayer`，`components/FullPlayer.tsx`）：底栏那颗封面点一下，
+  标题栏以下整块换成大封面 + 歌曲信息 + 歌词 + 控制条，收起钮 / Esc 出去。
+  它是**原生面里的一个浮层**（absolute + inset: 0，z-index 35 —— 压在播放条之上、标题栏之下，
+  标题栏是无边框窗口唯一常驻的拖拽区与关闭入口，不能被它吃掉），所以切去扩展面、进迷你时
+  跟着一起被藏，切回来原样还在；底下的页面一直挂着没被卸载，收起后仍是离开时那一页。
+* **迷你模式**（`useUi.mini`）：整个界面换成一条小播放条，**窗口几何在主进程**
+  （`main/windows.ts` 的 `MINI_SIZE` / `MINI_PANEL_SIZE`），渲染层只报"开没开 + 面板展没展开"。
+
+新加播放相关的界面时照着这条走：读同一个 `usePlayer`、复用 `PlayerProgress`（"拖动期间只动
+本地 scrub、松手才 seek"只有那一份）与 `LyricsView`，别复制一份状态出去。
 
 ---
 

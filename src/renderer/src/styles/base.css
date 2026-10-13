@@ -198,8 +198,12 @@ a {
   pointer-events: none;
 }
 
-/* 原生面：上半是「侧栏 + 主区 + 抽屉」，下半是播放条 */
+/* 原生面：上半是「侧栏 + 主区 + 抽屉」，下半是播放条。
+   ★ position: relative 是**满窗播放**那一层的定位基准（见 components.css 的 .fullplayer）：
+     它要 inset: 0 盖住这一整面（含播放条），而浮层的定位只会找最近的定位祖先 ——
+     这一条不在，它就会一路找到 .shell[data-mini] 那个相对定位上去（那一档下窗口只有 64px 高）。 */
 .surface-native {
+  position: relative;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
 }

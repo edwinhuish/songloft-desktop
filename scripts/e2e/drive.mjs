@@ -209,6 +209,35 @@ window.__t = {
     submenuTriggers: document.querySelectorAll('.context-menu button[aria-haspopup="menu"]').length,
     // 控制栏上的当前曲目。面板关着时，这是「双击真的开始播放了」的唯一可断言口径。
     playerTitle: (document.querySelector('.playerbar-title') || {}).textContent || '',
+    /*
+     * 满窗播放（点底栏那颗封面进去的那一层）。与「面板」同一个口径：
+     * 关着时整块不渲染，所以数个数就是「开没开」。
+     */
+    fullPlayer: document.querySelectorAll('.fullplayer').length,
+    /*
+     * 满窗里显示的曲目 vs 底栏显示的曲目：**必须是同一首**。
+     * 这一层是「同一个播放器的另一种画法」，所以这条挡的是「点进去换了一首歌 /
+     * 读的是另一份状态」—— 只数 .fullplayer 有几个是完全看不出来的。
+     * 两边都不在时返回 false：不然「满窗根本没开」也会算通过。
+     */
+    fullPlayerSameTrack: (() => {
+      const full = document.querySelector('.fullplayer-title');
+      const bar = document.querySelector('.playerbar-title');
+      return !!full && !!bar && full.textContent === bar.textContent;
+    })(),
+    /*
+     * 满窗真的「满」吗：它得盖住整个原生面（含底下那条播放条）。
+     * 只断言 .fullplayer 存在的话，一层只占上半截的小浮层也能绿 —— 而那正是
+     * 这个功能的名字所承诺的东西。
+     */
+    fullPlayerCoversBar: (() => {
+      const full = document.querySelector('.fullplayer');
+      const bar = document.querySelector('.playerbar');
+      if (!full || !bar) return false;
+      const f = full.getBoundingClientRect();
+      const b = bar.getBoundingClientRect();
+      return f.width > 0 && f.top <= b.top + 1 && f.bottom >= b.bottom - 1;
+    })(),
     // 折叠侧栏的居中偏差（px），回归"封面被 auto 外边距顶到左边"
     offCenter: window.__t.offCenter(),
     cardTitles: window.__t.cardTitles(),
@@ -645,12 +674,31 @@ const STEPS = [
     1400,
     { panel: exactly(0) }
   ],
+  // ── 满窗播放 ───────────────────────────────────────────────────────────
+  // 底栏那颗封面点一下 = 进满窗播放（大封面 + 歌曲信息 + 歌词 + 控制条盖住标题栏以下整块）。
+  // ★ 三件事都要断言：这一层开了；它显示的曲目与底栏是**同一首**（读的是同一个 usePlayer，
+  //   不是复制了一份状态）；它真的盖住了底栏那条（「满窗」这两个字的全部内容）。
+  // 歌词顺带数一遍 —— 上一步刚把面板收起，所以这 10 行只可能来自满窗这一层。
+  [
+    '38-fullplayer-open',
+    'window.__t.click(\'.playerbar button[aria-label="满窗播放"]\')',
+    2600,
+    {
+      fullPlayer: exactly(1),
+      fullPlayerSameTrack: exactly(true),
+      fullPlayerCoversBar: exactly(true),
+      lyricLines: exactly(10)
+    }
+  ],
+  // Esc 收起。左上角还有一颗「收起满窗播放」，这里验的是全局键那一条 ——
+  // 它在 App 的 keydown 里，键盘事件得从 window 派发才到得了。
+  ['39-fullplayer-closed', "window.__t.key('Escape')", 1400, { fullPlayer: exactly(0) }],
   // 折叠成图标条后，图标与歌单封面必须仍然居中。带计数的项曾因 .nav-count 的
   // auto 外边距吃掉整行自由空间而整体左偏，且**只在折叠态**出现 —— 不断言就会静默复发。
   // 放在命令面板之前：面板的 Escape 绑在它自己的输入框上，从 window 派发关不掉，
   // 先折叠就不会让它盖在侧栏截图上。
   [
-    '38-sidebar-collapsed',
+    '40-sidebar-collapsed',
     // 收起/展开那颗按钮压在侧栏右下角（`.sidebar-toggle`），没有可见文字 ——
     // 是个纯图标钮，只能按 aria-label 点它
     "window.__t.clickLabel('收起侧栏')",
@@ -658,7 +706,7 @@ const STEPS = [
     { offCenter: atMost(1) }
   ],
   [
-    '39-command-palette',
+    '41-command-palette',
     "window.__t.key('k', { ctrlKey: true })",
     1400,
     { paletteItems: atLeast(1) }

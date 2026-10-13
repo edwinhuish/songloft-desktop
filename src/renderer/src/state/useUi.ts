@@ -109,6 +109,16 @@ interface UiState {
    * 否则滚动位置会被重新夹一遍、扩展的 webview 也会被缩成一个针眼再弹回来。
    */
   miniRestore: { width: number; height: number } | null
+  /**
+   * 满窗播放：底栏那颗封面点出来的那一层（大封面 + 歌词 + 控制条，见 components/FullPlayer.tsx）。
+   *
+   * ★ 刻意**不是** `surface` 的第三种形态。surface 管的是「原生 / 扩展」两个工作台，
+   *   而它只是原生面上的一个浮层 —— 于是进迷你、切去扩展面时它跟着一起被藏起来
+   *   （不会孤零零地留在屏幕上），切回来时又原样还在。
+   * ★ 它也不进 nativeRoute：路由是「去哪一页」，这个是「换个看播放器的姿势」，
+   *   混进历史会让 Alt+← 退回到「收起满窗播放」这种莫名其妙的中间态。
+   */
+  fullPlayer: boolean
   /** 「加入歌单」对话框的待加入歌曲 id；null = 对话框关闭 */
   addToPlaylistTarget: number[] | null
   /** 播放队列多选的下标集合 */
@@ -134,6 +144,8 @@ interface UiState {
   /** 由布局自动收起 / 展开：只动界面状态，不写设置 */
   setSidebarAutoCollapsed: (collapsed: boolean) => void
   setPaletteOpen: (open: boolean) => void
+  /** 进 / 出满窗播放。只有这一条（没有 toggle）——「点封面就是进去」不该被一个开关语义盖住 */
+  setFullPlayer: (open: boolean) => void
   setMini: (mini: boolean) => void
   /** 与底栏的 togglePanel 同一套语义：点同一颗就是收起，点另一颗是换内容（不闪、不跳） */
   toggleMiniPanel: (panel: MiniPanel) => void
@@ -159,6 +171,7 @@ export const useUi = create<UiState>((set, get) => ({
   mini: false,
   miniPanel: null,
   miniRestore: null,
+  fullPlayer: false,
   addToPlaylistTarget: null,
   selection: [],
   selectionAnchor: null,
@@ -226,6 +239,7 @@ export const useUi = create<UiState>((set, get) => ({
   setSidebarAutoCollapsed: (collapsed) =>
     set({ sidebarCollapsed: collapsed, sidebarAutoCollapsed: collapsed }),
   setPaletteOpen: (open) => set({ paletteOpen: open }),
+  setFullPlayer: (open) => set({ fullPlayer: open }),
   setMini: (mini) =>
     set((state) => ({
       mini,

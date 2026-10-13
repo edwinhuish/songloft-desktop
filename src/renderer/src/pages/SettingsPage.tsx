@@ -2788,6 +2788,9 @@ function ShortcutsSettings(): React.JSX.Element {
       <Row title="Ctrl / Cmd + L" desc="打开歌词面板；再按一次收起">
         <span className="badge">面板</span>
       </Row>
+      <Row title="Esc" desc="收起满窗播放（点底栏那颗封面进去的那一层）">
+        <span className="badge">面板</span>
+      </Row>
       <Row title="Ctrl / Cmd + F" desc="聚焦到搜索框">
         <span className="badge">导航</span>
       </Row>

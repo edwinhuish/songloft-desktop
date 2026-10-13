@@ -807,6 +807,27 @@
   min-width: 0;
 }
 
+/* 底栏那颗封面：整张图就是「进满窗播放」的按钮（见 components/FullPlayer.tsx）。
+   去掉按钮自带的盒子与内边距，让它看上去就是那张封面本身；圆角与封面一致，
+   focus-visible 的轮廓与悬浮阴影才贴着封面走，而不是一个方框。 */
+.playerbar-cover {
+  display: block;
+  flex: none;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 10px;
+  transition:
+    transform var(--dur-2) var(--ease),
+    box-shadow var(--dur-2) var(--ease);
+}
+
+.playerbar-cover:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-2);
+}
+
 .playerbar-title {
   font-size: 13.5px;
   font-weight: 560;
@@ -859,6 +880,194 @@
   align-items: center;
   gap: 7px;
   width: 118px;
+}
+
+/* ── 满窗播放（见 components/FullPlayer.tsx）─────────────────────────────
+   原生面上的一个浮层：底栏那颗封面点一下进来，收起钮 / Esc 出去。
+
+   ★ 定位基准是 .surface-native（base.css 里给了 position: relative）。用 absolute + inset: 0
+     占满那一面，**没有**参与它那两行的栅格（上半内容 / 下半播放条）—— 底下的原生页因此
+     尺寸没变、也没重排，收起时列表的滚动位置就是离开时那一个。
+   ★ z-index 35：要压住播放条（30）与工具条（20），又要留在标题栏（40）之下 ——
+     窗口是无边框的，标题栏是唯一常驻的拖拽区与关闭入口，满窗播放也不该把它吃掉。 */
+.fullplayer {
+  position: absolute;
+  inset: 0;
+  z-index: 35;
+  display: grid;
+  /* 顶：收起钮那一行；中：封面 + 信息（吃掉剩余高度）；底：控制带 */
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  /* 底色是**不透明**的：满窗就该是满窗，让底下的曲库透上来只会让歌词读不清。
+     主题光晕与糊封面都压在这一层之上（见下两条）。 */
+  background: var(--bg-0);
+  animation: fullplayer-in var(--dur-3) var(--ease);
+}
+
+@keyframes fullplayer-in {
+  from {
+    opacity: 0;
+    transform: scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * 背景：同一张封面糊成的大色块（URL 由 TSX 给）。
+ *
+ * ★ z-index: -1 是这里的关键写法：它落在**叠层顺序的最前面**（在元素自己的底色之后、
+ *   在所有常规内容之前）。换成默认的 auto，它作为定位元素会盖在这三层内容**之上**
+ *   （定位元素排在非定位元素后面），表现就是歌名与歌词全被那一片糊色吃掉。
+ * ★ 往外撑一圈 + 放大，是为了糊掉自己的边缘：blur 会把四边揉成半透明，
+ *   不留这一圈就会在窗口四边露出一圈底色。
+ * ★ opacity 压到 0.5：它是氛围，不该和封面、歌词抢注意力，也保证上面的文字对比度。
+ */
+.fullplayer-bg {
+  position: absolute;
+  inset: -10%;
+  z-index: -1;
+  opacity: 0.5;
+  filter: blur(64px) saturate(1.3);
+  background-position: center;
+  background-size: cover;
+  pointer-events: none;
+}
+
+.fullplayer-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 26px 0;
+}
+
+/* 收起钮比常规那 32px 大一档：这一层只有它一个出口，做得显眼一点 */
+.fullplayer-head .icon-btn {
+  width: 40px;
+  height: 40px;
+}
+
+/* 左封面右信息。左栏给得比右栏窄一点：歌词是成段的文字，需要更宽的一栏才不至于频繁折行。
+   ★ 两栏都**拉满这一行的高度**（不自作主张居中对齐），右栏里的歌词要靠这一份高度才谈得上
+     「撑满剩余空间自己滚」—— 高度由内容决定的话，flex: 1 那一条就无解了。 */
+.fullplayer-body {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: 48px;
+  min-height: 0;
+  padding: 10px 56px;
+}
+
+/* 空态（没在播放时点进封面）：一块整的居中，别再摆两栏 */
+.fullplayer-body[data-empty='true'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.fullplayer-art {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  min-height: 0;
+}
+
+/*
+ * 正方形封面：**由高度定大小、宽度由 aspect-ratio 推出来**。
+ * 不能写成「宽高都给 100%」—— 那样窗口一宽它就长成一根顶天立地的柱子；
+ * 也不能给 max-width: 100% 兜着 —— 宽度被夹住之后比例就破了，封面会被拉成长方形
+ * （宽度是确定值 + aspect-ratio 只管 auto 的那一边）。
+ * min(52vh, 100%)：52vh 在最小那档窗口（660px 高）下是 343px，左栏放得下。
+ */
+.fullplayer-art-box {
+  height: min(52vh, 100%);
+  aspect-ratio: 1;
+}
+
+.fullplayer-art-box .cover {
+  box-shadow: var(--shadow-3);
+}
+
+.fullplayer-info {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 6px 0;
+}
+
+.fullplayer-title {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.fullplayer-sub {
+  margin-top: 6px;
+  font-size: 13.5px;
+  color: var(--text-2);
+}
+
+.fullplayer-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* 歌词：撑满剩下的高度自己滚（.lyrics 自带 flex: 1 + overflow-y: auto，
+   前提是外面这一层是 flex 列 —— 是块容器的话那句 flex: 1 无处生效，
+   内容会按自身高度长出去被 .fullplayer 剪掉，表现是「看得到却滚不动」） */
+.fullplayer-lyrics {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  margin-top: 12px;
+}
+
+/* 控制带：进度线贴它的上边缘（与底栏同一份组件、同一套手感，见 PlayerProgress）。
+   position: relative 是那份进度线的定位基准（它是 absolute + left/right: 0）。 */
+.fullplayer-foot {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 16px 56px 20px;
+  border-top: 1px solid var(--line-1);
+}
+
+.fullplayer-time {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+/* 比底栏那排再大一档：这一层一屏只有播放器，38px 的钮在 56px 的主键旁边会显得零碎 */
+.fullplayer-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.fullplayer-controls .icon-btn {
+  width: 44px;
+  height: 44px;
+}
+
+.fullplayer-controls .play-btn {
+  width: 56px;
+  height: 56px;
+}
+
+.fullplayer-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 /* ── 迷你模式（见 components/MiniPlayer.tsx）──────────────────────────────

@@ -30,6 +30,7 @@ import { AddToPlaylistDialog } from './components/AddToPlaylistDialog'
 import { CommandPalette } from './components/CommandPalette'
 import { ContextMenuHost } from './components/ContextMenu'
 import { ExtensionFrame } from './components/ExtensionFrame'
+import { FullPlayer } from './components/FullPlayer'
 import { IconClose, IconLoader, IconSearch } from './components/Icons'
 import { MiniPlayer } from './components/MiniPlayer'
 import { Panel } from './components/Panel'
@@ -234,6 +235,18 @@ export function App(): React.JSX.Element {
 
       if (isTypingTarget(event.target)) return
 
+      /*
+        Esc 收起满窗播放。刻意排在输入框那道判断**之后**：命令面板的 Esc 绑在它自己的输入框上
+        （那是「关掉面板」），目标在输入框里时这里就该让开，否则一下把面板与满窗一起收掉。
+      */
+      if (event.key === 'Escape') {
+        if (ui.fullPlayer) {
+          event.preventDefault()
+          ui.setFullPlayer(false)
+        }
+        return
+      }
+
       if (event.key === ' ' || event.code === 'Space') {
         event.preventDefault()
         void player.toggle()
@@ -267,6 +280,9 @@ export function App(): React.JSX.Element {
       usePlugins.getState().reset()
       // 迷你模式也得退出：登录页要摆在一个 400×64 的窗里是没法用的
       useUi.getState().setMini(false)
+      // 满窗播放同样复位：它挂在原生面上，而登录页整块是另一套外壳。
+      // 不复位的话，「开着满窗登出、再登录」会一进门就顶着一张播放器。
+      useUi.getState().setFullPlayer(false)
       return
     }
     void usePlaylists.getState().load()
@@ -320,6 +336,7 @@ function Shell(): React.JSX.Element {
   const sidebarCollapsed = useUi((s) => s.sidebarCollapsed)
   const mini = useUi((s) => s.mini)
   const miniRestore = useUi((s) => s.miniRestore)
+  const fullPlayer = useUi((s) => s.fullPlayer)
 
   /**
    * 扩展面**第一次**被打开过没有（之后就一直挂着，见下面那段说明）。
@@ -396,6 +413,13 @@ function Shell(): React.JSX.Element {
         </div>
 
         <PlayerBar />
+
+        {/*
+          满窗播放：盖在原生面**之上**（底栏那颗封面点出来，见 components/FullPlayer.tsx）。
+          放在这一面里面而不是像 MiniPlayer 那样挂在 Shell 上：它跟着原生面一起被藏
+          （切去扩展面、进迷你都不会孤零零留在屏幕上），切回来时又原样还在。
+        */}
+        {fullPlayer ? <FullPlayer /> : null}
       </div>
 
       {/* 第一次打开过之后就一直挂着（见上面 mountExtensions 的说明） */}

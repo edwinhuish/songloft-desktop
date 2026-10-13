@@ -45,14 +45,21 @@ const ICON_SM = 24 // 原 16：收藏、播放模式
 const ICON_MD = 26 // 原 17：歌词 / 队列 / 迷你 / 音量
 const ICON_LG = 28 // 原 19：上一首 / 下一首
 
-const MODE_ICON: Record<PlayMode, React.ReactNode> = {
+/**
+ * 播放模式 → 图标 / 文案。
+ *
+ * ★ 导出是给**满窗播放**用的（见 components/FullPlayer.tsx 那条控制条）：它也要一颗模式键，
+ *   而这一张表是「哪种模式配哪颗图标、报什么名」的唯一事实源 —— 复制一份出去，
+ *   迟早只有一处还记得 `random` 该换成 IconShuffle。
+ */
+export const MODE_ICON: Record<PlayMode, React.ReactNode> = {
   order: <IconRepeat size={ICON_SM} />,
   loop: <IconRepeat size={ICON_SM} />,
   single: <IconRepeatOne size={ICON_SM} />,
   random: <IconShuffle size={ICON_SM} />
 }
 
-const MODE_LABEL: Record<PlayMode, string> = {
+export const MODE_LABEL: Record<PlayMode, string> = {
   order: '顺序播放',
   loop: '列表循环',
   single: '单曲循环',
@@ -61,7 +68,7 @@ const MODE_LABEL: Record<PlayMode, string> = {
 
 export function PlayerBar(): React.JSX.Element {
   const player = usePlayer()
-  const { panelOpen, panelTab, togglePanel, mini, setMini } = useUi()
+  const { panelOpen, panelTab, togglePanel, mini, setMini, setFullPlayer } = useUi()
   const favoriteIds = usePlaylists((s) => s.favoriteIds)
   const toggleFavorite = usePlaylists((s) => s.toggleFavorite)
   /** 拖动进度条时手上的位置；null = 没在拖（见 PlayerProgress 的说明） */
@@ -95,11 +102,17 @@ export function PlayerBar(): React.JSX.Element {
 
       {/* 左侧：当前曲目 */}
       <div className="playerbar-now">
+        {/*
+          封面 = **进满窗播放**（见 components/FullPlayer.tsx）：大封面 + 歌词 + 控制条盖住
+          标题栏以下整块。它原先开的是右侧抽屉 —— 抽屉没被砍掉，入口改成上面那颗
+          「歌词面板」与 Ctrl+L（「看一眼歌词」和「把播放器铺满一屏」本来就是两件事）。
+        */}
         <button
           type="button"
-          onClick={() => togglePanel('now-playing')}
-          style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer' }}
-          data-tip="查看正在播放"
+          className="playerbar-cover"
+          data-tip="满窗播放"
+          aria-label="满窗播放"
+          onClick={() => setFullPlayer(true)}
         >
           <Cover coverUrl={song?.cover_url} width={112} size={54} radius={10} kind="song" />
         </button>
