@@ -18,7 +18,7 @@
  *   `useUi.extensionRoute` 在切走时根本没人动它，切回来就是那一页。
  *
  * 侧栏刻意**复用主导航那一套 class**（.sidebar / .nav-item / .sidebar-playlists /
- * .sidebar-foot）：折叠时的居中、文字淡出、强调条、滚动区让位这些行为都已经在那边调好了，
+ * .sidebar-toggle）：折叠时的居中、文字淡出、强调条、滚动区让位这些行为都已经在那边调好了，
  * 这里再写一份必然与那边慢慢漂开 —— 两个侧栏宽度相同、折叠动效相同，本来就是一回事。
  */
 
@@ -141,17 +141,18 @@ function ExtensionSidebar({
         </div>
       </div>
 
-      <div className="sidebar-foot">
-        <button
-          type="button"
-          className="nav-item"
-          onClick={() => void patch({ extensionSidebarCollapsed: !collapsed })}
-          {...tip(collapsed ? '展开侧栏' : '收起侧栏')}
-        >
-          {collapsed ? <IconChevronRight size={18} /> : <IconChevronLeft size={18} />}
-          <span className="nav-text">{collapsed ? '展开侧栏' : '收起侧栏'}</span>
-        </button>
-      </div>
+      {/* 收起 / 展开。与主导航那颗同一个做法（压在右下角、不占一行，见 .sidebar-toggle）；
+          文字没了，所以提示任何时候都要挂 */}
+      <button
+        type="button"
+        className="icon-btn sidebar-toggle"
+        aria-label={collapsed ? '展开侧栏' : '收起侧栏'}
+        data-tip={collapsed ? '展开侧栏' : '收起侧栏'}
+        data-tip-place={collapsed ? 'right' : undefined}
+        onClick={() => void patch({ extensionSidebarCollapsed: !collapsed })}
+      >
+        {collapsed ? <IconChevronRight size={16} /> : <IconChevronLeft size={16} />}
+      </button>
     </nav>
   )
 }

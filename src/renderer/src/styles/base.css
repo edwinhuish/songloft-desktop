@@ -622,6 +622,8 @@ html[data-menu='open'] .plugin-view {
 /* ───────────────────────────── 侧栏 ───────────────────────────── */
 
 .sidebar {
+  /* 定位基准：右下角那颗「收起 / 展开」按钮是绝对定位的（见 .sidebar-toggle） */
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -853,26 +855,41 @@ html[data-menu='open'] .plugin-view {
   overflow-y: auto;
   overflow-x: hidden;
   margin-left: -12px;
-  padding: 0 0 4px 12px;
+  /* 底部留出 34px 的空档：右下角那颗「收起 / 展开」按钮浮在这块上（见 .sidebar-toggle），
+     不留空档的话，列表滚到底时最后一行的**右侧**（歌单条数那个数字）会被它盖住 */
+  padding: 0 0 34px 12px;
   /* 滚到头之后把滚动「续」给外层是触控板上的常见困扰：侧栏只有这一块能滚，
      续出去只会让人以为整个侧栏在动。标准属性，各引擎都认；
      -webkit-overflow-scrolling 是 iOS Safari 的旧开关，Chromium 里是空操作。 */
   overscroll-behavior: contain;
 }
 
-.sidebar-foot {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  /* 钉死在侧栏最底部。现在余量是被「我的歌单」那一段吃掉的（见 .nav-group + .nav-group），
-     底部区自然就贴在它下面；auto 外边距留着当兜底 —— 万一上面那组不再伸缩，
-     它仍能把余量收在自己上方，而不是让「收起侧栏」悬在半空。 */
-  margin-top: auto;
-  /* 同样是「别挨压」：窗口极矮时若连它也被压缩，按钮会被 .sidebar 的 overflow 剪掉，
-     整条收起/展开的入口就凭空消失了。 */
-  flex: none;
-  padding-top: 10px;
-  border-top: 1px solid var(--line-1);
+/* 收起 / 展开侧栏。
+   ★ 压在侧栏**右下角**上，不占布局：原先它是一条占满整宽、带文字的底部行
+     （.sidebar-foot），两条侧栏各被它吃掉 39px 高，而那里只剩这一个动作可点 ——
+     对「一屏要放下几十个歌单」的侧栏来说，这一笔很贵。
+   ★ 压着放就得自己带底：它下面是滚动的列表，没有底色会与条目文字叠在一起看不清。
+     底用 --bg-2（不是半透的 --surface-*）：这一颗要**压住**文字，得真盖住。
+   与它重叠的那点面积本来也是行的右端空白（图标在左、文字从左往右排），不影响阅读；
+   为了让最后一行整个让开，列表容器还留了 34px 的底部空档。 */
+/* ★ 选择器带 .sidebar 前缀是为了压过 .icon-btn（两者都是单类，而 components.css
+   后加载会把同特异性的规则盖掉）：尺寸与底色都要以这一处为准。 */
+.sidebar .sidebar-toggle {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  /* 26px 而不是 .icon-btn 的 32px：它是压在内容上的一颗小钮，比条目还重就喧宾夺主了 */
+  width: 26px;
+  height: 26px;
+  background: var(--bg-2);
+  color: var(--text-3);
+  box-shadow: var(--shadow-1);
+}
+
+.sidebar .sidebar-toggle:hover:not(:disabled) {
+  background: var(--bg-3);
+  color: var(--text-1);
 }
 
 /* 拖拽放置提示：从歌曲行拖到侧栏歌单上 */

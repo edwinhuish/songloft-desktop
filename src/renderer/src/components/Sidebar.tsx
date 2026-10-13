@@ -223,22 +223,25 @@ export function Sidebar(): React.JSX.Element {
         </div>
       </div>
 
-      <div className="sidebar-foot">
-        <button
-          type="button"
-          className="nav-item"
-          onClick={() => {
-            const next = !sidebarCollapsed
-            toggleSidebar()
-            void patch({ sidebarCollapsed: next })
-          }}
-          {...tip(sidebarCollapsed ? '展开侧栏' : '收起侧栏')}
-        >
-          {sidebarCollapsed ? <IconChevronRight size={18} /> : <IconChevronLeft size={18} />}
-          {/* 文字要跟着状态走：折叠着还写「收起侧栏」是自相矛盾的 */}
-          <span className="nav-text">{sidebarCollapsed ? '展开侧栏' : '收起侧栏'}</span>
-        </button>
-      </div>
+      {/* 收起 / 展开。
+          压在侧栏右下角（见 base.css 的 .sidebar-toggle），**不占一行**：原先它是一条
+          占满整宽、带文字的底行，两条侧栏各被它吃掉 39px 高，而那里只剩这一个动作可点。
+          文字随之消失，所以提示（data-tip）必须**任何时候都挂**，不再像导航项那样
+          「只在折叠态挂」——那时还有可见文字兜底。 */}
+      <button
+        type="button"
+        className="icon-btn sidebar-toggle"
+        aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
+        data-tip={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
+        data-tip-place={sidebarCollapsed ? 'right' : undefined}
+        onClick={() => {
+          const next = !sidebarCollapsed
+          toggleSidebar()
+          void patch({ sidebarCollapsed: next })
+        }}
+      >
+        {sidebarCollapsed ? <IconChevronRight size={16} /> : <IconChevronLeft size={16} />}
+      </button>
     </nav>
   )
 }

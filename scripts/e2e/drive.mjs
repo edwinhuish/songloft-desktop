@@ -651,7 +651,9 @@ const STEPS = [
   // 先折叠就不会让它盖在侧栏截图上。
   [
     '38-sidebar-collapsed',
-    "window.__t.click('.sidebar-foot .nav-item', '收起侧栏')",
+    // 收起/展开那颗按钮压在侧栏右下角（`.sidebar-toggle`），没有可见文字 ——
+    // 是个纯图标钮，只能按 aria-label 点它
+    "window.__t.clickLabel('收起侧栏')",
     1600,
     { offCenter: atMost(1) }
   ],
