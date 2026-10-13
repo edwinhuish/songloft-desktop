@@ -24,6 +24,7 @@ import { ExcludeDirsEditor } from '@/components/ExcludeDirsEditor'
 import {
   IconAlert,
   IconCheck,
+  IconChevronDown,
   IconEyeOff,
   IconExternal,
   IconLoader,
@@ -40,6 +41,7 @@ import {
 } from '@/components/Icons'
 import { Modal } from '@/components/Modal'
 import { EmptyState, Switch } from '@/components/primitives'
+import { SettingSelect, type SelectOption } from '@/components/SettingSelect'
 import {
   cancelMetadataRefresh,
   cancelScan,
@@ -138,36 +140,51 @@ interface RowProps {
   desc?: React.ReactNode
   /** 该项是服务端设置（对所有设备生效） */
   server?: boolean
-  /** 控件占满一整行（排除目录编辑器、进度条这类宽内容），而不是靠右对齐 */
-  block?: boolean
   /** 子选项：从属于上一行，左缩进 + 竖线标出这层关系 */
   nested?: boolean
-  children: React.ReactNode
+  /**
+   * 正文落到标题下方、占满整行（排除目录编辑器、扫描按钮区这类宽内容）。
+   * 这时右侧控件要从 `control` 给 —— `children` 已经被正文占用了。
+   */
+  block?: boolean
+  /** 右侧控件。与 block 搭配时它仍留在标题行右侧（开关/展开按钮属于标题，不属于正文） */
+  control?: React.ReactNode
+  children?: React.ReactNode
 }
 
-function Row({ title, desc, server, block, nested, children }: RowProps): React.JSX.Element {
+function Row({
+  title,
+  desc,
+  server,
+  nested,
+  block,
+  control,
+  children
+}: RowProps): React.JSX.Element {
+  // 非 block 行的 children 就是右侧控件（设置页的历史写法），block 行才是正文
+  const trailing = control ?? (block ? null : children)
+
   return (
     <div
       className="setting-row"
       data-nested={nested ? 'true' : undefined}
-      style={block ? { display: 'block' } : undefined}
+      data-block={block ? 'true' : undefined}
     >
-      <div className="setting-row-text">
-        <div className="setting-row-title">
-          {title}
-          {server ? (
-            <span className="badge" data-tone="accent" style={{ marginLeft: 8 }}>
-              服务端
-            </span>
-          ) : null}
+      <div className="setting-row-head">
+        <div className="setting-row-text">
+          <div className="setting-row-title">
+            {title}
+            {server ? (
+              <span className="badge" data-tone="accent" style={{ marginLeft: 8 }}>
+                服务端
+              </span>
+            ) : null}
+          </div>
+          {desc ? <div className="setting-row-desc">{desc}</div> : null}
         </div>
-        {desc ? <div className="setting-row-desc">{desc}</div> : null}
+        {trailing ? <div className="setting-row-control">{trailing}</div> : null}
       </div>
-      {block ? (
-        <div style={{ marginTop: 12 }}>{children}</div>
-      ) : (
-        <div className="setting-row-control">{children}</div>
-      )}
+      {block && children ? <div className="setting-row-body">{children}</div> : null}
     </div>
   )
 }
@@ -480,20 +497,32 @@ function PlaybackSettings(): React.JSX.Element {
 /* ───────────────────────────── 曲库与扫描 ───────────────────────────── */
 
 /** 「标题来源」的两个选项。文案对齐上游 Flutter 版的语义（标签 vs 文件名） */
-const TITLE_SOURCES: { value: ScanTitleSource; label: string }[] = [
-  { value: 'tag', label: '歌曲元数据' },
-  { value: 'filename', label: '文件名' }
+const TITLE_SOURCES: SelectOption<ScanTitleSource>[] = [
+  { value: 'tag', label: '歌曲元数据', desc: '优先读音频文件里的标题 / 歌手标签' },
+  {
+    value: 'filename',
+    label: '文件名',
+    desc: '直接拿文件名（去掉扩展名）当标题，适合文件名已编号的情况'
+  }
 ]
 
-/** 「歌单创建方式」三档，顺序与取值照上游；desc 说明的是「歌会进哪几个歌单」 */
-const PLAYLIST_MODES: { value: PlaylistMode; label: string; desc: string }[] = [
+/**
+ * 「扫描后自动创建歌单」的下拉。
+ *
+ * 「关闭」与三档创建方式**放进同一个选框**：它们本来就是同一个决定的不同取值，
+ * 拆成「开关 + 子下拉」要额外解释「关掉开关时下面这项不生效」，还多占一行。
+ */
+type PlaylistChoice = 'off' | PlaylistMode
+
+const PLAYLIST_CHOICES: SelectOption<PlaylistChoice>[] = [
+  { value: 'off', label: '关闭', desc: '扫描后不自动生成歌单' },
   { value: 'directory', label: '按文件夹', desc: '每个文件夹生成独立歌单' },
   { value: 'top_level', label: '按顶层文件夹', desc: '子文件夹的歌曲合并到一级文件夹歌单' },
   { value: 'bubble_up', label: '包含子目录', desc: '歌曲同时出现在所有上级文件夹歌单' }
 ]
 
 /** 后端只收秒且限 60 ~ 86400，所以用固定档位，不做自由输入（省掉一轮越界校验） */
-const AUTO_SCAN_INTERVALS: { value: number; label: string }[] = [
+const AUTO_SCAN_INTERVALS: SelectOption<number>[] = [
   { value: 600, label: '10 分钟' },
   { value: 1800, label: '30 分钟' },
   { value: 3600, label: '1 小时' },
@@ -532,6 +561,8 @@ function LibrarySettings(): React.JSX.Element {
   const [progress, setProgress] = useState<ScanProgress | null>(null)
   // 排除目录的三个字段是一次覆盖写，所以整份配置只留一处草稿，三个页签共改它
   const [pathDraft, setPathDraft] = useState<MusicPathSetting | null>(null)
+  // 排除目录默认收起：它是一坨配置，占位置远多于改动频率
+  const [excludeOpen, setExcludeOpen] = useState(false)
   const [refresh, setRefresh] = useState<MetadataRefreshProgress | null>(null)
   const [duplicates, setDuplicates] = useState<DuplicatesResult | null>(null)
   const [checkingDuplicates, setCheckingDuplicates] = useState(false)
@@ -616,11 +647,22 @@ function LibrarySettings(): React.JSX.Element {
       )
   }, [])
 
+  /**
+   * 一次性动作的统一跑法：占住 busy、成功提示、失败提示。
+   * `after` 只在**成功之后**跑 —— 例如保存排除目录要顺带收起那块折叠区，
+   * 保存失败还收起来的话，用户就只能自己再展开一遍才能改回去。
+   */
   const run = useCallback(
-    async (key: string, action: () => Promise<void>, successMessage: string) => {
+    async (
+      key: string,
+      action: () => Promise<void>,
+      successMessage: string,
+      after?: () => void
+    ) => {
       setBusy(key)
       try {
         await action()
+        after?.()
         toast(successMessage, 'success')
       } catch (error) {
         toast('操作失败', 'error', error instanceof Error ? error.message : undefined)
@@ -639,9 +681,39 @@ function LibrarySettings(): React.JSX.Element {
   const refreshPercent =
     refresh && refresh.total > 0 ? Math.floor((refresh.processed * 100) / refresh.total) : 0
 
-  // 三档「歌单创建方式」的差别不在名字上，而在「一首歌到底会进哪几个歌单」
-  const modeDesc =
-    PLAYLIST_MODES.find((item) => item.value === playlistMode.data)?.desc ?? PLAYLIST_MODES[0].desc
+  // 开关也并进这个下拉：关掉就是选了「关闭」这一档
+  const playlistChoice: PlaylistChoice = autoPlaylists.data
+    ? (playlistMode.data ?? 'directory')
+    : 'off'
+  // 三档创建方式的差别不在名字上，而在「一首歌到底会进哪几个歌单」，所以说明跟着选中项走
+  const playlistDesc =
+    PLAYLIST_CHOICES.find((item) => item.value === playlistChoice)?.desc ?? PLAYLIST_CHOICES[0].desc
+
+  /** 排除目录收起时的摘要：不展开也知道自己排了些什么 */
+  const excludeSummary = pathDraft
+    ? `名称 ${pathDraft.exclude_dirs.length} · 路径 ${pathDraft.exclude_paths.length} · 歌单 ${pathDraft.auto_create_exclude_dirs.length}`
+    : ''
+
+  /**
+   * 一档切换 = 两个后端字段（模式 + 开关）。写的顺序有讲究：必须**先落模式再开开关**，
+   * 反过来的话，开关已生效而模式还没落库的那一小段，后端会按旧模式（默认 directory）建歌单。
+   */
+  const changePlaylistChoice = (choice: PlaylistChoice): void => {
+    const reload = (): void => {
+      autoPlaylists.reload()
+      playlistMode.reload()
+    }
+    if (choice === 'off') {
+      writeSetting(setScanAutoCreatePlaylists(requireClient(), false), reload)
+      return
+    }
+    void setScanPlaylistMode(requireClient(), choice)
+      .then(() => setScanAutoCreatePlaylists(requireClient(), true))
+      .then(reload)
+      .catch((error: unknown) =>
+        toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
+      )
+  }
 
   return (
     <>
@@ -653,81 +725,43 @@ function LibrarySettings(): React.JSX.Element {
           音乐根目录的输入框则撤掉了 —— 它属于部署配置，改错一个字符整库就扫不到，
           不该跟日常开关放在一起（原 Flutter 版也没在这放）。
         */}
-        <Row server title="扫描后自动创建歌单" desc="扫描结束时按目录结构生成歌单">
-          {autoPlaylists.loading ? (
-            <IconLoader size={16} />
-          ) : (
-            <Switch
-              ariaLabel="扫描后自动创建歌单"
-              checked={autoPlaylists.data ?? false}
-              onChange={(checked) =>
-                writeSetting(setScanAutoCreatePlaylists(requireClient(), checked), () =>
-                  autoPlaylists.reload()
-                )
-              }
-            />
-          )}
-        </Row>
-
         <Row
           server
-          nested
-          title="歌单创建方式"
-          desc={
-            autoPlaylists.loading
-              ? '正在读取…'
-              : autoPlaylists.data
-                ? modeDesc
-                : '已关闭自动创建歌单，此项不生效'
+          title="扫描后自动创建歌单"
+          desc={autoPlaylists.loading ? '正在读取…' : playlistDesc}
+          control={
+            <SettingSelect
+              ariaLabel="扫描后自动创建歌单"
+              value={playlistChoice}
+              options={PLAYLIST_CHOICES}
+              disabled={autoPlaylists.loading || playlistMode.loading}
+              onChange={changePlaylistChoice}
+              width={170}
+            />
           }
-        >
-          <select
-            className="input"
-            style={{ width: 170 }}
-            value={playlistMode.data ?? 'directory'}
-            disabled={playlistMode.loading || !autoPlaylists.data}
-            onChange={(event) =>
-              writeSetting(
-                setScanPlaylistMode(requireClient(), event.target.value as PlaylistMode),
-                () => playlistMode.reload()
-              )
-            }
-          >
-            {PLAYLIST_MODES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </Row>
+        />
 
         <Row
           server
           title="标题来源"
-          desc="「歌曲元数据」优先读音频标签；「文件名」适合文件名已编号的情况。改完需用「重新导入」再扫一次才生效"
-        >
-          <select
-            className="input"
-            style={{ width: 150 }}
-            value={titleSource.data ?? 'tag'}
-            disabled={titleSource.loading}
-            onChange={(event) =>
-              writeSetting(
-                setScanTitleSource(requireClient(), event.target.value as ScanTitleSource),
-                () => titleSource.reload()
-              )
-            }
-          >
-            {TITLE_SOURCES.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </Row>
+          desc="改完要用「强制扫描」再扫一次才生效（那一档会重读已入库文件的元数据）"
+          control={
+            <SettingSelect
+              ariaLabel="标题来源"
+              value={titleSource.data ?? 'tag'}
+              options={TITLE_SOURCES}
+              disabled={titleSource.loading}
+              onChange={(next) =>
+                writeSetting(setScanTitleSource(requireClient(), next), () => titleSource.reload())
+              }
+              width={150}
+            />
+          }
+        />
 
         <Row
           server
+          block
           title="自动扫描"
           desc={
             autoScan.loading
@@ -736,53 +770,47 @@ function LibrarySettings(): React.JSX.Element {
                 ? `每 ${intervalLabel(autoScan.data.interval_seconds)} 自动扫描一次`
                 : '关闭'
           }
+          control={
+            autoScan.loading ? (
+              <IconLoader size={16} />
+            ) : (
+              <Switch
+                ariaLabel="自动扫描"
+                checked={autoScan.data?.enabled ?? false}
+                onChange={(checked) =>
+                  writeSetting(
+                    setAutoScan(requireClient(), {
+                      enabled: checked,
+                      interval_seconds: autoScan.data?.interval_seconds ?? DEFAULT_SCAN_INTERVAL
+                    }),
+                    () => autoScan.reload()
+                  )
+                }
+              />
+            )
+          }
         >
-          {autoScan.loading ? (
-            <IconLoader size={16} />
-          ) : (
-            <Switch
-              ariaLabel="自动扫描"
-              checked={autoScan.data?.enabled ?? false}
-              onChange={(checked) =>
+          <div className="setting-inline">
+            <span className="setting-inline-label">扫描间隔</span>
+            <SettingSelect
+              ariaLabel="扫描间隔"
+              value={autoScan.data?.interval_seconds ?? DEFAULT_SCAN_INTERVAL}
+              options={AUTO_SCAN_INTERVALS}
+              // 关着也让它可见（灰掉），用户可以先挑好间隔再开开关，不必来回切两次
+              disabled={autoScan.loading || !autoScan.data?.enabled}
+              onChange={(seconds) =>
                 writeSetting(
                   setAutoScan(requireClient(), {
-                    enabled: checked,
-                    interval_seconds: autoScan.data?.interval_seconds ?? DEFAULT_SCAN_INTERVAL
+                    enabled: autoScan.data?.enabled ?? false,
+                    interval_seconds: seconds
                   }),
                   () => autoScan.reload()
                 )
               }
+              width={140}
             />
-          )}
-        </Row>
-
-        <Row
-          server
-          nested
-          title="扫描间隔"
-          desc="后端允许 1 分钟 ~ 24 小时；关闭自动扫描后此项不生效"
-        >
-          <select
-            className="input"
-            style={{ width: 150 }}
-            value={autoScan.data?.interval_seconds ?? DEFAULT_SCAN_INTERVAL}
-            disabled={autoScan.loading || !autoScan.data?.enabled}
-            onChange={(event) =>
-              writeSetting(
-                setAutoScan(requireClient(), {
-                  enabled: autoScan.data?.enabled ?? false,
-                  interval_seconds: Number(event.target.value)
-                }),
-                () => autoScan.reload()
-              )
-            }
-          >
-            {AUTO_SCAN_INTERVALS.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
+            <span className="field-hint">后端允许 1 分钟 ~ 24 小时；关闭自动扫描后不生效</span>
+          </div>
         </Row>
 
         <Row
@@ -827,33 +855,62 @@ function LibrarySettings(): React.JSX.Element {
           server
           block
           title="排除目录"
-          desc="扫描时跳过这些目录；三种排除的作用范围不同，切页签看说明"
+          desc={
+            excludeOpen
+              ? '扫描时跳过这些目录；三种排除的作用范围不同，切页签看说明'
+              : `扫描时跳过这些目录${excludeSummary ? ` · 当前 ${excludeSummary}` : ''}`
+          }
+          control={
+            <button
+              type="button"
+              className="btn"
+              data-size="sm"
+              aria-expanded={excludeOpen}
+              aria-controls="exclude-dirs-editor"
+              onClick={() => setExcludeOpen((open) => !open)}
+            >
+              <IconChevronDown
+                size={15}
+                className="collapse-caret"
+                data-open={excludeOpen ? 'true' : undefined}
+              />
+              {excludeOpen ? '收起' : '展开'}
+            </button>
+          }
         >
-          {pathDraft ? (
-            <ExcludeDirsEditor
-              value={pathDraft}
-              onChange={setPathDraft}
-              saving={busy === 'exclude'}
-              onSave={() =>
-                void run(
-                  'exclude',
-                  async () => {
-                    await updateMusicPath(requireClient(), pathDraft)
-                    musicPath.reload()
-                  },
-                  '排除目录已保存，后台正在清理被排除目录中的歌曲'
-                )
-              }
-            />
-          ) : (
-            <div className="field-hint">
-              {musicPath.error ? `读取排除配置失败：${musicPath.error}` : '正在读取排除配置…'}
+          {excludeOpen ? (
+            <div id="exclude-dirs-editor">
+              {pathDraft ? (
+                <ExcludeDirsEditor
+                  value={pathDraft}
+                  onChange={setPathDraft}
+                  saving={busy === 'exclude'}
+                  // 存完就收起来：这块折叠区是为「改一改」临时打开的，
+                  // 保存成功说明这次改动结束了，再摊着只是挡住下面的扫描按钮
+                  onSave={() =>
+                    void run(
+                      'exclude',
+                      async () => {
+                        await updateMusicPath(requireClient(), pathDraft)
+                        musicPath.reload()
+                      },
+                      '排除目录已保存，后台正在清理被排除目录中的歌曲',
+                      () => setExcludeOpen(false)
+                    )
+                  }
+                />
+              ) : (
+                <div className="field-hint">
+                  {musicPath.error ? `读取排除配置失败：${musicPath.error}` : '正在读取排除配置…'}
+                </div>
+              )}
             </div>
-          )}
+          ) : null}
         </Row>
 
         <Row
           server
+          block
           title="扫描进度"
           desc={
             progress
@@ -863,71 +920,77 @@ function LibrarySettings(): React.JSX.Element {
               : '正在读取…'
           }
         >
-          <div className="row" style={{ gap: 8 }}>
-            <button
-              type="button"
-              className="btn"
-              data-variant="primary"
-              disabled={isScanning || busy === 'scan'}
-              onClick={() =>
-                void run(
-                  'scan',
-                  async () => {
-                    await startScan(requireClient(), false)
-                    setProgress(await getScanProgress(requireClient()))
-                  },
-                  '扫描已开始'
-                )
-              }
-            >
-              <IconSparkle size={15} />
-              开始扫描
-            </button>
-            <button
-              type="button"
-              className="btn"
-              disabled={isScanning || busy === 'rescan'}
-              title="重新读取已入库文件（忽略缓存），文件没变时用不上"
-              onClick={() =>
-                void run(
-                  'rescan',
-                  async () => {
-                    await startScan(requireClient(), true)
-                    setProgress(await getScanProgress(requireClient()))
-                  },
-                  '重新导入已开始'
-                )
-              }
-            >
-              重新导入
-            </button>
-            <button
-              type="button"
-              className="btn"
-              data-variant="danger"
-              disabled={!isScanning}
-              onClick={() =>
-                void run('cancel', () => cancelScan(requireClient()), '已请求取消扫描')
-              }
-            >
-              取消
-            </button>
-          </div>
+          {isScanning ? (
+            <>
+              <div className="progress-track">
+                <div className="progress-fill" style={{ width: `${percent}%` }} />
+              </div>
+              <div className="setting-row-desc" style={{ marginTop: 8 }}>
+                {percent}%{progress?.current_file ? ` · ${progress.current_file}` : ''}
+                {progress && progress.cue_split_sources > 0
+                  ? ` · 已切 CUE 整轨 ${progress.cue_split_sources} 个`
+                  : ''}
+              </div>
+              {/* 扫描中只剩「停下来」这一件事可做：两个入口一起消失，不留能按的假按钮 */}
+              <button
+                type="button"
+                className="btn"
+                data-variant="danger"
+                style={{ width: '100%', marginTop: 10 }}
+                disabled={busy === 'cancel'}
+                onClick={() =>
+                  void run('cancel', () => cancelScan(requireClient()), '已请求取消扫描')
+                }
+              >
+                取消扫描
+              </button>
+            </>
+          ) : (
+            <div className="scan-actions">
+              <button
+                type="button"
+                className="btn"
+                data-variant="success"
+                style={{ flex: 1 }}
+                disabled={busy === 'scan'}
+                title="扫描尚未入库的新文件（已在库里的按修改时间跳过）"
+                onClick={() =>
+                  void run(
+                    'scan',
+                    async () => {
+                      await startScan(requireClient(), false)
+                      setProgress(await getScanProgress(requireClient()))
+                    },
+                    '扫描已开始'
+                  )
+                }
+              >
+                <IconRefresh size={15} />
+                重新扫描
+              </button>
+              <button
+                type="button"
+                className="btn"
+                style={{ flex: 'none' }}
+                disabled={busy === 'force'}
+                title="忽略缓存：已入库的文件也重新读一遍元数据（改了「标题来源」就该跑它），慢"
+                onClick={() =>
+                  void run(
+                    'force',
+                    async () => {
+                      await startScan(requireClient(), true)
+                      setProgress(await getScanProgress(requireClient()))
+                    },
+                    '强制扫描已开始'
+                  )
+                }
+              >
+                <IconSparkle size={15} />
+                强制扫描
+              </button>
+            </div>
+          )}
         </Row>
-
-        {progress && progress.status !== 'idle' ? (
-          <div className="setting-row" style={{ display: 'block' }}>
-            <div className="progress-track" style={{ marginTop: 4 }}>
-              <div className="progress-fill" style={{ width: `${percent}%` }} />
-            </div>
-            <div className="setting-row-desc" style={{ marginTop: 8 }}>
-              {percent}%{progress.current_file ? ` · ${progress.current_file}` : ''}
-              {progress.cue_split_sources > 0
-                ? ` · 已切 CUE 整轨 ${progress.cue_split_sources} 个`
-                : ''}
-            </div>
-          </div>
-        ) : null}
       </Card>
 
       <Card title="曲库维护">
@@ -986,8 +1049,8 @@ function LibrarySettings(): React.JSX.Element {
         </Row>
 
         {refreshRunning ? (
-          <div className="setting-row" style={{ display: 'block' }}>
-            <div className="progress-track" style={{ marginTop: 4 }}>
+          <div className="setting-row" data-block="true">
+            <div className="progress-track">
               <div className="progress-fill" style={{ width: `${refreshPercent}%` }} />
             </div>
           </div>

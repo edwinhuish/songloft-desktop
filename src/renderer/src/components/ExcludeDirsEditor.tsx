@@ -54,8 +54,7 @@ const SUGGESTION_LIST_ID = 'exclude-dir-name-suggestions'
 export interface ExcludeDirsEditorProps {
   value: MusicPathSetting
   onChange: (next: MusicPathSetting) => void
-  /** 后端配置还没读到：PUT 必须带 path，这时不允许保存 */
-  disabled?: boolean
+  /** 保存中（回读之前不允许连点） */
   saving?: boolean
   onSave: () => void
 }
@@ -63,7 +62,6 @@ export interface ExcludeDirsEditorProps {
 export function ExcludeDirsEditor({
   value,
   onChange,
-  disabled,
   saving,
   onSave
 }: ExcludeDirsEditorProps): React.JSX.Element {
@@ -115,7 +113,7 @@ export function ExcludeDirsEditor({
           type="button"
           className="btn"
           data-variant="primary"
-          disabled={disabled || saving}
+          disabled={saving}
           onClick={onSave}
         >
           {saving ? <IconLoader size={15} /> : <IconCheck size={15} />}
