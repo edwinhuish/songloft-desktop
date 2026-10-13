@@ -187,29 +187,41 @@
 }
 
 /* ── 默认封面 ─────────────────────────────────────────────────────────────
-   没有封面图（或图挂了）时按名字生成的那张，见 components/CoverArt.tsx。
-   底色是同色相的双色渐变：色相来自名字哈希（内联 --art-h/--art-h2/--art-angle），
-   明度与饱和度来自主题令牌，于是深浅主题各有各的成立方式、且换主题不必重算。 */
+   一类一张图（见 components/CoverArt.tsx）：色相与饱和度按类型定（下面三条），
+   明度与墨色按主题定（tokens.css）。刻意**不**按名字变色 —— 那版在长列表里太吵。 */
 .cover-art {
   position: absolute;
   inset: 0;
-  /* 图案统一用同色相的一档「墨色」：深色主题取浅、浅色主题取深（见 tokens.css） */
-  color: hsl(var(--art-h, 262) var(--cover-art-ink-s) var(--cover-art-ink));
+  /* 图案用同色相的一档「墨色」，且只在低透明度下出现：要的是一枚安静的记号，不是图标 */
+  color: hsl(var(--art-h) var(--art-s) var(--cover-art-ink) / var(--cover-art-ink-a));
   background: linear-gradient(
-    var(--art-angle, 150deg),
-    hsl(var(--art-h, 262) var(--cover-art-s) var(--cover-art-l1)),
-    hsl(var(--art-h2, 292) var(--cover-art-s) var(--cover-art-l2))
+    var(--art-angle),
+    hsl(var(--art-h) var(--art-s) var(--cover-art-l1)),
+    hsl(var(--art-h) var(--art-s) var(--cover-art-l2))
   );
-  /* 描一圈同色相的内边：小尺寸下（26px）平涂容易糊进背景，这圈让它有边界感 */
-  box-shadow: inset 0 0 0 1px hsl(var(--art-h, 262) 60% var(--cover-art-ink) / 14%);
+  /* 一圈同色相的内边：小尺寸下（20px）平涂容易糊进背景，这圈让它有边界感 */
+  box-shadow: inset 0 0 0 1px hsl(var(--art-h) var(--art-s) var(--cover-art-ink) / 9%);
 }
 
-/* 左上角一层极淡的高光。放在 ::before 而不是 ::after —— 后者会盖在图案上面 */
-.cover-art::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(120% 100% at 18% -10%, rgba(255, 255, 255, 0.14), transparent 62%);
+/* 三类的色相：都是低饱和的冷调（蓝灰 / 紫灰 / 灰绿），够区分类型，又不抢戏。
+   ★ 刻意不用暖色档：界面的底是冷黑，暖色块压在旁边会发褐、显脏 —— 试过，很脏。 */
+.cover-art[data-kind='song'] {
+  --art-h: 220;
+  --art-s: 14%;
+  --art-angle: 165deg;
+}
+
+.cover-art[data-kind='playlist'] {
+  /* 紫灰最接近本应用自己的强调色，用来代表「歌单」这类集合 */
+  --art-h: 252;
+  --art-s: 11%;
+  --art-angle: 150deg;
+}
+
+.cover-art[data-kind='artist'] {
+  --art-h: 170;
+  --art-s: 12%;
+  --art-angle: 175deg;
 }
 
 .cover-art svg {

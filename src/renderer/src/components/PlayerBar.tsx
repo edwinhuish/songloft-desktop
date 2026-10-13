@@ -147,14 +147,7 @@ export function PlayerBar(): React.JSX.Element {
           style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer' }}
           data-tip="查看正在播放"
         >
-          <Cover
-            coverUrl={song?.cover_url}
-            width={112}
-            size={54}
-            radius={10}
-            kind="song"
-            seed={song?.title ?? ''}
-          />
+          <Cover coverUrl={song?.cover_url} width={112} size={54} radius={10} kind="song" />
         </button>
         <div style={{ minWidth: 0 }}>
           <div className="playerbar-title truncate">{song?.title ?? '未在播放'}</div>

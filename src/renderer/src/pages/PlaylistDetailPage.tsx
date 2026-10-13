@@ -192,14 +192,7 @@ export function PlaylistDetailPage({ playlistId }: { playlistId: number }): Reac
       {/* ── Hero ── */}
       <div className="detail-hero">
         <div className="detail-hero-art" style={{ position: 'relative' }}>
-          <Cover
-            coverUrl={meta?.cover_url}
-            width={640}
-            size="100%"
-            radius={0}
-            kind="playlist"
-            seed={meta?.name ?? ''}
-          />
+          <Cover coverUrl={meta?.cover_url} width={640} size="100%" radius={0} kind="playlist" />
           <button
             type="button"
             className="btn"

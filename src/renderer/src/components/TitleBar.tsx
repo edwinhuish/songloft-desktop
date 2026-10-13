@@ -117,7 +117,6 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
                 size={20}
                 radius={4}
                 kind="playlist"
-                seed={playlist.name}
               />
             ),
             onClick: () => navigate({ name: 'playlist', id: playlist.id })

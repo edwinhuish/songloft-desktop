@@ -345,14 +345,7 @@ function SongRow({
       case 'title':
         return (
           <div className="row" style={{ minWidth: 0 }}>
-            <Cover
-              coverUrl={song.cover_url}
-              width={88}
-              size={34}
-              radius={7}
-              kind="song"
-              seed={song.title}
-            />
+            <Cover coverUrl={song.cover_url} width={88} size={34} radius={7} kind="song" />
             <div style={{ minWidth: 0 }}>
               <div className="song-title truncate">{song.title}</div>
             </div>

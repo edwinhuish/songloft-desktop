@@ -368,7 +368,6 @@ export function CommandPalette(): React.JSX.Element | null {
                         size={26}
                         radius={6}
                         kind="song"
-                        seed={entry.label}
                       />
                     ) : (
                       entry.icon

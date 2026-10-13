@@ -378,14 +378,7 @@ function RecentSongCard({
       onContextMenu={(event) => openMenuFromEvent(event, buildSongMenuItems([song], { onDeleted }))}
     >
       <div className="card-art">
-        <Cover
-          coverUrl={song.cover_url}
-          width={400}
-          size="100%"
-          radius={0}
-          kind="song"
-          seed={song.title}
-        />
+        <Cover coverUrl={song.cover_url} width={400} size="100%" radius={0} kind="song" />
         <button
           type="button"
           className="card-play"
@@ -422,7 +415,7 @@ function PlaylistCard({
   return (
     <div className="card" data-pinned="false" onClick={onOpen} onDoubleClick={onOpen}>
       <div className="card-art">
-        <Cover coverUrl={coverUrl} size="100%" radius={0} kind="playlist" seed={title} />
+        <Cover coverUrl={coverUrl} size="100%" radius={0} kind="playlist" />
         <button
           type="button"
           className="card-play"
@@ -459,14 +452,7 @@ function ArtistCard({
   return (
     <div className="card" role="button" tabIndex={0} onClick={onOpen} onDoubleClick={onPlay}>
       <div className="card-art">
-        <Cover
-          coverUrl={facet.cover_url}
-          size="100%"
-          radius={0}
-          round={true}
-          kind="artist"
-          seed={facet.value}
-        />
+        <Cover coverUrl={facet.cover_url} size="100%" radius={0} round={true} kind="artist" />
         <button
           type="button"
           className="card-play"

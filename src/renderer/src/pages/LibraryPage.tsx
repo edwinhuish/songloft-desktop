@@ -333,7 +333,6 @@ function LibraryView(): React.JSX.Element {
                       round={browseField === 'artist'}
                       // 分面就是「一类东西」：歌手走人像，其余（专辑/流派/语种/风格）走歌单那套
                       kind={browseField === 'artist' ? 'artist' : 'playlist'}
-                      seed={facet.value}
                     />
                   </div>
                   <div className="card-title truncate" style={{ textAlign: 'left' }}>

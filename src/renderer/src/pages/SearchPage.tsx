@@ -126,7 +126,6 @@ export function SearchPage({ keyword }: { keyword: string }): React.JSX.Element 
                       size={26}
                       radius={6}
                       kind="playlist"
-                      seed={playlist.name}
                     />
                     {playlist.name}
                     <span style={{ color: 'var(--text-4)', fontSize: 11.5 }}>
@@ -161,7 +160,6 @@ export function SearchPage({ keyword }: { keyword: string }): React.JSX.Element 
                       size={26}
                       radius={13}
                       kind="artist"
-                      seed={facet.value}
                     />
                     {facet.value}
                     <span style={{ color: 'var(--text-4)', fontSize: 11.5 }}>{facet.count} 首</span>
@@ -194,7 +192,6 @@ export function SearchPage({ keyword }: { keyword: string }): React.JSX.Element 
                       size={26}
                       radius={6}
                       kind="playlist"
-                      seed={facet.value}
                     />
                     {facet.value}
                     <span style={{ color: 'var(--text-4)', fontSize: 11.5 }}>{facet.count} 首</span>

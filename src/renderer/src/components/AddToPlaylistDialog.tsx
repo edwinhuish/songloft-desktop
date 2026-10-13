@@ -176,7 +176,6 @@ export function AddToPlaylistDialog(): React.JSX.Element | null {
                 size={36}
                 radius={8}
                 kind="playlist"
-                seed={playlist.name}
               />
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div className="truncate" style={{ fontSize: 13.5 }}>

@@ -202,13 +202,7 @@ export function PlaylistsPage(): React.JSX.Element {
               onContextMenu={(event) => openMenuFromEvent(event, menuFor(playlist))}
             >
               <div className="card-art">
-                <Cover
-                  coverUrl={playlist.cover_url}
-                  size="100%"
-                  radius={0}
-                  kind="playlist"
-                  seed={playlist.name}
-                />
+                <Cover coverUrl={playlist.cover_url} size="100%" radius={0} kind="playlist" />
               </div>
               <div className="card-title truncate row" style={{ gap: 6 }}>
                 {playlist.type === 'radio' ? <IconRadio size={13} /> : null}

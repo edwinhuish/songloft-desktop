@@ -2,9 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { CoverArt } from './CoverArt'
+import { CoverArt, type CoverKind } from './CoverArt'
 import { IconLoader, IconMusic } from './Icons'
-import type { CoverKind } from '@/lib/cover-art'
 import { buildCoverUrl } from '@/lib/url'
 import { resourceContext } from '@/state/useAuth'
 
@@ -19,11 +18,6 @@ export interface CoverProps {
   round?: boolean
   /** 没有封面图时用哪一类默认封面，默认按歌曲 */
   kind?: CoverKind
-  /**
-   * 默认封面的种子：歌名 / 歌单名 / 歌手名。
-   * 同一个名字永远得到同一张图；不传也画得出来，但列表里会长一个样 —— 能传就传。
-   */
-  seed?: string
   className?: string
   alt?: string
 }
@@ -35,7 +29,6 @@ export function Cover({
   radius = 'var(--r-md)',
   round = false,
   kind = 'song',
-  seed = '',
   className,
   alt = ''
 }: CoverProps): React.JSX.Element {
@@ -68,8 +61,8 @@ export function Cover({
           draggable={false}
         />
       ) : (
-        // 没有封面图：按名字生成一张（同一名字永远同一张，见 components/CoverArt.tsx）
-        <CoverArt kind={kind} seed={seed} />
+        // 没有封面图：按类型显示那一张（见 components/CoverArt.tsx）
+        <CoverArt kind={kind} />
       )}
     </div>
   )
