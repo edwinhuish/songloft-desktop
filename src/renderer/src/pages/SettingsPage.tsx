@@ -894,9 +894,8 @@ function ServerSettings(): React.JSX.Element {
 
   return (
     <>
-      <Card title="播放与转码（服务端）">
+      <Card title="播放与转码">
         <Row
-          server
           title="响度归一化（EBU R128）"
           desc={
             <>
@@ -927,7 +926,7 @@ function ServerSettings(): React.JSX.Element {
           )}
         </Row>
 
-        <Row server title="HLS 代理" desc="播放 m3u8 时由服务端代理切片，解决跨域与防盗链">
+        <Row title="HLS 代理" desc="播放 m3u8 时由服务端代理切片，解决跨域与防盗链">
           {hls.loading ? (
             <IconLoader size={16} />
           ) : (
