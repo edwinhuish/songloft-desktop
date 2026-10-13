@@ -186,6 +186,8 @@ export interface AppSettings {
   autoCheckUpdate: boolean
   /** 侧栏是否折叠 */
   sidebarCollapsed: boolean
+  /** 扩展主框架里那条侧边栏是否折叠（与主侧栏分开存：两者宽度与用途都不同） */
+  extensionSidebarCollapsed: boolean
   /** 记住的播放队列（会话恢复） */
   lastQueue: number[]
   lastQueueIndex: number
@@ -215,6 +217,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // 默认开着：查一次很便宜，而「不知道自己落后了」的代价更大；嫌烦的人可以关掉
   autoCheckUpdate: true,
   sidebarCollapsed: false,
+  extensionSidebarCollapsed: false,
   lastQueue: [],
   lastQueueIndex: -1,
   lastQueueContext: null,

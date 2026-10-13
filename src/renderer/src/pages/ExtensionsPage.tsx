@@ -1,22 +1,28 @@
 /**
- * 扩展管理。
+ * 插件管理 —— 扩展主框架右侧的一栏（框架与左栏见 components/ExtensionFrame.tsx）。
  *
- * 装插件是「逛」，与「改配置」不是同一种节奏，所以它是独立页而不是设置里的一个分区。
- * 左列是**已经装上的**（这里），右列是插件商店里**还能装的**。
+ * 只列**已经装上的**：「还能装的」在同框架的插件商店那一栏里。装是「逛」、这是「改配置」，
+ * 两种节奏各有各的一栏，而不是并排挤在同一屏里互相争宽度。
  *
- * 列表顺序就是标题栏入口条的顺序 —— 同一个 `order`，同一个 applyPluginOrder。
- * 两处各存一份顺序的话，「拖完没反应」或「标题栏顺序自己变了」会随机出现。
+ * 列表顺序就是扩展侧栏里那份顺序 —— 同一个 `order`，同一个 applyPluginOrder。
+ * 两处各存一份的话，「拖完没反应」或「侧栏顺序自己变了」会随机出现。
  */
 
 import { useState } from 'react'
 
 import { entryPathsOf, pluginDisplayName, type JSPlugin } from '@shared/plugin'
-import { IconGrip, IconLoader, IconPuzzle, IconRefresh, IconTrash } from '@/components/Icons'
+import {
+  IconGrip,
+  IconLoader,
+  IconPuzzle,
+  IconRefresh,
+  IconSliders,
+  IconTrash
+} from '@/components/Icons'
 import { PluginIcon } from '@/components/PluginIcon'
 import { EmptyState, Switch } from '@/components/primitives'
 import { useOrderedPlugins, usePlugins } from '@/state/usePlugins'
 import { toast } from '@/state/useToasts'
-import { PluginStore } from './PluginStore'
 
 export function ExtensionsPage(): React.JSX.Element {
   const ordered = useOrderedPlugins()
@@ -83,90 +89,81 @@ export function ExtensionsPage(): React.JSX.Element {
       <div className="page-header">
         <div>
           <h1 className="page-title row" style={{ gap: 10 }}>
-            <IconPuzzle size={24} />
-            扩展
+            <IconSliders size={24} />
+            插件管理
           </h1>
           <p className="page-subtitle">
             {loaded
-              ? `${ordered.length} 个已安装 · ${enabledCount} 个启用中 · 拖动可调整标题栏上的顺序`
+              ? `${ordered.length} 个已安装 · ${enabledCount} 个启用中 · 拖动可调整扩展侧栏里的顺序`
               : '正在读取…'}
           </p>
         </div>
+
+        <button
+          type="button"
+          className="btn"
+          data-size="sm"
+          onClick={() => void load().catch(() => toast('扩展列表刷新失败', 'error'))}
+        >
+          <IconRefresh size={14} />
+          重新读取
+        </button>
       </div>
 
-      <div className="extensions-layout">
-        <section>
-          <h2 className="section-title">
-            已安装
+      {!loaded && !error ? (
+        <div className="empty">
+          <IconLoader size={22} />
+        </div>
+      ) : null}
+
+      {error ? (
+        <EmptyState
+          icon={<IconPuzzle size={26} />}
+          title="扩展列表打不开"
+          description={error}
+          action={
             <button
               type="button"
-              className="icon-btn"
-              data-tip="重新读取"
-              aria-label="重新读取已安装列表"
-              onClick={() => void load().catch(() => toast('扩展列表刷新失败', 'error'))}
+              className="btn"
+              data-size="sm"
+              onClick={() => void load().catch(() => undefined)}
             >
-              <IconRefresh size={15} />
+              重试
             </button>
-          </h2>
+          }
+        />
+      ) : null}
 
-          {!loaded && !error ? (
-            <div className="empty">
-              <IconLoader size={22} />
-            </div>
-          ) : null}
+      {loaded && !error && ordered.length === 0 ? (
+        <EmptyState
+          icon={<IconPuzzle size={26} />}
+          title="还没有安装扩展"
+          description="左侧「插件商店」里能直接装；也可以装本地打包好的 .jsplugin.zip。"
+        />
+      ) : null}
 
-          {error ? (
-            <EmptyState
-              icon={<IconPuzzle size={26} />}
-              title="扩展列表打不开"
-              description={error}
-              action={
-                <button
-                  type="button"
-                  className="btn"
-                  data-size="sm"
-                  onClick={() => void load().catch(() => undefined)}
-                >
-                  重试
-                </button>
-              }
+      {loaded && !error && ordered.length > 0 ? (
+        <ul className="extension-list">
+          {ordered.map((plugin, index) => (
+            <ExtensionRow
+              key={plugin.id}
+              plugin={plugin}
+              dragging={dragIndex === index}
+              // 拖到自己头上不算落点，否则会画出一条毫无意义的指示线
+              over={overIndex === index && dragIndex !== null && dragIndex !== index}
+              onDragStart={() => setDragIndex(index)}
+              onDragOver={() => setOverIndex(index)}
+              onDrop={() => dropAt(index)}
+              onDragEnd={() => {
+                setDragIndex(null)
+                setOverIndex(null)
+              }}
+              onToggle={(next) => toggle(plugin, next)}
+              onUninstall={() => uninstall(plugin)}
             />
-          ) : null}
-
-          {loaded && !error && ordered.length === 0 ? (
-            <EmptyState
-              icon={<IconPuzzle size={26} />}
-              title="还没有安装扩展"
-              description="右边的插件商店里能直接装；也可以装本地打包好的 .jsplugin.zip。"
-            />
-          ) : null}
-
-          {loaded && !error && ordered.length > 0 ? (
-            <ul className="extension-list">
-              {ordered.map((plugin, index) => (
-                <ExtensionRow
-                  key={plugin.id}
-                  plugin={plugin}
-                  dragging={dragIndex === index}
-                  // 拖到自己头上不算落点，否则会画出一条毫无意义的指示线
-                  over={overIndex === index && dragIndex !== null && dragIndex !== index}
-                  onDragStart={() => setDragIndex(index)}
-                  onDragOver={() => setOverIndex(index)}
-                  onDrop={() => dropAt(index)}
-                  onDragEnd={() => {
-                    setDragIndex(null)
-                    setOverIndex(null)
-                  }}
-                  onToggle={(next) => toggle(plugin, next)}
-                  onUninstall={() => uninstall(plugin)}
-                />
-              ))}
-            </ul>
-          ) : null}
-        </section>
-
-        <PluginStore />
-      </div>
+          ))}
+        </ul>
+      ) : null}
     </div>
   )
 }

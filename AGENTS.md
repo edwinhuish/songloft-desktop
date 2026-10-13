@@ -128,28 +128,29 @@ src/
    │                 （「文件夹」不是独立页面，是 LibraryPage 里的一个标签，见 FoldersView）
    ├─ components/    Sidebar / TitleBar / SongTable / PlayerBar / LyricsView / CommandPalette /
    │                 Panel / ContextMenu / Modal / Toasts / SelectionBar /
-   │                 ExtensionStrip（标题栏入口条）/ PluginSurface（扩展 webview 栈）/ PluginIcon
-   ├─ hooks/         useSongList / usePlaylistSongs / useAsync / useExtensionStrip（入口条视窗）
+   │                 ExtensionFrame（扩展主框架：左侧栏 + 右内容面）/
+   │                 PluginSurface（扩展 webview 栈）/ PluginIcon
+   ├─ hooks/         useSongList / usePlaylistSongs / useAsync / useResponsiveSidebar
    ├─ lib/           url（资源 URL 拼接）/ color / accent / format / concurrency
    └─ styles/        tokens.css / base.css / components.css / index.css
 ```
 
-★ **标题栏以下是「一个可替换的内容面」**，三种形态由 `.shell[data-surface]` 切换
+★ **标题栏以下是「一个可替换的内容面」**，两种形态由 `.shell[data-surface]` 切换
 （见 `App.tsx` 的 Shell）：
 
 | surface | 内容 | 用在哪 |
 |---|---|---|
 | `native` | 侧栏 + 工具条 + 主区 + 抽屉 + 播放条 | 常规页面（Home / 曲库 / 设置…） |
-| `plugin` | 扩展页的 `webview` | `{name:'plugin'}`，见 §8.12 |
-| `extensions` | 占满整块的原生页（`.full-surface`） | `{name:'extensions'}`，扩展管理 |
+| `extensions` | 扩展主框架：左扩展侧栏 + 右内容面 | `{name:'extensions'}`（商店/管理）与 `{name:'plugin'}`（某个扩展），见 §8.12 |
 
-后两种都**整体不挂载**原生那一套（而不是藏起来），并且只剩两行栅格（标题栏 + `1fr`）。
+后者**整体不挂载**原生那一套（而不是藏起来），并且只剩两行栅格（标题栏 + `1fr`）。
 播放不会因此中断 —— 音频是模块级对象、不挂在 DOM 上（`state/usePlayer` 的 `audio`），
 但**播放条也不在了**，此时控制播放只能靠媒体键 / 托盘 / MPRIS。
 
-这两种路由落在 `useUi` 的 `Route` 里，但**不在 `renderRoute` 的 switch 里**（那种「既是路由
+这两条路由落在 `useUi` 的 `Route` 里，但**不在 `renderRoute` 的 switch 里**（那种「既是路由
 又不是页签」的写法就是靠 `surfacedInShell()` 判的）—— 别顺手把它们加回 switch，加回去会
-被渲染到侧栏里那一小块去。
+被渲染到侧栏里那一小块去。它们的差别只在框架右侧那一栏（`pane` / `entryPath`），所以刻意
+是两条路由而不是一条带 `view` 字段的：侧栏高亮与历史语义本来就不一样。
 
 ---
 
@@ -319,7 +320,7 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
 ### 8.12 扩展（JS 插件）：装在后端，宿主只是遥控器
 
 插件本体（manifest + `static/` + QuickJS 沙箱里的 JS）全在**服务端**，客户端不存任何插件
-二进制。本地只存两样轻量配置：**谁出现在标题栏**（启用与否）与**谁在前**（`plugin-order`，
+二进制。本地只存两样轻量配置：**谁出现在扩展侧栏里**（启用与否）与**谁在前**（`plugin-order`，
 键是 `entryPath` 而不是 id）。排序纯函数在 `shared/plugin.ts` 的 `applyPluginOrder` ——
 四条语义（孤儿条目跳过、重复取首个、未列入的按原顺序落尾、不改入参）来自上游
 `plugin_order.dart`，回归用例在 `shared/plugin.test.ts`。
@@ -343,26 +344,30 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
 4. **webview 必须显式给 display 与尺寸**，否则默认 `inline` 把高度塌成 0，表现为「加载了
    却看不见」。
 
-**标题栏入口条是「图标 + 名称」的一排，标签按内容取宽（不做统一宽度），靠左对齐**；
-可见区**只能是除去左边 LOGO、右边那组按钮之后剩下的那一块，不许由内容撑开**（`flex: 1 1 0`
-—— basis 取 0，内容的 max-content 就不进弹性基准了；取 `auto` 会先撑进基准再被 shrink 挤回，
-过程中两侧各被挤掉几像素）。露不满的从右边裁掉。三个容易做错的地方：
+**扩展是一个「去处」，不是一排页签**：标题栏上只有左上角那一个「扩展」入口（拼图图标 +
+文字），点下去把标题栏以下整块换成扩展主框架 —— 左是扩展侧栏，右是内容面（插件商店 /
+插件管理 / 某个扩展的 `webview`），三者在右侧那一栏里换，框架本身不动。
 
-* **溢出个数必须量真实几何**（`ExtensionStrip` 里数 `offsetLeft` / `offsetWidth`），不能按
-  「每个按钮固定多少像素」反推 —— 宽度随名称长短浮动，那个常量必然算错。条上是
-  **全渲染 + `overflow: hidden` 裁**的，所以数目一旦偏大，就会把裁掉的当成露着的（菜单里
-  少列几个，用户再也点不到）。
-* **只数「完全露出来」的**，所以「只露了一半」与「完全没露」一样进折叠菜单。对它们来说
-  菜单是**唯一**的入口，所以判定还留了 1px 余量往严的那边靠（`CLIP_EPSILON`）。
-* 「把被隐藏的扩展移进可视范围」只能靠**改变它在条上的位置**（裁切在右边，没有视窗可滚），
-  所以 `useUi.extensionFront` 把刚被激活的那一个提到最前。它刻意**不写设置**：标题栏是
-  工具栏，用户在管理页拖出来的顺序是配置 —— 写回去等于「点一次扩展就把自己排的顺序改了」。
+侧栏三段职责固定：**顶部两条固定入口**（插件商店 / 插件管理）、**中间一列已安装扩展**（可滚动）、
+**底部那个「收起侧栏」**。三条容易做错的地方：
 
-`.titlebar-brand` 与 `.titlebar-actions` 都 `flex: none`，外加 `.titlebar { overflow: hidden }`
-兜底：扩展条再长也不许把 LOGO 与窗口控制按钮挤动或顶出去。
+* **侧栏复用主导航那一套 class**（`.sidebar` / `.nav-item` / `.sidebar-playlists` /
+  `.sidebar-foot`）：折叠时的图标居中、文字淡出、左侧强调条、滚动区让位都是现成的，另写一套
+  必然与那边慢慢漂开 —— 两个侧栏宽度相同、折叠动效相同，本来就是一回事。列宽也共用
+  `--sidebar-current` / `--sidebar-w` 那套令牌（`.ext-frame` 与 `.shell-body` 是同一套算术）。
+* **中间那一列只列 `isDisplayable` 的**（启用且有 `entryPath`）：停用与「运行异常」的没有可
+  打开的页面，列出来也点不动。它们在插件管理页里照样看得到、处理得了。
+* **折叠状态是设置项**（`settings.extensionSidebarCollapsed`，与主侧栏那份分开存 —— 两者宽度、
+  用途都不同），不进 `useUi`：这个框架没有「窗口太窄就自动收起」那一套。
 
-入口条与菜单必须走同一个 `useExtensionStrip`：两边各算一套必然出现「菜单里列着一个其实
-就在条上的扩展」。
+★ **`PluginSurface` 在框架里常驻**（哪怕当前显示的是插件商店，只是 `display: none` 藏起来）。
+它是「活着的 = 当前显示的那个 ∪ 正在播放的那些」的实现，框架把它整块卸掉等于：用户点一下
+「插件管理」，正在放的歌就断了。所以它必须容忍 `entryPath` 为空 = 不显示、只保活
+（`display: none` 不会停掉 guest 的播放 —— 音频不挂在布局上）。
+
+`.titlebar-brand` 与 `.titlebar-actions` 都 `flex: none`，`「扩展」入口`那项是 `flex: 0 1 auto`
+（宁肯名字被省略号吃掉，也不许把窗口按钮顶出去），外加 `.titlebar { overflow: hidden }` 兜底：
+标题栏里任何一项都不许把布局撑出去。
 
 ---
 
@@ -387,7 +392,8 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
   （后者是 electron-vite 的转译副本，正常会被自动删除，异常残留时已在 `.gitignore` 里）。
 * 不要把扩展页装进 `<iframe>`：跨源 iframe 既静音不了、也探不到在不在出声（§8.12）。
 * 不要把扩展页的 webview 放进 `defaultSession`：宿主注入的 CSP 会把插件页一起改写（§8.12）。
-* 不要让入口条与折叠菜单各算一套「哪些扩展被挤出去了」：两处必须走 `useExtensionStrip`（§8.12）。
+* 不要在切到插件商店 / 插件管理时卸载 `PluginSurface`：那会把正在出声的扩展一起关掉，
+  也就是「点一下插件管理，音乐就断了」（§8.12）。
 
 ---
 
@@ -397,11 +403,11 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
 文件夹浏览、逐字歌词与点击跳转、播放队列、命令面板、扫描与重复检测、设置项。
 
 **JS 插件（扩展）**：已实现「列表 / 启用停用 / 卸载 / 上传 zip / 从商店安装 / 调整顺序」
-与「标题栏入口条 + 折叠菜单溢出列表 + 扩展管理页」。与上游的形态差异是**入口位置**：
-上游把插件挂在底部导航栏的 Tab 上，本仓库没有底部导航栏，改成标题栏右侧的图标条
-（布局与坑见 §8.12）。未做的部分：插件的商店「全部更新」、清理孤儿数据、以及各个源
-的单独管理界面。插件的**页面本身**仍由服务端提供（渲染在 webview 里），所以上游那些
-插件自带的 UI 一行都不用重写。
+与「扩展主框架（插件商店 + 插件管理 + 扩展侧栏）」。与上游的形态差异是**入口位置**：
+上游把插件挂在底部导航栏的 Tab 上，本仓库没有底部导航栏，改成标题栏左上角一个入口，
+点下去把标题栏以下整块换成扩展主框架（布局与坑见 §8.12）。未做的部分：插件的商店
+「全部更新」、清理孤儿数据、以及各个源的单独管理界面。插件的**页面本身**仍由服务端提供
+（渲染在 webview 里），所以上游那些插件自带的 UI 一行都不用重写。
 
 未实现（换栈后需重做）：均衡器、无缝播放 / 淡入淡出、DLNA 投送、桌面歌词、
 「缓存到本机」（把单曲下载到设备本地离线播放 —— 设置页里那份「本地缓存」是**另一回事**，

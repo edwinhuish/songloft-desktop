@@ -2286,21 +2286,10 @@ select.input option {
   font-variant-numeric: tabular-nums;
 }
 
-/* ── 扩展管理 ─────────────────────────────────────────────────────────── */
+/* ── 扩展（插件商店 / 插件管理）──────────────────────────────────────── */
 
-/* 左「已安装」/ 右「插件商店」。两列等宽：装插件时两边要来回对照（这个装了没、
-   那个能不能更新），一宽一窄会让对照变成负担。 */
-.extensions-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 28px;
-  align-items: start;
-}
-
-/* 不设窄屏回退：这一页占满标题栏以下整块（见 .full-surface），而窗口最小宽 1080
-   （main/windows.ts 的 MIN_WIDTH）—— 减掉左右内边距后每列仍有约 500px，够放
-   「图标 + 名称/说明 + 按钮」一整行。按窗口宽度做断点反而会在 1080~1240 这段
-   白白并成一列，把好不容易腾出来的宽度又浪费掉。 */
+/* 两栏各是一整页（不再是同一屏里的左右两列），而窗口最小宽 1080（main/windows.ts 的
+   MIN_WIDTH）减去扩展侧栏后仍有 700px 以上，所以不必为窄屏做回退。 */
 
 .extension-list {
   display: flex;
@@ -2326,7 +2315,7 @@ select.input option {
     opacity var(--dur-1) var(--ease);
 }
 
-/* 停用的那些留在列表里（用户要能把它们重新打开），但要一眼看出它们不参与入口条 */
+/* 停用的那些留在列表里（用户要能把它们重新打开），但要一眼看出它们不在扩展侧栏里 */
 .extension-row[data-enabled='false'] .extension-info {
   opacity: 0.55;
 }

@@ -18,6 +18,9 @@ export type SettingsSection =
   | 'shortcuts'
   | 'about'
 
+/** 扩展主框架里的两条固定入口 */
+export type ExtensionPane = 'store' | 'manage'
+
 export type Route =
   | { name: 'home' }
   | { name: 'library' }
@@ -28,13 +31,19 @@ export type Route =
   | { name: 'playlist'; id: number }
   | { name: 'folders'; path: string }
   | { name: 'settings'; section: SettingsSection }
-  /** 扩展管理：左列已装、右列插件商店。它是独立页而不是设置里的一个分区 ——
-   *  装插件是「逛」，与「改配置」不是同一种操作节奏 */
-  | { name: 'extensions' }
   /**
-   * 扩展页。它**不是**主内容区里的一个页签，而是把标题栏以下整块换成一个 webview ——
-   * 见 App 里 `.shell[data-surface='plugin']` 的分支。所以它在 Route 里，但不在
-   * renderRoute 的 switch 里。
+   * 扩展主框架的「固定入口」那一页（插件商店 / 插件管理）。
+   *
+   * 它不是主内容区里的一个页签，而是把标题栏以下整块换成 ExtensionFrame ——
+   * 见 App 里 `.shell[data-surface='extensions']` 的分支。所以它在 Route 里，
+   * 但不在 renderRoute 的 switch 里。
+   */
+  | { name: 'extensions'; pane: ExtensionPane }
+  /**
+   * 扩展主框架的「某个扩展」那一页：框架不变，只是右侧内容面换成一个 webview。
+   *
+   * 与上面那条分开而不是合成一条 `{name:'extensions', view: …}`：两者的侧边栏高亮、
+   * 历史语义都不一样，合成一条会让那一堆判断挤在同一个 switch 里。
    */
   | { name: 'plugin'; entryPath: string }
 
@@ -62,34 +71,14 @@ interface UiState {
   /** 播放列表选中态锚点（Shift 连选用） */
   selectionAnchor: number | null
   /**
-   * 最近一次停留过的**原生**页。
+   * 上一次停留在扩展主框架的哪一栏（插件商店 / 插件管理）。
    *
-   * 为什么单存一份：扩展之间互跳时，history 里夹着的是另一个插件，`back()` 会回到
-   * 那个插件而不是播放页。「再点一次已激活的扩展按钮 = 收起扩展」要的正是回到原生页，
-   * 所以必须记住它是哪一个。
+   * 标题栏那个「扩展」入口靠它决定进去落哪一栏 —— 每次都踢回商店的话，用户在管理页
+   * 改到一半去播放页看一眼再回来，就得重新点一次。
    */
-  lastNativeRoute: Route
-  /**
-   * 一条从溢出里**刚被激活**、需要因此提前的扩展（entryPath）。
-   *
-   * 入口条靠左对齐、装不下的从**右边**裁掉，所以「把被隐藏的那个移进可视范围」只能靠
-   * 改变它在条上的位置 —— 把它提到最前。没有视窗可滚，这是唯一能兑现那句要求的做法。
-   *
-   * 刻意**不写设置**：这是标题栏这条工具栏的临时排布，用户在管理页拖出来的顺序是配置，
-   * 两者不能互相污染（写回去的话，用户点一次扩展就会看到自己排的顺序被改了）。
-   */
-  extensionFront: string | null
-  /**
-   * 入口条一次完整露得出来几个（由入口条量出实际几何后回写）。
-   *
-   * 之所以要放进 store：折叠菜单的溢出列表也依赖它 —— 菜单得知道「哪些算被裁掉了」。
-   * 两边各自量一遍必然会算出两个不同的答案，于是菜单里列出的和条上藏起来的对不上。
-   */
-  extensionCapacity: number
+  extensionPane: ExtensionPane
 
   navigate: (route: Route) => void
-  setExtensionFront: (entryPath: string | null) => void
-  setExtensionCapacity: (capacity: number) => void
   back: () => void
   setPanelOpen: (open: boolean) => void
   togglePanel: (tab?: PanelTab) => void
@@ -118,10 +107,7 @@ export const useUi = create<UiState>((set, get) => ({
   addToPlaylistTarget: null,
   selection: [],
   selectionAnchor: null,
-  lastNativeRoute: { name: 'home' },
-  extensionFront: null,
-  // 初值只是首帧的占位，真实值由入口条量出来。取 0 会让首帧的溢出菜单列得偏多
-  extensionCapacity: 8,
+  extensionPane: 'store',
 
   navigate: (route) => {
     const current = get().route
@@ -132,14 +118,10 @@ export const useUi = create<UiState>((set, get) => ({
       history: [current, ...state.history].slice(0, MAX_HISTORY),
       selection: [],
       selectionAnchor: null,
-      // 只记原生页：插件路由记进来，「收起扩展」就会回到另一个插件
-      lastNativeRoute: route.name === 'plugin' ? state.lastNativeRoute : route
+      // 只在这一栏真的被打开时才更新，别让「去某个扩展」把它顺手改了
+      extensionPane: route.name === 'extensions' ? route.pane : state.extensionPane
     }))
   },
-
-  setExtensionFront: (entryPath) => set({ extensionFront: entryPath }),
-  // 0 是合法值（一个都放不下时整条都进溢出菜单），但要挡住负数
-  setExtensionCapacity: (capacity) => set({ extensionCapacity: Math.max(0, capacity) }),
 
   back: () => {
     const [prev, ...rest] = get().history

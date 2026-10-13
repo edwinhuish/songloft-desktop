@@ -1,5 +1,5 @@
 /**
- * 插件商店（扩展管理页的右列）。
+ * 插件商店 —— 扩展主框架右侧的一栏（框架与左栏见 components/ExtensionFrame.tsx）。
  *
  * 数据来自后端对订阅源的聚合结果（`POST /jsplugins/registry/refresh`）。三件事一律交给
  * 后端判断、前端绝不自己算：**装没装**（installed）、**能不能更新**（has_update）、
@@ -125,7 +125,7 @@ export function PluginStore(): React.JSX.Element {
         throw new Error(result.results[0]?.error || result.message || '安装失败')
       }
       toast(`已安装「${entry.name || entry.entryPath}」`, 'success')
-      // 插件列表变了 → 标题栏的入口条要跟着多出一个按钮
+      // 插件列表变了 → 扩展侧栏里要跟着多出一项
       await usePlugins.getState().load()
       // 重拉一次让这一行从「安装」变成「已安装」，也让 has_update 归零
       setReloadToken((token) => token + 1)
@@ -150,26 +150,32 @@ export function PluginStore(): React.JSX.Element {
   const hasMore = entries.length < total
 
   return (
-    <section>
-      <h2 className="section-title">
-        插件商店
-        <button
-          type="button"
-          className="icon-btn"
-          data-tip="刷新商店（会绕过服务端缓存）"
-          aria-label="刷新插件商店"
-          onClick={refresh}
-        >
-          <IconRefresh size={15} />
-        </button>
-      </h2>
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title row" style={{ gap: 10 }}>
+            <IconStore size={24} />
+            插件商店
+          </h1>
+          <p className="page-subtitle">
+            列表来自服务端聚合的扩展订阅源；安装与更新也都发生在服务端。
+          </p>
+        </div>
 
+        <button type="button" className="btn" data-size="sm" onClick={refresh}>
+          <IconRefresh size={14} />
+          刷新商店
+        </button>
+      </div>
+
+      {/* 搜索框不铺满整行：这一栏宽起来能有上千像素，一条横贯全屏的输入框反而不好对焦 */}
       <input
         className="input"
         type="search"
         value={input}
         placeholder="搜索扩展…"
         aria-label="搜索扩展"
+        style={{ maxWidth: 420 }}
         onChange={(event) => setInput(event.target.value)}
       />
 
@@ -238,7 +244,7 @@ export function PluginStore(): React.JSX.Element {
           </button>
         </div>
       ) : null}
-    </section>
+    </div>
   )
 }
 

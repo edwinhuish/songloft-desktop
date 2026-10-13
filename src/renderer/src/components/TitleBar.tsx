@@ -12,14 +12,13 @@
  *   也关不掉（只能靠 Alt+F4）。所以 App 在任何状态下都把标题栏放在最外层，
  *   这里只是把「导航菜单 / 搜索」这类需要已登录的元素藏起来。
  *
- * 布局：`[logo] ⟨扩展入口条（吃掉所有余量）⟩ [导航菜单][搜索][窗口控制]`。
- * 中间刻意**不再显示当前曲目** —— 那块整块让给了扩展入口条（见 ExtensionStrip），
- * 而曲目信息本来在播放条与右侧抽屉里各有一份。
+ * 布局：`[logo][扩展入口][折叠菜单] ⟪拖拽区⟫ [搜索][窗口控制]`。
+ * 左起三项是**去处**（回播放页 / 进扩展主框架 / 打开导航菜单），右端是搜索与窗口控制。
+ * 中间刻意不显示当前曲目 —— 曲目信息本来在播放条与右侧抽屉里各有一份。
  */
 
 import { useEffect, useState } from 'react'
 
-import { pluginDisplayName } from '@shared/plugin'
 import {
   IconClock,
   IconClose,
@@ -33,14 +32,10 @@ import {
   IconPuzzle,
   IconRestore,
   IconSearch,
-  IconSettings,
-  IconSliders
+  IconSettings
 } from './Icons'
 import { useContextMenu, type MenuItem } from './ContextMenu'
-import { ExtensionStrip } from './ExtensionStrip'
-import { PluginIcon } from './PluginIcon'
 import { Cover } from './primitives'
-import { useExtensionStrip } from '@/hooks/useExtensionStrip'
 import { useUi } from '@/state/useUi'
 import { regularPlaylists, usePlaylists } from '@/state/usePlaylists'
 
@@ -53,13 +48,21 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   const [state, setState] = useState({ maximized: false, fullscreen: false, focused: true })
   const setPaletteOpen = useUi((s) => s.setPaletteOpen)
   const navigate = useUi((s) => s.navigate)
+  const route = useUi((s) => s.route)
+  /**
+   * 上次停在扩展主框架的哪一栏。
+   *
+   * 入口按它决定进去落哪一栏 —— 每次都踢回商店的话，用户在插件管理里改到一半、
+   * 跑去播放页看一眼再回来，就得重新点一次。
+   */
+  const extensionPane = useUi((s) => s.extensionPane)
   /** 只为把 aria-expanded 说出来：读的是宿主的真实状态，而不是本地另存一份 */
   const navMenuOpen = useContextMenu((s) => s.open)
   const playlists = usePlaylists((s) => s.playlists)
   // 与侧栏「我的歌单」用同一个过滤器，两处名单不会各自漂移
   const myPlaylists = regularPlaylists(playlists)
-  // 被挤出标题栏的那些扩展要在这里列出来（入口条与它同源，见 hooks/useExtensionStrip）
-  const { hidden: hiddenExtensions, activate: activateExtension } = useExtensionStrip()
+  // 插件商店 / 插件管理 / 某个扩展——三者都算「在扩展里」，入口据此高亮
+  const inExtensions = route.name === 'extensions' || route.name === 'plugin'
 
   useEffect(() => {
     void window.songloft.window.getState().then(setState)
@@ -149,12 +152,13 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
       label: '扩展',
       icon: <IconPuzzle size={16} />,
       /**
-       * 「双面」项：悬浮列出能直接打开的扩展（含被挤出标题栏的那些），单击进扩展管理页。
-       * 二级菜单的顺序与标题栏入口条同源（都走 useExtensionStrip），所以「列表里的第几个」
-       * 与「条上的第几个」永远对得上 —— 两边各算一套必然会出现自相矛盾的列法。
+       * 进扩展主框架（落上次那一栏）。
+       *
+       * 刻意**不再有二级菜单**：扩展主框架的侧栏里就是一整列可打开的扩展，菜单再列一份
+       * 等于同一个名单出现在两处 —— 而入口条那种「挤出去了要有个兜底」的处境已经不存在了
+       * （侧栏是滚动的，不裁切）。要直奔某个扩展，进框架后在侧栏里点一下即可。
        */
-      onClick: () => navigate({ name: 'extensions' }),
-      children: extensionMenuChildren()
+      onClick: () => navigate({ name: 'extensions', pane: extensionPane })
     },
     {
       key: 'settings',
@@ -163,37 +167,6 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
       onClick: () => navigate({ name: 'settings', section: 'appearance' })
     }
   ]
-
-  /**
-   * 「扩展」的二级菜单。
-   *
-   * 第一项固定是「扩展管理」；只有真的**有扩展被挤出可视范围**时，才补一条分割线与
-   * 那串被藏起来的扩展。全都露在标题栏上时把它们再列一遍是纯噪音。
-   *
-   * 点被隐藏的那一项 = 激活它（useExtensionStrip.activate 会顺手把它滚进可视范围），
-   * 这正是「挤出去了也还有一处能点到」的兜底入口。
-   */
-  const extensionMenuChildren = (): MenuItem[] => {
-    const children: MenuItem[] = [
-      {
-        key: 'extensions-manage',
-        label: '扩展管理',
-        icon: <IconSliders size={16} />,
-        onClick: () => navigate({ name: 'extensions' })
-      }
-    ]
-    if (!hiddenExtensions.length) return children
-    children.push({ key: 'extensions-sep', label: '', separator: true })
-    for (const plugin of hiddenExtensions) {
-      children.push({
-        key: `extension-${plugin.entryPath}`,
-        label: pluginDisplayName(plugin),
-        icon: <PluginIcon plugin={plugin} size={16} />,
-        onClick: () => activateExtension(plugin.entryPath)
-      })
-    }
-    return children
-  }
 
   const toggleNavMenu = (event: React.MouseEvent<HTMLButtonElement>): void => {
     const menu = useContextMenu.getState()
@@ -223,24 +196,44 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
         </button>
       </div>
 
-      {/* 中段整块交给扩展入口条：它吃掉所有余量，于是既撑住了拖拽区，
-          又把右侧那组（菜单/搜索/窗口控制）顶到右缘 */}
-      <ExtensionStrip />
+      {!solo ? (
+        /**
+         * 扩展入口。
+         *
+         * 图标复用 IconPuzzle：拼图就是「扩展」这个概念的通用图形，插件管理的标题、
+         * 折叠菜单里那一项也都是它 —— 同一个去处给同一种记号，比再造一个语义重复的图形好。
+         * 名字照样写出来（不挂 data-tip：文字就在眼前，再浮一层同名提示是噪音）；窄窗口里
+         * 名字会被省略号截断，而窗口最小宽度 1080 下截不到它，所以不必为它再补一层提示。
+         */
+        <button
+          type="button"
+          className="titlebar-entry"
+          data-active={inExtensions ? 'true' : undefined}
+          aria-label="扩展"
+          aria-current={inExtensions ? 'page' : undefined}
+          onClick={() => navigate({ name: 'extensions', pane: extensionPane })}
+        >
+          <IconPuzzle size={16} />
+          <span className="titlebar-entry-text">扩展</span>
+        </button>
+      ) : null}
 
+      {!solo ? (
+        <button
+          type="button"
+          className="win-btn"
+          data-tip="导航菜单"
+          aria-label="导航菜单"
+          aria-haspopup="menu"
+          aria-expanded={navMenuOpen}
+          onClick={toggleNavMenu}
+        >
+          <IconMenu size={16} />
+        </button>
+      ) : null}
+
+      {/* 右端固定在右缘：左侧那几项都是 flex:none，中间空出来的就是拖拽区 */}
       <div className="titlebar-actions">
-        {!solo ? (
-          <button
-            type="button"
-            className="win-btn"
-            data-tip="导航菜单"
-            aria-label="导航菜单"
-            aria-haspopup="menu"
-            aria-expanded={navMenuOpen}
-            onClick={toggleNavMenu}
-          >
-            <IconMenu size={16} />
-          </button>
-        ) : null}
         {!solo ? (
           <button
             type="button"

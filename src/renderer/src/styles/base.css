@@ -136,28 +136,55 @@ a {
 
 /* ───────────────────────── 扩展承载面 ───────────────────────── */
 
-/* 扩展态（webview）与「占满整块的原生页」都只剩两行：标题栏 + 内容面。
-   播放条此时被整块内容面取代 —— 播放不会因此中断，音频是模块级对象、不挂在 DOM 上
-   （见 state/usePlayer 的 audio）。 */
-.shell[data-surface='plugin'],
+/* 扩展主框架只剩两行：标题栏 + 内容面。播放条此时被整块框架取代 —— 宿主播放不会因此
+   中断，音频是模块级对象、不挂在 DOM 上（见 state/usePlayer 的 audio）。 */
 .shell[data-surface='extensions'] {
   grid-template-rows: var(--titlebar-h) minmax(0, 1fr);
 }
 
-/* 占满标题栏以下整块的原生页（目前只有扩展管理）。
-   它不经过侧栏/工具条那套栅格，所以**自己负责滚动**；scrollbar-gutter 与 .main-scroll
-   同一个理由：两栏宽度会被滚动条的出现与否挤动，留出常驻槽位才不会来回抖。 */
-.full-surface {
+/* 扩展主框架：左扩展侧栏、右内容面。
+
+   列宽复用 `--sidebar-current` / `--sidebar-w` 那套令牌（主导航同样这么算宽），于是两个
+   侧栏宽度、折叠动画时长天然一致 —— 两个侧栏本就是同一种东西，各写一套宽度必然会漂开。 */
+.ext-frame {
+  display: grid;
+  grid-template-columns: var(--sidebar-current, var(--sidebar-w)) minmax(0, 1fr);
   min-height: 0;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
+  transition: grid-template-columns var(--dur-3) var(--ease);
 }
 
-/* 这一档页面要的是「用满整块」，所以放开 .page 的 1520px 上限。
-   那个上限是给阅读型内容（列表、详情）防止行长过长的，而这里是左右两栏并列，
-   宽一点只会让两栏更从容。 */
-.full-surface .page {
-  max-width: none;
+.ext-frame[data-collapsed='true'] {
+  --sidebar-current: var(--sidebar-w-collapsed);
+}
+
+/* 右侧那一栏。两个内容面（扩展 webview / 原生页）叠在同一个格子里：
+   ★ webview 那一层**一直挂着**，切到插件商店时只是被藏起来 —— 直接卸载它会把正在
+     出声的扩展一起关掉，也就是「点一下插件管理，音乐就断了」（见 ExtensionFrame）。 */
+.ext-content {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ext-content > * {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ext-content[data-pane='native'] .plugin-surface {
+  /* display:none 不会停掉 guest 的播放（音频不挂在布局上），这正是保活能成立的前提 */
+  display: none;
+}
+
+/* 原生页那一栏自己负责滚动（它不经过 .main-scroll 那套栅格）。
+   scrollbar-gutter 与 .main-scroll 同一个理由：滚动条是 10px 的实体，两栏宽度会被它的
+   出现与否挤动，留出常驻槽位才不会来回抖。 */
+.ext-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
 }
 
 .plugin-surface {
@@ -324,8 +351,8 @@ a {
   border-bottom: 1px solid var(--line-1);
   -webkit-app-region: drag;
   z-index: 40;
-  /* 最后一道保险：标题栏里任何一项都不许把布局撑出去。扩展条自己已经有 overflow: hidden，
-     这里再兜一层 —— 免得将来往标题栏里加东西时，无声地把窗口控制按钮顶出可视区。 */
+  /* 最后一道保险：标题栏里任何一项都不许把布局撑出去 —— 免得将来往标题栏里加东西时，
+     无声地把窗口控制按钮顶出可视区。 */
   overflow: hidden;
 }
 
@@ -339,8 +366,7 @@ a {
   display: flex;
   align-items: center;
   gap: 9px;
-  /* 不参与弹性伸缩：LOGO 与右侧那组窗口按钮是标题栏的固定两端，
-     扩展条再长也不能把它们挤动 */
+  /* 不参与弹性伸缩：LOGO 与右侧那组窗口按钮是标题栏的固定两端，谁都不能把它们挤动 */
   flex: none;
   font-weight: 620;
   font-size: 13px;
@@ -380,39 +406,16 @@ a {
   color: var(--text-1);
 }
 
-/* 扩展入口条的可见区。
-   ★ `flex: 1 1 0`（basis 取 **0**）是这条要求的落点：视图区只能是「除去左边 LOGO、
-     右边那组按钮之后剩下的那一块」，**不许由内容撑开**。basis 取 0 意味着入口条的宽度
-     完全不参与弹性基准的计算 —— 它只吃剩下的空间，内容再多也影响不到 LOGO 与窗口按钮
-     的位置。取 `auto` 的话，内容的 max-content 会先撑进基准、再由 flex-shrink 挤回来，
-     过程中会把两侧各挤掉一点（窗口控制按钮于是看着窄了几像素）。
-   靠左对齐：按钮紧挨 LOGO，右边空出来的那一大截就是拖拽区。
-   露不出来的（含只露了一半的）一概从**右边**裁掉，由折叠菜单接住。
-
-   `position: relative` 是给测量用的：按钮的 offsetLeft 要相对它来算。 */
-.titlebar-extensions {
-  position: relative;
-  flex: 1 1 0;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 4px;
-  min-width: 0;
-  overflow: hidden;
-}
-
-/* 标签**按内容取宽**（图标 + 名称），不做统一宽度 —— 溢出个数因此改成量真实几何，
-   没有常量需要跟 CSS 对齐了。 */
-.titlebar-ext {
-  position: relative;
-  flex: none;
+/* 扩展入口（图标 + 名称）。
+   `flex: 0 1 auto` 而不是 none：窗口极窄时宁可让名字被省略号吃掉，也不许把右侧那组
+   窗口按钮顶出去（最小宽度 1080 下截不到它，这是最后一道保险）。 */
+.titlebar-entry {
+  flex: 0 1 auto;
   display: inline-flex;
   align-items: center;
   gap: 7px;
   height: 30px;
-  /* 这是**上限**不是宽度：只有名字长到离谱时才封顶，其余各按各的自然宽度。
-     不封顶的话，一个特长名字能把整条吃光，别的扩展全被挤进溢出菜单 */
-  max-width: 190px;
+  min-width: 0;
   padding: 0 10px;
   border: none;
   background: transparent;
@@ -420,44 +423,58 @@ a {
   border-radius: var(--r-sm);
   cursor: pointer;
   font-size: 12.5px;
+  font-weight: 540;
   transition:
     background var(--dur-1) var(--ease),
     color var(--dur-1) var(--ease);
 }
 
-.titlebar-ext:hover {
+.titlebar-entry:hover {
   background: var(--surface-2);
+  color: var(--text-1);
 }
 
-.titlebar-ext[data-active='true'] {
-  background: var(--surface-2);
+/* 正在扩展里（商店 / 管理 / 某个扩展）：与 .nav-item[aria-current] 同一套语义 ——
+   底色 + 强调色图标，而不是加边框 */
+.titlebar-entry[data-active='true'] {
+  background: var(--accent-soft);
+  color: var(--text-1);
+}
+
+.titlebar-entry[data-active='true'] svg {
   color: var(--accent);
 }
 
-/* 图标那一小块的定位基准，播放蒙版相对它摆放 */
-.ext-icon {
-  position: relative;
+/* 图标不跟着名字一起被压缩：名字缩短是省略号，图标塌掉就是糊了 */
+.titlebar-entry svg {
   flex: none;
-  display: grid;
-  place-items: center;
-  width: 17px;
-  height: 17px;
 }
 
-.ext-name {
+.titlebar-entry-text {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* 扩展条目图标的定位基准（侧栏那一条里），播放蒙版相对它摆放 */
+.ext-nav-icon {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+}
+
 /* 「这个扩展正在出声」：半透明白蒙版 + 音符，叠在**图标上**。
-   只盖图标不盖整颗按钮：按钮现在带着名称，整颗盖住就把名字糊掉了。
+   只盖图标不盖整颗按钮/整行：名字要留在外面读得出来。
    音符用深色：蒙版是白的，两种主题下都读得出来。 */
 .ext-playing {
   position: absolute;
-  /* 比图标本身大一圈：音符压在 17px 的图形上会看不清 */
-  inset: -3px;
+  /* 比图标本身大一圈：音符压在 18px 的图形上会看不清。
+     只用 1px 而不是 3px —— 这一行是「图标 + 名字」，蒙版再往外扩就贴到名字上了 */
+  inset: -1px;
   display: grid;
   place-items: center;
   border-radius: 7px;
@@ -487,8 +504,11 @@ a {
   display: flex;
   align-items: center;
   gap: 2px;
-  /* 同 .titlebar-brand：搜索与三个窗口控制按钮是固定宽度的那一端，不许被挤 */
+  /* 同 .titlebar-brand：搜索与三个窗口控制按钮是固定宽度的那一端，不许被挤。
+     `margin-left: auto` 把余量全收在自己**左边** —— 那一大截就是拖拽区，
+     也正是「右端永远贴右缘」的实现（左侧那几项都是 flex:none，谁也撑不动它）。 */
   flex: none;
+  margin-left: auto;
 }
 
 .win-btn {
@@ -496,6 +516,7 @@ a {
   height: 30px;
   display: grid;
   place-items: center;
+  flex: none;
   border: none;
   background: transparent;
   color: var(--text-2);

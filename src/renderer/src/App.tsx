@@ -2,12 +2,13 @@
  * 应用外壳。
  *
  * 三层结构（栅格来自 base.css 的 .shell / .shell-body / .main-column）：
- *   ┌ 标题栏（LOGO + 扩展入口条 + 导航菜单/搜索/窗口控制）—— 唯一常驻的原生 chrome
+ *   ┌ 标题栏（LOGO + 扩展入口 + 折叠菜单/搜索/窗口控制）—— 唯一常驻的原生 chrome
  *   ├ 侧栏 │ 工具条 + 主滚动区 │ 右侧抽屉
  *   └ 播放条
  *
- * ★ 标题栏以下是**一个可替换的内容面**：原生页（上面那三层）或者某个扩展的 webview。
- *   切换靠 `.shell[data-surface]`，见下面 Shell 里的分支 —— 扩展不是主内容区里的一个页签。
+ * ★ 标题栏以下是**一个可替换的内容面**：原生页（上面那三层）或者扩展主框架（左右分栏，
+ *   左是扩展侧栏、右是插件商店/插件管理/某个扩展）。切换靠 `.shell[data-surface]`，
+ *   见下面 Shell 里的分支 —— 扩展不是一个页签，而是一整块去处。
  *
  * 三件「只该发生一次」的接线也放在这里：
  *   1. 全局快捷键（空格/方向键/Ctrl+K…）
@@ -24,17 +25,16 @@ import { checkServerUpgrade, getGithubProxy } from './api/endpoints'
 import { AddToPlaylistDialog } from './components/AddToPlaylistDialog'
 import { CommandPalette } from './components/CommandPalette'
 import { ContextMenuHost } from './components/ContextMenu'
+import { ExtensionFrame } from './components/ExtensionFrame'
 import { IconClose, IconLoader, IconSearch } from './components/Icons'
 import { Panel } from './components/Panel'
 import { PlayerBar } from './components/PlayerBar'
-import { PluginSurface } from './components/PluginSurface'
 import { Sidebar } from './components/Sidebar'
 import { TitleBar } from './components/TitleBar'
 import { Toasts } from './components/Toasts'
 import { TooltipHost } from './components/Tooltip'
 import { useResponsiveSidebar } from './hooks/useResponsiveSidebar'
 import { formatVersion } from './lib/format'
-import { ExtensionsPage } from './pages/ExtensionsPage'
 import { FavoritesPage } from './pages/FavoritesPage'
 import { HomePage } from './pages/HomePage'
 import { LibraryPage } from './pages/LibraryPage'
@@ -283,11 +283,11 @@ function Shell(): React.JSX.Element {
   const panelOpen = useUi((s) => s.panelOpen)
   const sidebarCollapsed = useUi((s) => s.sidebarCollapsed)
 
-  const isPlugin = route.name === 'plugin'
-  // 扩展管理也要占满标题栏以下整块 —— 它是个两栏的「逛 + 管」界面，被侧栏和播放条
-  // 挤掉左右各一大截之后，两栏各自都剩不下多少
-  const isFullPage = route.name === 'extensions'
-  const surface = isPlugin ? 'plugin' : isFullPage ? 'extensions' : 'native'
+  // 扩展的三条路由（插件商店 / 插件管理 / 某个扩展）都走同一个框架，所以只看「在不在扩展里」。
+  // 它要占满标题栏以下整块：左侧是扩展自己的侧栏，右侧那一栏再被主侧栏与播放条挤掉一大截就
+  // 什么都不剩了。
+  const inExtensions = route.name === 'extensions' || route.name === 'plugin'
+  const surface = inExtensions ? 'extensions' : 'native'
   const content = useMemo(() => (surfacedInShell(route) ? renderRoute(route) : null), [route])
 
   return (
@@ -295,20 +295,15 @@ function Shell(): React.JSX.Element {
       <TitleBar />
 
       {/*
-        标题栏以下是**一个可替换的内容面**，三种形态：
-          * plugin     —— 扩展页的 webview；
-          * extensions —— 占满整块的原生页（扩展管理）；
+        标题栏以下是**一个可替换的内容面**，两种形态：
+          * extensions —— 扩展主框架（左扩展侧栏 + 右内容面）；
           * native     —— 侧栏 + 工具条 + 主区 + 抽屉 + 播放条。
-        前两种都整体不挂载原生那一套（而不是藏起来）：它们要拿到完整的窗口高度，
-        留着侧栏/播放条的 DOM 只是白占布局。播放不会因此中断 —— 音频是模块级对象、
-        不挂在 DOM 上（见 state/usePlayer 的 audio）。
+        前者整体不挂载原生那一套（而不是藏起来）：它要拿到完整的窗口高度，留着侧栏/
+        播放条的 DOM 只是白占布局。宿主播放不会因此中断 —— 音频是模块级对象、不挂在
+        DOM 上（见 state/usePlayer 的 audio）；扩展自己的 webview 则在框架内常驻。
       */}
-      {isPlugin ? (
-        <PluginSurface entryPath={route.entryPath} />
-      ) : isFullPage ? (
-        <div className="full-surface">
-          <ExtensionsPage />
-        </div>
+      {inExtensions ? (
+        <ExtensionFrame />
       ) : (
         <>
           <div

@@ -1,8 +1,8 @@
 /**
- * 扩展页承载层 —— 标题栏以下的那一整块内容面。
+ * 扩展 webview 的承载层 —— 扩展主框架右侧那一栏的内容面（见 ExtensionFrame）。
  *
- * 两种内容二选一，由 App 按路由决定：原生页（播放器 / 设置 / 扩展管理）或这里的
- * 扩展 webview。视觉上永远只有一个槽位，实现上却是一个**栈**：
+ * 它在框架里**常驻**（哪怕当前显示的是插件商店 / 插件管理，只是被藏起来），
+ * 视觉上永远只有一个槽位，实现上却是一个**栈**：
  *
  *   ★ 正在出声的扩展必须活着。若切走就销毁，那「这个扩展正在播放音乐」这个角标根本
  *     无从谈起 —— 声音都没了。所以「活着的 = 当前显示的那个 ∪ 正在播放的那些」，
@@ -51,7 +51,13 @@ interface PluginWebviewHandle {
 const LOAD_TIMEOUT_MS = 15_000
 
 export interface PluginSurfaceProps {
-  /** 当前要显示的扩展 */
+  /**
+   * 当前要显示的扩展；**空串 = 一个都不显示，只保活正在出声的那些**。
+   *
+   * 空串这一档是给扩展主框架用的：用户切到「插件商店」时那个 webview 只是被藏起来
+   * （框架把它整块 display:none），不能因此被销毁 —— 否则点一下「插件管理」就把
+   * 正在放的歌掐了（见 ExtensionFrame 的说明）。
+   */
   entryPath: string
 }
 
@@ -71,7 +77,8 @@ export function PluginSurface({ entryPath }: PluginSurfaceProps): React.JSX.Elem
   }, [entryPath, runtime, plugins])
 
   // 插件列表还没回来时不要急着说「不存在」，否则冷启动进扩展页会闪一下错误
-  if (!loaded) {
+  // （entryPath 为空时连这一句都不必：我们本来就没打算显示任何东西）
+  if (!loaded && entryPath) {
     return (
       <div className="plugin-surface">
         <div className="plugin-view-overlay" data-state="loading">
@@ -82,7 +89,8 @@ export function PluginSurface({ entryPath }: PluginSurfaceProps): React.JSX.Elem
     )
   }
 
-  if (!plugins.some((plugin) => plugin.entryPath === entryPath)) {
+  // 空串这一档没有「要显示的那个」，自然也就谈不上「它不在了」
+  if (entryPath && !plugins.some((plugin) => plugin.entryPath === entryPath)) {
     return (
       <div className="plugin-surface">
         <div className="plugin-view-overlay" data-state="failed">
@@ -191,7 +199,7 @@ function ExtensionView({ plugin, active, ctx }: ExtensionViewProps): React.JSX.E
       view.removeEventListener('did-fail-load', failed)
       viewRef.current = null
       view.remove()
-      // 销毁即不可能再出声。不复位的话，入口条上会永远留着一枚不再更新的「播放中」
+      // 销毁即不可能再出声。不复位的话，扩展侧栏里会永远留着一枚不再更新的「播放中」
       setRuntime(entryPath, { playing: false })
     }
   }, [url, entryPath, setRuntime, buildToken])

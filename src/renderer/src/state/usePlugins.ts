@@ -1,9 +1,9 @@
 /**
  * 已安装的扩展（JS 插件）与其显示顺序。
  *
- * 这个 store 是**唯一**的插件事实源：标题栏入口条、折叠菜单的溢出列表、扩展管理页
- * 全部从这里派生。三处各自维护一份「我拿到的插件列表」是这类功能最常见的坏法 ——
- * 装一个插件后有的地方刷新了、有的地方没刷新，看起来像随机丢按钮。
+ * 这个 store 是**唯一**的插件事实源：扩展侧栏、插件商店、插件管理页全部从这里派生。
+ * 三处各自维护一份「我拿到的插件列表」是这类功能最常见的坏法 —— 装一个插件后有的地方
+ * 刷新了、有的地方没刷新，看起来像随机丢按钮。
  *
  * 顺序采用「乐观提交 → 以服务端返回为准 → 失败回滚」：后端会在保存时静默剔除已卸载
  * 插件的条目，前端如果沿用自己那份，界面就会显示一个并不存在的插件。
@@ -47,7 +47,7 @@ interface PluginsState {
   error: string | null
 
   load: () => Promise<void>
-  /** 用一份完整顺序覆盖（管理页拖拽、标题栏快捷调整都走它） */
+  /** 用一份完整顺序覆盖（插件管理页拖拽排序走它） */
   setOrder: (order: string[]) => Promise<void>
   setEnabled: (id: number, enabled: boolean) => Promise<void>
   remove: (id: number) => Promise<void>
@@ -160,7 +160,7 @@ export function useExtensionRuntime(entryPath: string): ExtensionRuntime {
   return usePlugins((state) => state.runtime[entryPath]) ?? IDLE_RUNTIME
 }
 
-/** 全部已安装的插件，按用户顺序（扩展管理页的左侧列表） */
+/** 全部已安装的插件，按用户顺序（插件管理页那一列） */
 export function useOrderedPlugins(): JSPlugin[] {
   const plugins = usePlugins((state) => state.plugins)
   const order = usePlugins((state) => state.order)
@@ -168,10 +168,13 @@ export function useOrderedPlugins(): JSPlugin[] {
 }
 
 /**
- * 标题栏入口位上该出现的那些扩展。
+ * 扩展侧栏里该列出来的那些扩展（= 点得进去的那些）。
  *
  * 先按 isDisplayable 过滤再排序（顺序不能反）：被停用的插件**留在 order 里**，
  * 重新启用后能回到原来的位置 —— 与上游 tab_config 的语义一致。
+ *
+ * 停用 / 运行异常的**不列**：它们没有可打开的页面，列出来点不动。它们在插件管理页里
+ * 照样看得到、处理得了（那边用的是 useOrderedPlugins）。
  */
 export function useDisplayablePlugins(): JSPlugin[] {
   const plugins = usePlugins((state) => state.plugins)
