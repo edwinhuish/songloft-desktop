@@ -124,11 +124,11 @@ function ExtensionSidebar({
         </button>
       </div>
 
+      {/* 这一组没有标题行：原先那行写着「已安装扩展」，只是把分组本身的意思又说了一遍 ——
+          上面两条固定入口 + 下面这一列插件名已经交代得很清楚。
+          去掉之后列表的顶部留白改由样式给（见 base.css 的 .ext-sidebar .sidebar-playlists），
+          否则第一行的胶囊会贴着分组分割线。 */}
       <div className="nav-group">
-        <div className="nav-section-head">
-          <span className="nav-label">已安装扩展</span>
-        </div>
-
         <div className="sidebar-playlists">
           {plugins.length === 0 ? (
             <div className="nav-empty">

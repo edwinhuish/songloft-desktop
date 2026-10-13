@@ -929,6 +929,15 @@ html[data-menu='open'] .plugin-view {
   overscroll-behavior: contain;
 }
 
+/* 扩展侧栏那一列没有标题行（原先写着「已安装扩展」），顶部留白就得自己给：
+   少了它，第一行的胶囊会直接贴着分组分割线。
+   取 --sidebar-group-gap 而不是 --nav-item-gap —— 分割线上面那一段（.sidebar 的分组间距）
+   也是这个值，两边一样宽，那条线才像是**插在两组之间**，而不是贴着下面这一列。
+   只作用在 .ext-sidebar：主侧栏的列表顶上还有「我的歌单」标题行，不需要这份内边距。 */
+.ext-sidebar .sidebar-playlists {
+  padding-top: var(--sidebar-group-gap);
+}
+
 /* 歌单列表的滚动条：三档状态机。
    ① 什么都不悬浮          —— 半透明（--surface-1，明度阶梯里最淡的一档）
    ② 鼠标进入这块可滚动区域  —— 显形（--surface-2）
