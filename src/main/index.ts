@@ -63,32 +63,27 @@ const userDataOverride = process.env.SONGLOFT_USER_DATA
 if (userDataOverride) app.setPath('userData', userDataOverride)
 
 /**
- * ★ Linux / Wayland 会话下改用 X11 后端（XWayland）。
+ * Linux 下改用 X11 后端（XWayland）—— **只在显式要求时**（`SONGLOFT_OZONE=x11`），默认不动。
  *
- * 这不是偏好，是**能力缺口**：Wayland 的 xdg-shell 里没有「置顶」这个请求，GNOME 也没实现
- * 任何替代扩展 —— window.setAlwaysOnTop() 在那条路上会被合成器**无声忽略**，而迷你模式的
- * 整个用法就是「浮在别的窗口之上」（见 windows.ts 的 setMiniAlwaysOnTop）。
- * 同一类缺口在这套桌面上还有两处：窗口图标传不出去（app-icon.ts，AGENTS §8.11）、
- * GNOME 50 起 globalShortcut 走门户被拒（AGENTS §8.1）。走 XWayland 之后这三件事都回到
- * X11 的正常路径（_NET_WM_STATE_ABOVE / _NET_WM_ICON / X11 键盘抓取）。
+ * 这个口子是为了「置顶」：Wayland 的 xdg-shell 里没有这个请求，GNOME 也没实现替代扩展，
+ * window.setAlwaysOnTop() 在那条路上会被合成器**无声忽略**（见 windows.ts 的
+ * setWindowOnTop）；走 XWayland 之后它落到 _NET_WM_STATE_ABOVE 上，窗口图标
+ * （_NET_WM_ICON）与 globalShortcut 的 X11 抓取也一并回到正常路径。
  *
- * 代价也写在这里，别让它变成暗坑：XWayland 不做原生 Wayland 的分数缩放与输入法适配
- * （GNOME 下它按整数缩放，分数缩放会糊一档）。
- * 想留原生 Wayland：`SONGLOFT_OZONE=wayland`（代价是上面三件事在 GNOME 下都不成立）。
+ * ★ 但**不能默认切**：本机实测（GNOME 45 / Wayland + XWayland）一进 dev 就
+ *   `GPU process exited unexpectedly: exit_code=139`（SIGSEGV）连发三发、窗口整个画不出来，
+ *   紧跟一句 `XGetWindowAttributes failed for window 1`。默认切过去等于把「能用的应用」换成
+ *   「要置顶但打不开的应用」—— 所以默认一切照平台走（本机 = 原生 Wayland），
+ *   只有明确要置顶的人才吃这份代价。默认态下置顶在 GNOME 上就是不成立，这是平台的账。
+ * ★ 连着 `--disable-gpu` 一起给：崩的是 XWayland 那条 GPU 路径，而这条路的唯一目的是置顶，
+ *   用软件合成换它稳定（e2e 那条路也是这么跑的，见 scripts/e2e/run.sh）。
  *
  * ★ 必须赶在 app ready 之前设：Chromium 只在启动时读一次平台，运行中改不了 —— 所以它和
  *   SONGLOFT_USER_DATA 一样放在文件顶部这一段。
- * ★ 还要有 DISPLAY 才敢切：会话是 Wayland 但没跑 XWayland（或 XWayland 没挂上）时，
- *   指定 x11 的后果是**起不来**（Chromium 报 "Missing X server or $DISPLAY"），
- *   那比"置顶不生效"严重得多。这种环境按原样走原生 Wayland，只是置顶不成立。
  */
-const ozonePref = process.env.SONGLOFT_OZONE
-const onWaylandSession =
-  process.env.XDG_SESSION_TYPE === 'wayland' || Boolean(process.env.WAYLAND_DISPLAY)
-const canUseX11 = Boolean(process.env.DISPLAY)
-const forceX11 = ozonePref === 'x11' || (ozonePref !== 'wayland' && onWaylandSession && canUseX11)
-if (process.platform === 'linux' && forceX11) {
+if (process.platform === 'linux' && process.env.SONGLOFT_OZONE === 'x11') {
   app.commandLine.appendSwitch('ozone-platform', 'x11')
+  app.commandLine.appendSwitch('disable-gpu')
 }
 
 // 只允许一个实例：第二次启动就把已有窗口顶到前面，而不是再开一个播放器。

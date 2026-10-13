@@ -206,8 +206,8 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
    * · Linux / X11：走 _NET_WM_STATE_ABOVE，由窗口管理器实现，一句够用。
    * · Linux / Wayland：**协议层就没有这个请求**（xdg-shell 里没有，GNOME 也没实现任何替代
    *   扩展），下面这一句会被合成器**无声忽略**。所以这条路上它不是「写漏了」，而是本来就
-   *   没有可写的 API —— 真正让置顶在这类会话下成立的是启动时改用 X11 后端，见 index.ts
-   *   顶部那段 ozone-platform 的说明。
+   *   没有可写的 API —— 想在这种会话下真的要到位顶，只能用 X11 后端启动
+   *   （`SONGLOFT_OZONE=x11`，见 index.ts 顶部；默认不开，那份代价不小）。
    */
   const setWindowOnTop = (on: boolean, acrossSpaces: boolean): void => {
     if (on) {
