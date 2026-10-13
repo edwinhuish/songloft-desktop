@@ -1068,6 +1068,16 @@ select.input option {
   border-top: 1px solid var(--line-1);
 }
 
+/*
+ * 子选项行（例如「歌单创建方式」挂在「扫描后自动创建歌单」下面）：
+ * 左缩进 + 竖线，让「它属于上一项」一眼可见 —— 两者都只在开关打开时才生效，
+ * 光靠文案说「关闭时不生效」是看不见这层关系的。
+ */
+.setting-row[data-nested='true'] {
+  padding-left: 22px;
+  box-shadow: inset 2px 0 0 var(--line-2);
+}
+
 .setting-row-text {
   min-width: 0;
 }
@@ -1699,6 +1709,88 @@ select.input option {
   background: var(--accent);
   border-radius: var(--r-pill);
   transition: width var(--dur-3) var(--ease);
+}
+
+/* ── 排除目录编辑器 ───────────────────────────────────────────────────── */
+
+/* 输入框占满一行、按钮贴右边且不被压扁 */
+.exclude-editor .row > .input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/*
+ * 目录树：与「路径排除」配合使用。整块带内边距与底色，跟上面的输入框分开，
+ * 免得看起来像是同一片表单。
+ */
+.dir-tree {
+  margin-top: 10px;
+  padding: 10px 12px;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-sm);
+  background: var(--surface-1);
+}
+
+.dir-node {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+}
+
+/* 展开箭头：没有子目录时禁用，保留宽度以免同一层的文件名左右错位 */
+.dir-caret {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: var(--text-4);
+  cursor: pointer;
+  border-radius: var(--r-xs);
+  font-size: 10px;
+}
+
+.dir-caret:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+.dir-caret:disabled {
+  cursor: default;
+}
+
+.dir-caret > span[data-open='true'] {
+  transform: rotate(90deg);
+}
+
+.dir-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.dir-name:hover {
+  background: var(--surface-2);
+  color: var(--text-1);
+}
+
+.dir-name[aria-pressed='true'] {
+  background: var(--accent-soft);
+  color: var(--text-1);
 }
 
 /* ── 工具类 ───────────────────────────────────────────────────────────── */
