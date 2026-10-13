@@ -5,19 +5,21 @@
  *   1. **服务器地址是一等公民** —— songloft 后端不是云服务，地址必须手填；
  *   2. **探测按钮**：填完地址先点一下，能立刻分出「地址错了」「服务没起来」
  *      「地址对但需要 TLS 放行」三种情况，而不是登录失败后盲猜；
- *   3. **已保存服务器列表**：多台 NAS 之间切换，不该每次重敲地址。
+ *   3. **地址字段本身就是已保存服务器的选择器**（可编辑下拉）：既能手敲，
+ *      也能展开历史记录 —— 每条带上「这台机器上次用哪个账号登录的」，免得选错 NAS。
  */
 
 import { useEffect, useState } from 'react'
 
-import type { ServerProbeResult } from '@shared/ipc'
+import type { ServerEntry, ServerProbeResult } from '@shared/ipc'
+import { useContextMenu, type MenuItem } from '@/components/ContextMenu'
 import {
   IconAlert,
   IconCheck,
+  IconChevronDown,
   IconLoader,
   IconServer,
-  IconSparkle,
-  IconTrash
+  IconSparkle
 } from '@/components/Icons'
 import { Switch } from '@/components/primitives'
 import { useAuth } from '@/state/useAuth'
@@ -40,16 +42,71 @@ export function LoginPage(): React.JSX.Element {
 
   const [url, setUrl] = useState(servers[0]?.url ?? DEFAULT_URL)
   const [name, setName] = useState('')
-  const [username, setUsername] = useState('admin')
+  // 刻意留空：预填「admin」会让人顺手回车，撞上「用户名或密码不正确」才发现用户名错了
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [probing, setProbing] = useState(false)
   const [probeResult, setProbeResult] = useState<ServerProbeResult | null>(null)
   const [localError, setLocalError] = useState<string | null>(null)
+  /** 各已保存服务器上登录过的账号名（服务器 URL → 账号名） */
+  const [accounts, setAccounts] = useState<Record<string, string>>({})
 
   // 服务器列表异步到达时，第一次填充默认地址（用户已经改过就别动）
   useEffect(() => {
     setUrl((current) => (current === DEFAULT_URL && servers[0] ? servers[0].url : current))
   }, [servers])
+
+  // 列表一变就重读账号名：刚移除或刚在某台服务器上登录过之后，这里不该还是旧的一份
+  useEffect(() => {
+    void window.songloft.servers
+      .accounts()
+      .then(setAccounts)
+      .catch(() => undefined)
+  }, [servers])
+
+  /** 从历史记录里选中一台：填地址与备注名，账号名已知时一并填上 */
+  const selectServer = (server: ServerEntry): void => {
+    setUrl(server.url)
+    setName(server.name)
+    const account = accounts[server.url]
+    if (account) setUsername(account)
+    setProbeResult(null)
+    setLocalError(null)
+  }
+
+  /** 展开已保存的服务器（菜单贴在地址框下方；再点一次同一个按钮收起） */
+  const openSavedServers = (event: React.MouseEvent<HTMLButtonElement>): void => {
+    const menu = useContextMenu.getState()
+    if (menu.open && menu.anchor === event.currentTarget) {
+      menu.hide()
+      return
+    }
+    const anchor = event.currentTarget.closest('.input-combo') ?? event.currentTarget
+    const rect = anchor.getBoundingClientRect()
+    const items: MenuItem[] = servers.map((server) => {
+      const account = accounts[server.url]
+      return {
+        key: server.url,
+        label: account ? `${server.url} · ${account}` : server.url,
+        onClick: () => selectServer(server),
+        // 点击 = 填进表单；「直接进入 / 移除」放二级菜单，免得同一条记录在列表里出现两次
+        children: [
+          {
+            key: `${server.url}#enter`,
+            label: `直接进入（${account ?? '已保存凭据'}）`,
+            onClick: () => void switchServer(server.url)
+          },
+          {
+            key: `${server.url}#forget`,
+            label: '移除该服务器及其本机凭据',
+            variant: 'danger',
+            onClick: () => void forgetServer(server.url)
+          }
+        ]
+      }
+    })
+    useContextMenu.getState().show(rect.left, rect.bottom + 4, items, event.currentTarget)
+  }
 
   const handleProbe = async (): Promise<void> => {
     const target = url.trim()
@@ -131,18 +188,32 @@ export function LoginPage(): React.JSX.Element {
               服务器地址
             </label>
             <div className="row" style={{ gap: 8 }}>
-              <input
-                id="server-url"
-                className="input"
-                value={url}
-                placeholder={DEFAULT_URL}
-                spellCheck={false}
-                autoCapitalize="off"
-                onChange={(event) => {
-                  setUrl(event.target.value)
-                  setProbeResult(null)
-                }}
-              />
+              <div className="input-combo grow">
+                <input
+                  id="server-url"
+                  className="input"
+                  value={url}
+                  placeholder={DEFAULT_URL}
+                  spellCheck={false}
+                  autoCapitalize="off"
+                  onChange={(event) => {
+                    setUrl(event.target.value)
+                    setProbeResult(null)
+                  }}
+                />
+                {servers.length > 0 ? (
+                  <button
+                    type="button"
+                    className="input-combo-toggle"
+                    title="已保存的服务器"
+                    aria-label="展开已保存的服务器"
+                    aria-haspopup="menu"
+                    onClick={openSavedServers}
+                  >
+                    <IconChevronDown size={15} />
+                  </button>
+                ) : null}
+              </div>
               <button
                 type="button"
                 className="btn"
@@ -247,66 +318,6 @@ export function LoginPage(): React.JSX.Element {
             {busy ? <IconLoader size={16} /> : null}
             {busy ? '正在登录…' : '登录'}
           </button>
-
-          {servers.length > 0 ? (
-            <>
-              <div className="divider" />
-              <div className="field-label">已保存的服务器</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: -4 }}>
-                {servers.map((server) => (
-                  <div
-                    key={server.url}
-                    className="row"
-                    style={{ gap: 6, padding: '5px 8px', borderRadius: 'var(--r-sm)' }}
-                  >
-                    <button
-                      type="button"
-                      className="grow truncate"
-                      style={{
-                        border: 'none',
-                        background: 'transparent',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        padding: '4px 0',
-                        color: 'var(--text-2)'
-                      }}
-                      title={server.url}
-                      onClick={() => {
-                        setUrl(server.url)
-                        setName(server.name)
-                        setProbeResult(null)
-                        setLocalError(null)
-                      }}
-                    >
-                      <div style={{ fontSize: 13, color: 'var(--text-1)' }}>{server.name}</div>
-                      <div className="truncate" style={{ fontSize: 11.5, color: 'var(--text-4)' }}>
-                        {server.url}
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      className="btn"
-                      data-size="sm"
-                      data-variant="ghost"
-                      title="用已保存的凭据直接进入"
-                      onClick={() => void switchServer(server.url)}
-                    >
-                      直接进入
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      title="移除该服务器"
-                      aria-label={`移除 ${server.name}`}
-                      onClick={() => void forgetServer(server.url)}
-                    >
-                      <IconTrash size={15} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : null}
         </form>
       </div>
     </div>

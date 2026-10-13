@@ -1072,6 +1072,38 @@ select.input option {
   line-height: 1.6;
 }
 
+/* ── 可编辑下拉（输入框 + 右侧展开按钮）──────────────────────────────── */
+
+.input-combo {
+  position: relative;
+  min-width: 0;
+}
+
+.input-combo .input {
+  padding-right: 34px;
+}
+
+.input-combo-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--r-xs);
+  background: transparent;
+  color: var(--text-4);
+  cursor: pointer;
+}
+
+.input-combo-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
 /* 设置行标题后面的状态后缀：版本号 / 连接耗时 / 「断开链接」 */
 .setting-row-meta {
   margin-left: 8px;
