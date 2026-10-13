@@ -412,6 +412,40 @@ function AppearanceSettings(): React.JSX.Element {
         </Row>
       </Card>
 
+      {/* 两个播放器各有各的底色浓度：主播放条常与曲库并排看，迷你窗口要浮在别的窗口上，
+          想要的通透程度本来就不同，所以各给一个滑块而不是共用一个 */}
+      <Card title="播放器透明度">
+        <Row
+          title="主播放器不透明度"
+          desc={`底部播放条底色的浓度：${settings.playerOpacity}%（100 为不透明，0 只留模糊）`}
+        >
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={settings.playerOpacity}
+            aria-label="主播放器不透明度"
+            onChange={(event) => void patch({ playerOpacity: Number(event.target.value) })}
+            style={{ width: 180 }}
+          />
+        </Row>
+
+        <Row
+          title="迷你播放器不透明度"
+          desc={`迷你窗口底色的浓度：${settings.miniOpacity}%（与主播放器各管各的，调一个不动另一个）`}
+        >
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={settings.miniOpacity}
+            aria-label="迷你播放器不透明度"
+            onChange={(event) => void patch({ miniOpacity: Number(event.target.value) })}
+            style={{ width: 180 }}
+          />
+        </Row>
+      </Card>
+
       <Card title="重置">
         <Row title="恢复默认设置" desc="只重置本机偏好，不会动服务器上的任何数据">
           <button
@@ -435,6 +469,14 @@ function AppearanceSettings(): React.JSX.Element {
 
 function PlaybackSettings(): React.JSX.Element {
   const { settings, patch } = useSettings()
+
+  /*
+   * 取色器必须拿到一个具体色值（不能是空串）。跟随主题时按「当前实际生效的主题」
+   * 推一个对立的颜色：空着直接点开，浅色主题下会落在白色上，选出来一片看不见的浅色歌词。
+   * （data-theme 是 applyToDocument 写下的**已解析**主题，system 也已经被换算了。）
+   */
+  const fallbackLyricColor =
+    document.documentElement.dataset.theme === 'light' ? '#12141f' : '#ffffff'
 
   const normalize = useAsync(() => getVolumeNormalize(requireClient()), [])
 
@@ -544,6 +586,67 @@ function PlaybackSettings(): React.JSX.Element {
             style={{ width: 180 }}
           />
         </Row>
+        <Row
+          title="歌词字体颜色"
+          desc={settings.lyricFontColor ? `当前 ${settings.lyricFontColor}` : '跟随主题文字色'}
+        >
+          <div className="row" style={{ gap: 6 }}>
+            <input
+              type="color"
+              aria-label="歌词字体颜色"
+              value={settings.lyricFontColor || fallbackLyricColor}
+              onChange={(event) => void patch({ lyricFontColor: event.target.value })}
+              style={{
+                width: 34,
+                height: 26,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer'
+              }}
+            />
+            <button
+              type="button"
+              className="btn"
+              data-size="sm"
+              data-variant="ghost"
+              disabled={!settings.lyricFontColor}
+              onClick={() => void patch({ lyricFontColor: '' })}
+            >
+              跟随主题
+            </button>
+          </div>
+        </Row>
+
+        <Row
+          title="歌词字体不透明度"
+          desc={`${settings.lyricFontOpacity}%（只影响歌词文字；当前行依旧最亮，其余按比例变淡）`}
+        >
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={settings.lyricFontOpacity}
+            aria-label="歌词字体不透明度"
+            onChange={(event) => void patch({ lyricFontOpacity: Number(event.target.value) })}
+            style={{ width: 180 }}
+          />
+        </Row>
+
+        <Row
+          title="歌词面板不透明度"
+          desc={`歌词区域自身的底色：${settings.lyricPanelOpacity}%（0 为默认，完全透出所在面板的玻璃质感）`}
+        >
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={settings.lyricPanelOpacity}
+            aria-label="歌词面板不透明度"
+            onChange={(event) => void patch({ lyricPanelOpacity: Number(event.target.value) })}
+            style={{ width: 180 }}
+          />
+        </Row>
+
         <Row title="显示翻译" desc="后端返回 tlyric 时显示在原文下方">
           <Switch
             ariaLabel="显示歌词翻译"

@@ -745,7 +745,8 @@
   gap: 16px;
   height: var(--player-h);
   padding: 0 22px;
-  background: var(--glass-tint);
+  /* 底色浓度只由「主播放器不透明度」控制（不再跟着 --glass 走），见 tokens.css 的 --player-* */
+  background: var(--player-tint);
   backdrop-filter: blur(var(--glass-blur));
   border-top: 1px solid var(--line-1);
   z-index: 30;
@@ -879,7 +880,8 @@
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
-  background: var(--glass-tint);
+  /* 底色浓度只由「迷你播放器不透明度」控制（与主播放器各管各的），见 tokens.css 的 --mini-* */
+  background: var(--mini-tint);
   backdrop-filter: blur(var(--glass-blur));
 }
 
@@ -1223,13 +1225,17 @@
   color: var(--text-3);
 }
 
-/* 歌词 */
+/* 歌词
+   ★ 底色与文字分开控制（见 tokens.css 的 --lyric-*）：
+     · 底色只有 --lyric-panel-tint 这一层，由「歌词面板不透明度」决定（0 = 不铺，透出宿主玻璃质感）；
+     · 文字颜色与不透明度只作用于文字本身，与那层底色互不影响。 */
 .lyrics {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding: 10px 0 40px;
   scroll-behavior: smooth;
+  background: var(--lyric-panel-tint);
   mask-image: linear-gradient(
     to bottom,
     transparent,
@@ -1243,7 +1249,9 @@
   padding: 9px 26px;
   font-size: 15px;
   line-height: 1.5;
-  color: var(--text-4);
+  /* 各档浓度 = 歌词字色（默认主题文字色，可为任意颜色）的百分之多少 × 字体不透明度。
+     用 color-mix 而不是整个元素的 opacity：调淡之后「当前行最亮、其余逐档变暗」依然成立 */
+  color: color-mix(in srgb, var(--lyric-fg) calc(28% * var(--lyric-fg-alpha)), transparent);
   transition:
     color var(--dur-2) var(--ease),
     transform var(--dur-2) var(--ease);
@@ -1252,11 +1260,11 @@
 }
 
 .lyric-line:hover {
-  color: var(--text-3);
+  color: color-mix(in srgb, var(--lyric-fg) calc(44% * var(--lyric-fg-alpha)), transparent);
 }
 
 .lyric-line[data-active='true'] {
-  color: var(--text-1);
+  color: color-mix(in srgb, var(--lyric-fg) calc(96% * var(--lyric-fg-alpha)), transparent);
   font-weight: 620;
   transform: scale(1.045);
 }
@@ -1268,32 +1276,33 @@
 .lyric-translation {
   font-size: 0.78em;
   font-weight: 450;
-  color: var(--text-4);
+  color: color-mix(in srgb, var(--lyric-fg) calc(28% * var(--lyric-fg-alpha)), transparent);
   margin-top: 2px;
 }
 
 .lyric-line[data-active='true'] .lyric-translation {
-  color: var(--text-2);
+  color: color-mix(in srgb, var(--lyric-fg) calc(68% * var(--lyric-fg-alpha)), transparent);
 }
 
 .lyric-roman {
   font-size: 0.7em;
-  color: var(--text-4);
+  color: color-mix(in srgb, var(--lyric-fg) calc(28% * var(--lyric-fg-alpha)), transparent);
   letter-spacing: 0.01em;
 }
 
 /* 逐字高亮：未唱到的字压暗，唱到的字由 ::after 蒙层逐字揭开 */
 .lyric-word {
   position: relative;
-  color: var(--text-4);
+  color: color-mix(in srgb, var(--lyric-fg) calc(28% * var(--lyric-fg-alpha)), transparent);
 }
 
 .lyric-line[data-active='true'] .lyric-word[data-sung='false'] {
-  color: color-mix(in srgb, var(--text-1) 34%, transparent);
+  color: color-mix(in srgb, var(--lyric-fg) calc(34% * var(--lyric-fg-alpha)), transparent);
 }
 
 .lyric-line[data-active='true'] .lyric-word[data-sung='true'] {
-  color: var(--accent);
+  /* 已唱到的字仍用强调色：字体颜色改的是「词的底色」，不该把逐字高亮的强调色也一起换掉 */
+  color: color-mix(in srgb, var(--accent) calc(100% * var(--lyric-fg-alpha)), transparent);
 }
 
 .lyrics-empty {

@@ -176,10 +176,32 @@ export interface AppSettings {
   accentFromCover: boolean
   /** 界面密度 */
   density: 'comfortable' | 'compact'
-  /** 玻璃质感强度 0–100 */
+  /** 玻璃质感强度 0–100（标题栏 / 侧栏 / 右侧抽屉共用的那层「统一浓度」） */
   glassIntensity: number
+  /**
+   * 主播放器（底部播放条）底色不透明度 0–100：100 = 完全不透明，0 = 完全透明（只剩模糊）。
+   *
+   * ★ 与 glassIntensity **各管各的**，也刻意不与 miniOpacity 共用一个值：
+   *   glassIntensity 是「所有玻璃面的统一浓度」，而这两个播放器想要的通透程度本来就不同 ——
+   *   主播放条常与曲库并排看，迷你窗口则要浮在别的窗口之上。合成一个旋钮的话，
+   *   调通透了一处，另一处跟着一起变，正是要避免的。
+   */
+  playerOpacity: number
+  /** 迷你播放器底色不透明度 0–100。与 playerOpacity 各存一份、互不影响 */
+  miniOpacity: number
   /** 歌词字号 px */
   lyricFontSize: number
+  /**
+   * 歌词区域自身底色不透明度 0–100：100 = 完全不透明，0 = 完全透明（默认）。
+   *
+   * 它只是**叠在**宿主（右侧抽屉 / 迷你窗口）玻璃质感之上的一层 —— 0 时完全透出宿主，
+   * 也就是改动前的观感。与上面两项同为「底色浓度」，但作用于哪个面互不相干。
+   */
+  lyricPanelOpacity: number
+  /** 歌词字体颜色（`#rrggbb`；空串 = 跟随主题文字色） */
+  lyricFontColor: string
+  /** 歌词字体不透明度 0–100。只影响歌词文字，不动上面那层底色 */
+  lyricFontOpacity: number
   /** 歌词是否显示翻译 / 罗马音 */
   lyricShowTranslation: boolean
   lyricShowRoman: boolean
@@ -253,7 +275,15 @@ export const DEFAULT_SETTINGS: AppSettings = {
   accentFromCover: true,
   density: 'comfortable',
   glassIntensity: 62,
+  // 57% 正是改动前 glassIntensity=62 时那层底色的浓度 —— 默认观感与原样一致
+  playerOpacity: 57,
+  miniOpacity: 57,
   lyricFontSize: 30,
+  // 默认不铺额外底色：歌词区域透出所在面板的玻璃质感（与改动前一致）
+  lyricPanelOpacity: 0,
+  // 空串 = 跟随主题的文字色
+  lyricFontColor: '',
+  lyricFontOpacity: 100,
   lyricShowTranslation: true,
   lyricShowRoman: false,
   closeToTray: false,
