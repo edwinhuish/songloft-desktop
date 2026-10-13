@@ -1,9 +1,9 @@
 /**
  * 标题栏扩展入口条。
  *
- * 布局上它是标题栏中段那个**吃掉所有余量**的容器：LOGO 在左、菜单与窗口控制在右，
- * 中间这块的宽度就是「留给入口条的可用宽度」。所以入口条不是「有几个画几个」，
- * 而是先量出宽度、算出装得下几个，再把装不下的交给折叠菜单（见 useExtensionStrip）。
+ * 一排「图标 + 名称」，**靠左对齐**（紧挨 LOGO），装不下的从右边裁掉、由折叠菜单接住。
+ * 布局上它是标题栏中段那个吃掉所有余量的容器：右侧那组（菜单 / 搜索 / 窗口控制）靠它
+ * 顶到右缘，它自己剩下来的空档就是拖拽区。
  *
  * 三个必须做对的地方：
  *   * 按钮一律 `<button>`：只有按钮才吃得到 base.css 里 `.titlebar button { no-drag }`
@@ -22,36 +22,51 @@ import { useExtensionStrip } from '@/hooks/useExtensionStrip'
 import { useExtensionRuntime, usePlugins } from '@/state/usePlugins'
 import { useUi } from '@/state/useUi'
 
-/**
- * 一个入口按钮占的宽度（含它与下一个之间的间隙）。
- *
- * 之所以是写死的常量而不是量出来的：入口按钮尺寸由 CSS 定，量单个按钮就得等它渲染完，
- * 于是「先有鸡还是先有蛋」—— 想算出装得下几个，得先渲染出来几个。固定尺寸把这个循环
- * 断开了，代价是这里的数字必须和 `.titlebar-ext` 的 width 保持一致。
- */
-const BUTTON_WIDTH = 30
-const BUTTON_GAP = 2
-
 export function ExtensionStrip(): React.JSX.Element {
-  const { visible, setCapacity, activate } = useExtensionStrip()
+  const { ordered, setCapacity, activate } = useExtensionStrip()
   const stripRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const node = stripRef.current
     if (!node) return
-    // ResizeObserver 而不是 window.resize：侧栏折叠、面板开合、主题换字号都可能改变
-    // 这里能用的宽度，而窗口尺寸一点没变。
-    const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? 0
-      setCapacity(Math.floor((width + BUTTON_GAP) / (BUTTON_WIDTH + BUTTON_GAP)))
-    })
+
+    /**
+     * 数一数有几个完整落在可视宽度里。
+     *
+     * 拿 `offsetLeft` 而不是 `getBoundingClientRect`：后者受祖先可能有的变换影响，
+     * 而且每次读取都会强制同步布局。
+     *
+     * 一旦某个的右边界越界，后面的一定也越界，所以可以提前 break —— 这不仅快，
+     * 还顺带把「露出来的必然是一段前缀」这件事写死在算法里（与 `.slice(capacity)` 一致）。
+     */
+    const measure = (): void => {
+      const available = node.clientWidth
+      if (!available) return
+      let count = 0
+      for (const child of Array.from(node.children)) {
+        const item = child as HTMLElement
+        if (item.offsetLeft + item.offsetWidth > available) break
+        count += 1
+      }
+      setCapacity(count)
+    }
+
+    // 同时盯住容器与每个按钮：换主题字号、字体回退、名称变长都可能改变按钮宽度，
+    // 而窗口尺寸和容器尺寸一点没变 —— 只观察容器会漏掉这些。
+    const observer = new ResizeObserver(measure)
     observer.observe(node)
+    for (const child of Array.from(node.children)) observer.observe(child)
+    // 首帧那次 ResizeObserver 回调不保证在绘制前到达，先手动量一遍，避免闪一下空条
+    measure()
+
     return () => observer.disconnect()
-  }, [setCapacity])
+  }, [ordered, setCapacity])
 
   return (
+    // ★ 全部条目都渲染出来（超出的交给 CSS 的 overflow: hidden 裁掉）。
+    //   不能只渲染「算出来的那几个」：按钮宽度随名称浮动，想量准个数就得先有得量。
     <div className="titlebar-extensions" ref={stripRef}>
-      {visible.map((plugin) => (
+      {ordered.map((plugin) => (
         <ExtensionButton
           key={plugin.entryPath}
           plugin={plugin}
@@ -81,6 +96,7 @@ function ExtensionButton({ plugin, onClick }: ExtensionButtonProps): React.JSX.E
       type="button"
       className="titlebar-ext"
       data-active={active ? 'true' : undefined}
+      // 名称被省略号截断时，浮层里还能读到全名
       data-tip={name}
       aria-label={name}
       aria-current={active ? 'page' : undefined}
@@ -97,12 +113,16 @@ function ExtensionButton({ plugin, onClick }: ExtensionButtonProps): React.JSX.E
         ])
       }
     >
-      <PluginIcon plugin={plugin} size={17} />
-      {runtime.playing ? (
-        <span className="ext-playing" aria-hidden="true">
-          <IconMusic size={9} />
-        </span>
-      ) : null}
+      {/* 蒙版只盖图标那一小块：按钮现在带着名称，整颗盖住会把名字糊掉 */}
+      <span className="ext-icon">
+        <PluginIcon plugin={plugin} size={17} />
+        {runtime.playing ? (
+          <span className="ext-playing" aria-hidden="true">
+            <IconMusic size={10} />
+          </span>
+        ) : null}
+      </span>
+      <span className="ext-name">{name}</span>
     </button>
   )
 }

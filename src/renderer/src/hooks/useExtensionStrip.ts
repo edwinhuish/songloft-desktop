@@ -1,14 +1,15 @@
 /**
- * 标题栏扩展入口条的「视窗」。
+ * 标题栏扩展入口条的排布与溢出。
  *
- * 把入口条理解成**有序列表上的一个窗口**，而不是一段会换行的按钮：
+ * 形态是「靠左对齐的一排 图标 + 名称」，装不下的从**右边**裁掉，被裁掉的进折叠菜单：
  *
- *   ordered = 已启用的扩展，按用户排好的顺序
- *   visible = ordered.slice(offset, offset + capacity)     ← 条上画出来的
- *   hidden  = 其余（保持相对顺序）                          ← 折叠菜单里列的
+ *   ordered  = 已启用的扩展，按用户排好的顺序（若有一个刚从溢出里被激活，它排最前）
+ *   capacity = 入口条实测能完整放下几个
+ *   hidden   = ordered.slice(capacity)      ← 折叠菜单「扩展」二级菜单里列的那些
  *
- * 为什么不做「最近使用的移到最前」：那会改掉用户在扩展管理页拖出来的顺序。视窗只是
- * 视图位置，它不写设置（见 useUi.extensionOffset 的注释）。
+ * 为什么不再按「每个按钮固定多少像素」反推能放几个：按钮现在带名称，宽度随名字长短
+ * 浮动，那个写死的常量必然算出错的个数（数少了会白白空一截，数多了会把裁掉的当成露着的）。
+ * 改成量真实几何，见 components/ExtensionStrip.tsx。
  *
  * 这套计算必须只有一份 —— 入口条与折叠菜单各自算一遍，必然会出现「菜单里列着一个
  * 其实就在条上的扩展」这种自相矛盾。所以两边都走这个 hook。
@@ -21,39 +22,37 @@ import { useDisplayablePlugins } from '@/state/usePlugins'
 import { useUi } from '@/state/useUi'
 
 export interface ExtensionStripView {
-  /** 全部该出现在入口位上的扩展，按用户顺序 */
+  /** 该出现在入口位上的扩展，按**实际显示**顺序（含被提前的那一个） */
   ordered: JSPlugin[]
-  /** 当前挤进可视范围的那一段 */
-  visible: JSPlugin[]
-  /** 被挤出去的，供折叠菜单列出 */
+  /** 被右边裁掉的那些，供折叠菜单列出 */
   hidden: JSPlugin[]
-  /** 一次装得下几个 */
-  capacity: number
-  /** 入口条量出实际宽度后回写 */
+  /** 入口条量出实际几何后回写 */
   setCapacity: (capacity: number) => void
-  /** 点入口：已激活的就收起（回原生页），否则激活并滚进可视范围 */
+  /** 点入口：已激活的就收起（回原生页），否则激活，并保证它露得出来 */
   activate: (entryPath: string) => void
 }
 
 export function useExtensionStrip(): ExtensionStripView {
-  const ordered = useDisplayablePlugins()
-  const offset = useUi((state) => state.extensionOffset)
+  const installed = useDisplayablePlugins()
+  const front = useUi((state) => state.extensionFront)
   const capacity = useUi((state) => state.extensionCapacity)
-  const setOffset = useUi((state) => state.setExtensionOffset)
   const setCapacity = useUi((state) => state.setExtensionCapacity)
+  const setFront = useUi((state) => state.setExtensionFront)
 
-  // 越界的 offset 就地回夹：插件被卸载、或窗口变宽后，窗口不该还停在列表末尾之外
-  const maxOffset = Math.max(0, ordered.length - capacity)
-  const safeOffset = Math.min(offset, maxOffset)
+  /**
+   * 实际显示顺序：被提出来的那个排最前，其余保持用户顺序。
+   *
+   * `index <= 0` 一句话盖住两种情况：它已经不在了（被卸载 / 停用），或者本来就在第一个
+   * —— 都不需要动。靠这个判断，一个已经不存在的 entryPath 不会把整条顺序搅乱。
+   */
+  const ordered = useMemo(() => {
+    if (!front) return installed
+    const index = installed.findIndex((plugin) => plugin.entryPath === front)
+    if (index <= 0) return installed
+    return [installed[index], ...installed.slice(0, index), ...installed.slice(index + 1)]
+  }, [installed, front])
 
-  const visible = useMemo(
-    () => ordered.slice(safeOffset, safeOffset + capacity),
-    [ordered, safeOffset, capacity]
-  )
-  const hidden = useMemo(
-    () => [...ordered.slice(0, safeOffset), ...ordered.slice(safeOffset + capacity)],
-    [ordered, safeOffset, capacity]
-  )
+  const hidden = useMemo(() => ordered.slice(capacity), [ordered, capacity])
 
   const activate = (entryPath: string): void => {
     const ui = useUi.getState()
@@ -66,16 +65,14 @@ export function useExtensionStrip(): ExtensionStripView {
       return
     }
 
-    // 把它滚进可视范围。取 min(index, maxOffset) 而不是直接 index：被点的那个排在
-    // 末尾时，直接用它当起点会让窗口后面露出一片空白。
-    const index = ordered.findIndex((plugin) => plugin.entryPath === entryPath)
-    if (index >= 0) {
-      const max = Math.max(0, ordered.length - capacity)
-      setOffset(Math.min(index, max))
+    // 只有**露不出来**的那些才需要提前。裁切在右边，「移进可视范围」就只能靠改位置。
+    // 露得出来的不动它 —— 否则每点一次标题栏都会重排一次，像在抽风。
+    if (hidden.some((plugin) => plugin.entryPath === entryPath)) {
+      setFront(entryPath)
     }
 
     ui.navigate({ name: 'plugin', entryPath })
   }
 
-  return { ordered, visible, hidden, capacity, setCapacity, activate }
+  return { ordered, hidden, setCapacity, activate }
 }

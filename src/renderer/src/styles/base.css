@@ -358,33 +358,42 @@ a {
 
 /* 扩展入口条占据标题栏中段。
    ★ `flex: 1 1 auto` 是这套溢出的关键：它吃掉所有余量，于是**它的宽度恰好就是
-     留给入口条的可用宽度**。若改成由内容撑开（flex: none），量到的会是内容宽度而不是
-     可用宽度，结果永远少数一个 —— 明明还有余量，第二个却放不进去。
-   右对齐让按钮紧贴折叠菜单，视觉上「入口 + 它的溢出菜单」是一组。 */
+     留给入口条的可用宽度** —— 量出来的「能放几个」才和实际露出来的对得上。
+     若改成由内容撑开（flex: none），量到的会是内容宽度而不是可用宽度。
+   靠左对齐：按钮紧挨 LOGO，右边空出来的那一大截就是拖拽区。
+   装不下的从**右边**裁掉，被裁掉的由折叠菜单接住（见 hooks/useExtensionStrip）。
+
+   `position: relative` 是给测量用的：按钮的 offsetLeft 要相对它来算。 */
 .titlebar-extensions {
+  position: relative;
   flex: 1 1 auto;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 2px;
+  justify-content: flex-start;
+  gap: 4px;
   min-width: 0;
   overflow: hidden;
 }
 
-/* 尺寸必须与 ExtensionStrip.tsx 里的 BUTTON_WIDTH / BUTTON_GAP 保持一致 ——
-   溢出个数是按它们算出来的（那一处注释解释了为什么不改成量出来的）。 */
+/* 宽度由内容决定（图标 + 名称），不再固定 —— 溢出个数因此改成量真实几何，
+   没有常量需要跟 CSS 对齐了。 */
 .titlebar-ext {
   position: relative;
   flex: none;
-  display: grid;
-  place-items: center;
-  width: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   height: 30px;
+  /* 名称最长也就到这儿，再长自己省略号。不封顶的话，一个特长名字能把整条吃光，
+     其余扩展全被挤进溢出菜单 */
+  max-width: 190px;
+  padding: 0 10px;
   border: none;
   background: transparent;
   color: var(--text-2);
   border-radius: var(--r-sm);
   cursor: pointer;
+  font-size: 12.5px;
   transition:
     background var(--dur-1) var(--ease),
     color var(--dur-1) var(--ease);
@@ -399,15 +408,33 @@ a {
   color: var(--accent);
 }
 
-/* 「这个扩展正在出声」：半透明白蒙版 + 音符。
-   刻意盖住图标而不是另占一块地 —— 标题栏每一像素都要跟窗口控制钮抢。
-   音符用深色：蒙版是白的，两种主题下它都读得出来。 */
-.ext-playing {
-  position: absolute;
-  inset: 0;
+/* 图标那一小块的定位基准，播放蒙版相对它摆放 */
+.ext-icon {
+  position: relative;
+  flex: none;
   display: grid;
   place-items: center;
-  border-radius: inherit;
+  width: 17px;
+  height: 17px;
+}
+
+.ext-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 「这个扩展正在出声」：半透明白蒙版 + 音符，叠在**图标上**。
+   只盖图标不盖整颗按钮：按钮现在带着名称，整颗盖住就把名字糊掉了。
+   音符用深色：蒙版是白的，两种主题下都读得出来。 */
+.ext-playing {
+  position: absolute;
+  /* 比图标本身大一圈：音符压在 17px 的图形上会看不清 */
+  inset: -3px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
   background: rgba(255, 255, 255, 0.45);
   color: #16161a;
   pointer-events: none;

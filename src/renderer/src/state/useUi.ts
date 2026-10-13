@@ -70,22 +70,25 @@ interface UiState {
    */
   lastNativeRoute: Route
   /**
-   * 标题栏扩展入口条的视窗起点（有序列表上的下标）。
+   * 一条从溢出里**刚被激活**、需要因此提前的扩展（entryPath）。
    *
-   * 刻意**不写设置**：它只是一次视图滚动的位置，与用户拖出来的插件顺序是两码事。
-   * 存进设置的话，用户在管理页排好的顺序会被「上次滚到哪」污染。
+   * 入口条靠左对齐、装不下的从**右边**裁掉，所以「把被隐藏的那个移进可视范围」只能靠
+   * 改变它在条上的位置 —— 把它提到最前。没有视窗可滚，这是唯一能兑现那句要求的做法。
+   *
+   * 刻意**不写设置**：这是标题栏这条工具栏的临时排布，用户在管理页拖出来的顺序是配置，
+   * 两者不能互相污染（写回去的话，用户点一次扩展就会看到自己排的顺序被改了）。
    */
-  extensionOffset: number
+  extensionFront: string | null
   /**
-   * 视窗一次装得下几个入口（由入口条量出实际宽度后回写）。
+   * 入口条一次完整露得出来几个（由入口条量出实际几何后回写）。
    *
-   * 之所以要放进 store：折叠菜单的溢出列表也依赖它 —— 菜单得知道「哪些算被挤掉了」。
+   * 之所以要放进 store：折叠菜单的溢出列表也依赖它 —— 菜单得知道「哪些算被裁掉了」。
    * 两边各自量一遍必然会算出两个不同的答案，于是菜单里列出的和条上藏起来的对不上。
    */
   extensionCapacity: number
 
   navigate: (route: Route) => void
-  setExtensionOffset: (offset: number) => void
+  setExtensionFront: (entryPath: string | null) => void
   setExtensionCapacity: (capacity: number) => void
   back: () => void
   setPanelOpen: (open: boolean) => void
@@ -116,8 +119,8 @@ export const useUi = create<UiState>((set, get) => ({
   selection: [],
   selectionAnchor: null,
   lastNativeRoute: { name: 'home' },
-  extensionOffset: 0,
-  // 初值只是首帧的占位，真实值由入口条量出来。取 0 会让首帧一条都不显示
+  extensionFront: null,
+  // 初值只是首帧的占位，真实值由入口条量出来。取 0 会让首帧的溢出菜单列得偏多
   extensionCapacity: 8,
 
   navigate: (route) => {
@@ -134,9 +137,9 @@ export const useUi = create<UiState>((set, get) => ({
     }))
   },
 
-  setExtensionOffset: (offset) => set({ extensionOffset: Math.max(0, offset) }),
-  // 永不收下 0：那会让「可视范围」塌成空窗，入口条一条都不画，也就再也量不出宽度
-  setExtensionCapacity: (capacity) => set({ extensionCapacity: Math.max(1, capacity) }),
+  setExtensionFront: (entryPath) => set({ extensionFront: entryPath }),
+  // 0 是合法值（一个都放不下时整条都进溢出菜单），但要挡住负数
+  setExtensionCapacity: (capacity) => set({ extensionCapacity: Math.max(0, capacity) }),
 
   back: () => {
     const [prev, ...rest] = get().history
