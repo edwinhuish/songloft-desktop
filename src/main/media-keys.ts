@@ -34,14 +34,16 @@ export function registerMediaKeys(onCommand: (command: MediaCommand) => void): (
       if (globalShortcut.register(binding.accelerator, () => onCommand(binding.command))) {
         registered.push(binding.accelerator)
       } else {
-        console.warn(`[media-keys] ${binding.accelerator} 已被占用，跳过（Media Session 仍可工作）`)
+        console.warn(
+          `[Songloft-Desktop] ${binding.accelerator} 已被占用，跳过（Media Session 仍可工作）`
+        )
       }
     } catch (error) {
-      console.warn(`[media-keys] 注册 ${binding.accelerator} 失败`, error)
+      console.warn(`[Songloft-Desktop] 注册 ${binding.accelerator} 失败`, error)
     }
   }
 
-  console.log(`[media-keys] 已接管 ${registered.length}/${BINDINGS.length} 个媒体键`)
+  console.log(`[Songloft-Desktop] 已接管 ${registered.length}/${BINDINGS.length} 个媒体键`)
   return () => {
     for (const accelerator of registered) globalShortcut.unregister(accelerator)
   }
