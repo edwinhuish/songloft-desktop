@@ -366,8 +366,12 @@ a {
   display: flex;
   align-items: center;
   gap: 9px;
-  /* 不参与弹性伸缩：LOGO 与右侧那组窗口按钮是标题栏的固定两端，谁都不能把它们挤动 */
-  flex: none;
+  /* 让名字在极窄窗口下先被省略号吃掉，而不是把右侧那组窗口按钮顶出去 */
+  flex: 0 1 auto;
+  min-width: 0;
+  /* 抵消 .titlebar 的左内边距：LOGO 的外缘要与标题栏内缘对齐。
+     负边距挂在这一层（而不是里面那颗按钮上）—— 挂按钮上会让胶囊的底色漏出左边 8px */
+  margin-left: -8px;
   font-weight: 620;
   font-size: 13px;
   letter-spacing: -0.01em;
@@ -375,79 +379,76 @@ a {
 }
 
 .titlebar-brand img {
+  flex: none;
   width: 20px;
   height: 20px;
   border-radius: 6px;
+}
+
+/* ── 拆分按钮：左半执行主操作，右半那颗小三角开下拉 ────────────────────────
+   两块共用一颗胶囊：悬停 / 聚焦时整颗亮起来，分隔线也**只在这时**才画 ——
+   平时不画那条竖线，标题栏干净很多（浏览器的下拉按钮也是这么做的）。
+
+   胶囊按内容取宽、但可被压缩（flex: 0 1 auto）：窗口窄到装不下时先截断自己的名字，
+   不去挤别人。 */
+.titlebar-split {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  border-radius: var(--r-sm);
+  transition: background var(--dur-1) var(--ease);
+}
+
+.titlebar-split:hover,
+.titlebar-split:focus-within {
+  background: var(--surface-2);
+}
+
+/* 菜单开着 = 按钮按下去了。这条写在 [data-active] **前面**：两条命中时让
+   「你在哪儿」那份高亮胜出（同样特异性，后写的赢） */
+.titlebar-split[data-open='true'] {
+  background: var(--surface-2);
+}
+
+/* 正在扩展里（商店 / 管理 / 某个扩展）：与 .nav-item[aria-current] 同一套语义 ——
+   底色 + 强调色图标，而不是加边框 */
+.titlebar-split[data-active='true'] {
+  background: var(--accent-soft);
+}
+
+.titlebar-split > button {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease);
+}
+
+.titlebar-split > button:hover {
+  color: var(--text-1);
 }
 
 /* LOGO = 「回播放页」。做成按钮而不是给 img 挂 onClick：按钮才拿得到
    base.css 里 `.titlebar button { no-drag }` 那条兜底，否则点击会被拖窗口吃掉。
    `font/color: inherit` 是为了继续沿用 .titlebar-brand 的字重与颜色。 */
 .titlebar-home {
-  display: flex;
-  align-items: center;
   gap: 9px;
-  height: 32px;
   padding: 0 8px;
-  margin-left: -8px;
-  border: none;
-  background: transparent;
   font: inherit;
   color: inherit;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  transition:
-    background var(--dur-1) var(--ease),
-    color var(--dur-1) var(--ease);
 }
 
-.titlebar-home:hover {
-  background: var(--surface-2);
-  color: var(--text-1);
-}
-
-/* 扩展入口（图标 + 名称）。
-   `flex: 0 1 auto` 而不是 none：窗口极窄时宁可让名字被省略号吃掉，也不许把右侧那组
-   窗口按钮顶出去（最小宽度 1080 下截不到它，这是最后一道保险）。 */
+/* 扩展入口（图标 + 名称）。窄窗口下名字被省略号吃掉，图标不跟着塌（见下面 svg 那条） */
 .titlebar-entry {
-  flex: 0 1 auto;
-  display: inline-flex;
-  align-items: center;
   gap: 7px;
-  height: 30px;
-  min-width: 0;
   padding: 0 10px;
-  border: none;
-  background: transparent;
-  color: var(--text-2);
-  border-radius: var(--r-sm);
-  cursor: pointer;
   font-size: 12.5px;
   font-weight: 540;
-  transition:
-    background var(--dur-1) var(--ease),
-    color var(--dur-1) var(--ease);
-}
-
-.titlebar-entry:hover {
-  background: var(--surface-2);
-  color: var(--text-1);
-}
-
-/* 正在扩展里（商店 / 管理 / 某个扩展）：与 .nav-item[aria-current] 同一套语义 ——
-   底色 + 强调色图标，而不是加边框 */
-.titlebar-entry[data-active='true'] {
-  background: var(--accent-soft);
-  color: var(--text-1);
-}
-
-.titlebar-entry[data-active='true'] svg {
-  color: var(--accent);
-}
-
-/* 图标不跟着名字一起被压缩：名字缩短是省略号，图标塌掉就是糊了 */
-.titlebar-entry svg {
-  flex: none;
 }
 
 .titlebar-entry-text {
@@ -455,6 +456,35 @@ a {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 图标不跟着名字一起被压缩：名字缩短是省略号，图标塌掉就是糊了 */
+.titlebar-split > button svg {
+  flex: none;
+}
+
+/* 高亮态下图标（含那颗小三角）走强调色 —— 与 .nav-item[aria-current] 同一个记号 */
+.titlebar-split[data-active='true'] > .titlebar-entry {
+  color: var(--text-1);
+}
+
+.titlebar-split[data-active='true'] > button svg {
+  color: var(--accent);
+}
+
+/* 下拉那半颗：一个 chevron 加一点边距，再宽就喧宾夺主 */
+.titlebar-split > .titlebar-split-caret {
+  flex: none;
+  justify-content: center;
+  width: 22px;
+  padding: 0;
+  border-left: 1px solid transparent;
+}
+
+.titlebar-split:hover > .titlebar-split-caret,
+.titlebar-split:focus-within > .titlebar-split-caret,
+.titlebar-split[data-open='true'] > .titlebar-split-caret {
+  border-left-color: var(--line-2);
 }
 
 /* 扩展条目图标的定位基准（侧栏那一条里），播放蒙版相对它摆放 */

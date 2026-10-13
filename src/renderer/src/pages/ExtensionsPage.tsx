@@ -31,6 +31,7 @@ import {
 import { Modal } from '@/components/Modal'
 import { PluginIcon } from '@/components/PluginIcon'
 import { EmptyState, Switch } from '@/components/primitives'
+import { togglePlugin, uninstallPlugin } from '@/lib/plugin-actions'
 import { requireClient } from '@/state/useAuth'
 import { useOrderedPlugins, usePlugins } from '@/state/usePlugins'
 import { toast } from '@/state/useToasts'
@@ -40,8 +41,6 @@ export function ExtensionsPage(): React.JSX.Element {
   const loaded = usePlugins((state) => state.loaded)
   const error = usePlugins((state) => state.error)
   const setOrder = usePlugins((state) => state.setOrder)
-  const setEnabled = usePlugins((state) => state.setEnabled)
-  const remove = usePlugins((state) => state.remove)
   const load = usePlugins((state) => state.load)
 
   /** 拖拽中的下标与悬停到的下标。都放本地：它们是纯粹的交互瞬时状态，不该进 store */
@@ -74,16 +73,6 @@ export function ExtensionsPage(): React.JSX.Element {
     const [moved] = next.splice(from, 1)
     next.splice(index, 0, moved)
     void setOrder(entryPathsOf(next)).catch(() => toast('扩展顺序没能保存', 'error'))
-  }
-
-  const toggle = (plugin: JSPlugin, next: boolean): void => {
-    void setEnabled(plugin.id, next)
-      .then(() =>
-        toast(next ? `已启用「${pluginDisplayName(plugin)}」` : '已停用该扩展', 'success')
-      )
-      .catch((reason: unknown) =>
-        toast('操作失败', 'error', reason instanceof Error ? reason.message : undefined)
-      )
   }
 
   /**
@@ -178,21 +167,9 @@ export function ExtensionsPage(): React.JSX.Element {
   }
 
   /**
-   * 卸载。
-   *
-   * 用 window.confirm 而不是自绘弹窗：仓库里所有破坏性确认都是这个路子（见
-   * PlaylistsPage / SettingsPage）。它说的是**会发生什么**而不是「确定吗」——
-   * 卸载会连插件的磁盘数据一起清掉，这一点必须讲明白。
+   * 停用/启用与卸载都走 `lib/plugin-actions`：标题栏那颗扩展下拉里也能做同样两件事，
+   * 各写一份的话「卸载会连数据一起删」那句确认迟早有一处会漏。
    */
-  const uninstall = (plugin: JSPlugin): void => {
-    const name = pluginDisplayName(plugin)
-    if (!window.confirm(`卸载「${name}」？插件在本机留下的数据会一并删除，不可恢复。`)) return
-    void remove(plugin.id)
-      .then(() => toast(`已卸载「${name}」`, 'success'))
-      .catch((reason: unknown) =>
-        toast('卸载失败', 'error', reason instanceof Error ? reason.message : undefined)
-      )
-  }
 
   return (
     <div className="page">
@@ -319,8 +296,8 @@ export function ExtensionsPage(): React.JSX.Element {
                 setDragIndex(null)
                 setOverIndex(null)
               }}
-              onToggle={(next) => toggle(plugin, next)}
-              onUninstall={() => uninstall(plugin)}
+              onToggle={(next) => togglePlugin(plugin, next)}
+              onUninstall={() => uninstallPlugin(plugin)}
             />
           ))}
         </ul>

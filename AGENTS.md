@@ -132,7 +132,9 @@ src/
    │                 PluginSurface（扩展 webview 栈）/ PluginIcon /
    │                 RegistrySourcesDialog（管理订阅源）
    ├─ hooks/         useSongList / usePlaylistSongs / useAsync / useResponsiveSidebar
-   ├─ lib/           url（资源 URL 拼接）/ color / accent / format / concurrency
+   ├─ lib/           url（资源 URL 拼接）/ color / accent / format / concurrency /
+   │                 plugin-actions（插件的停用 / 卸载 —— 管理页与标题栏下拉共用同一份
+   │                 确认与提示；lib/ 里唯一一个不是纯函数的）
    └─ styles/        tokens.css / base.css / components.css / index.css
 ```
 
@@ -346,8 +348,10 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
    却看不见」。
 
 **扩展是一个「去处」，不是一排页签**：标题栏上只有左上角那一个「扩展」入口（拼图图标 +
-文字），点下去把标题栏以下整块换成扩展主框架 —— 左是扩展侧栏，右是内容面（插件商店 /
-插件管理 / 某个扩展的 `webview`），三者在右侧那一栏里换，框架本身不动。
+文字，右侧还带一颗下拉三角），点主操作把标题栏以下整块换成扩展主框架 —— 左是扩展侧栏，
+右是内容面（插件商店 / 插件管理 / 某个扩展的 `webview`），三者在右侧那一栏里换，
+框架本身不动。那颗下拉三角列的是**当前已开启的扩展**（点一下直接进去），
+每项挂着对它的操作 —— 也就是「不必先进框架再点一次」的那条近路。
 
 侧栏三段职责固定：**顶部两条固定入口**（插件商店 / 插件管理）、**中间一列已安装扩展**（可滚动）、
 **底部那个「收起侧栏」**。三条容易做错的地方：
@@ -366,9 +370,20 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
 「插件管理」，正在放的歌就断了。所以它必须容忍 `entryPath` 为空 = 不显示、只保活
 （`display: none` 不会停掉 guest 的播放 —— 音频不挂在布局上）。
 
-`.titlebar-brand` 与 `.titlebar-actions` 都 `flex: none`，`「扩展」入口`那项是 `flex: 0 1 auto`
-（宁肯名字被省略号吃掉，也不许把窗口按钮顶出去），外加 `.titlebar { overflow: hidden }` 兜底：
-标题栏里任何一项都不许把布局撑出去。
+**标题栏上是两颗「拆分按钮」**（`.titlebar-split`：左半执行主操作、右半那颗小三角开下拉，
+两块共用一颗胶囊，悬停/聚焦/菜单开着时整颗亮起、分隔线才出现）：Songloft（回播放页 /
+导航菜单）与扩展（进扩展主框架 / 已开启的扩展列表 —— 每项都是「双面」的，悬浮展开对自己
+操作：静音、停用、卸载）。所以**标题栏里不再有独立的「折叠菜单」按钮**，原来那一份导航项
+一分为二，各自贴在自己的入口上。两条容易做错的：
+
+* **两个 `aria-expanded` 要各自判断** `anchor === 自己的 ref`：只看 `open` 的话，打开一颗
+  会让两颗都报「已展开」（`anchor` 的语义见 `ContextMenu.tsx`）。
+* **「停用 / 卸载」必须走 `lib/plugin-actions`**，不要在下拉里另写一份 —— 卸载的确认文案里
+  那句「数据会一并删除」漏一次就是真的丢数据，而它现在有两个入口。
+
+`.titlebar-brand` 是 `flex: 0 1 auto`（名字先被省略号吃掉，不许把窗口按钮顶出去），
+`.titlebar-actions` 是 `flex: none` + `margin-left: auto`（右端永远贴右缘），外加
+`.titlebar { overflow: hidden }` 兜底：标题栏里任何一项都不许把布局撑出去。
 
 **订阅源**（`api/plugins.ts` 的 `getPluginRegistries` / `updatePluginRegistries`）：后端只有
 「整表读 / 整表写」两个口子（`GET|PUT /settings/plugin-registries`），没有单条增删改，也不是
@@ -403,6 +418,8 @@ Wayland 下缺的永远是宿主上那份 `.desktop`。
 * 不要把扩展页的 webview 放进 `defaultSession`：宿主注入的 CSP 会把插件页一起改写（§8.12）。
 * 不要在切到插件商店 / 插件管理时卸载 `PluginSurface`：那会把正在出声的扩展一起关掉，
   也就是「点一下插件管理，音乐就断了」（§8.12）。
+* 不要在标题栏的扩展下拉里另写一份「停用 / 卸载」：与插件管理页共用 `lib/plugin-actions`
+  （§8.12）。
 
 ---
 

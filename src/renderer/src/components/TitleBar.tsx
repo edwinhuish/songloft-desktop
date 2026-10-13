@@ -10,16 +10,24 @@
  * ★ 未登录（solo）时也要渲染这个组件：窗口是 frameless 的，全部拖拽能力都来自
  *   `.titlebar` 的 -webkit-app-region —— 登录页若不带标题栏，那个窗口就既拖不动、
  *   也关不掉（只能靠 Alt+F4）。所以 App 在任何状态下都把标题栏放在最外层，
- *   这里只是把「导航菜单 / 搜索」这类需要已登录的元素藏起来。
+ *   这里只是把「两个下拉 / 搜索」这类需要已登录的元素藏起来。
  *
- * 布局：`[logo][扩展入口][折叠菜单] ⟪拖拽区⟫ [搜索][窗口控制]`。
- * 左起三项是**去处**（回播放页 / 进扩展主框架 / 打开导航菜单），右端是搜索与窗口控制。
+ * 布局：`[Songloft ▾][🧩 扩展 ▾] ⟪拖拽区⟫ [搜索][窗口控制]`。
+ * 左起是两处**去处**，各自是一颗**拆分按钮**（左半执行主操作、右半那颗小三角开下拉）：
+ *   * Songloft —— 左半回播放页，右半是原来的「折叠菜单」（导航项，去掉扩展）；
+ *   * 扩展     —— 左半进扩展主框架，右半列出所有已开启的扩展（每项挂着对它的操作）。
+ * 为什么拆成两颗而不是留一颗「折叠菜单」：菜单里原来那两项（扩展 / 设置）本来就不是一类 ——
+ * 前者是**一整个工作台**（装了还得管），后者是去改配置；把它们并排放在标题栏上，
+ * 「去哪儿」就不必先展开一层菜单了。
+ *
  * 中间刻意不显示当前曲目 —— 曲目信息本来在播放条与右侧抽屉里各有一份。
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
+import { pluginDisplayName } from '@shared/plugin'
 import {
+  IconChevronDown,
   IconClock,
   IconClose,
   IconHeart,
@@ -27,17 +35,23 @@ import {
   IconLibrary,
   IconListMusic,
   IconMaximize,
-  IconMenu,
   IconMinimize,
+  IconPause,
   IconPuzzle,
   IconRestore,
   IconSearch,
-  IconSettings
+  IconSettings,
+  IconTrash,
+  IconVolume,
+  IconVolumeX
 } from './Icons'
 import { useContextMenu, type MenuItem } from './ContextMenu'
+import { PluginIcon } from './PluginIcon'
 import { Cover } from './primitives'
+import { togglePlugin, uninstallPlugin } from '@/lib/plugin-actions'
 import { useUi } from '@/state/useUi'
 import { regularPlaylists, usePlaylists } from '@/state/usePlaylists'
+import { useDisplayablePlugins, usePlugins } from '@/state/usePlugins'
 
 export interface TitleBarProps {
   /** 未登录/启动中：只保留窗口控制，去掉需要登录态的元素 */
@@ -49,18 +63,26 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   const setPaletteOpen = useUi((s) => s.setPaletteOpen)
   const navigate = useUi((s) => s.navigate)
   const route = useUi((s) => s.route)
-  /**
-   * 上次停在扩展主框架的哪一栏。
-   *
-   * 入口按它决定进去落哪一栏 —— 每次都踢回商店的话，用户在插件管理里改到一半、
-   * 跑去播放页看一眼再回来，就得重新点一次。
-   */
   const extensionPane = useUi((s) => s.extensionPane)
-  /** 只为把 aria-expanded 说出来：读的是宿主的真实状态，而不是本地另存一份 */
-  const navMenuOpen = useContextMenu((s) => s.open)
   const playlists = usePlaylists((s) => s.playlists)
   // 与侧栏「我的歌单」用同一个过滤器，两处名单不会各自漂移
   const myPlaylists = regularPlaylists(playlists)
+  // 扩展下拉与扩展侧栏同源：两处列出来的扩展因此永远是同一批
+  const extensions = useDisplayablePlugins()
+  const runtime = usePlugins((s) => s.runtime)
+  const toggleMuted = usePlugins((s) => s.toggleMuted)
+
+  /**
+   * 两颗下拉各自的触发器。
+   *
+   * aria-expanded 要答的是「**我这份**菜单开着吗」，不是「有没有菜单开着」——
+   * 只看 `open` 的话，打开 Songloft 那颗菜单会让扩展那颗也报 expanded。
+   */
+  const songloftMenuRef = useRef<HTMLButtonElement>(null)
+  const extensionMenuRef = useRef<HTMLButtonElement>(null)
+  const songloftOpen = useContextMenu((s) => s.open && s.anchor === songloftMenuRef.current)
+  const extensionOpen = useContextMenu((s) => s.open && s.anchor === extensionMenuRef.current)
+
   // 插件商店 / 插件管理 / 某个扩展——三者都算「在扩展里」，入口据此高亮
   const inExtensions = route.name === 'extensions' || route.name === 'plugin'
 
@@ -85,12 +107,33 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   }
 
   /**
-   * 折叠菜单的菜单项：按「浏览 → 收藏与历史 → 设置」排。
-   * 只放「去哪儿」不放管理动作；「文件夹」不单列 —— 它是曲库页里的一个标签。
+   * 打开某一颗下拉。
    *
-   * 复用 ContextMenuHost 而不是自己造一个下拉：宿主已经处理了贴边翻转、Esc、失焦关闭，
-   * 再造一份就是两份要同步维护的行为。代价是必须把触发器一起传进去 —— 见 ContextMenu.tsx
-   * 里 anchor 的说明（不传的话「再点一次收起」做不出来）。
+   * 复用 ContextMenuHost 而不是自己造一个下拉：宿主已经处理了贴边翻转、Esc、失焦关闭、
+   * 「点同一个按钮 = 收起」，再造一份就是两份要同步维护的行为。代价是必须把触发器元素
+   * 一起传进去 —— 见 ContextMenu.tsx 里 anchor 的说明（不传的话「再点一次收起」做不出来）。
+   *
+   * 面板左缘贴那颗**小三角**的左缘：它是这一组里最右的东西，面板往右铺开正好盖在按钮
+   * 下方，不会自己压到自己头上（贴整颗胶囊的左缘就会这样）。
+   */
+  const openDropdown = (event: React.MouseEvent<HTMLButtonElement>, items: MenuItem[]): void => {
+    const menu = useContextMenu.getState()
+    // 宿主对「点触发器」刻意不关（anchor），所以这里读到的仍是开着 → 收起
+    if (menu.open) {
+      menu.hide()
+      return
+    }
+    const rect = event.currentTarget.getBoundingClientRect()
+    menu.show(rect.left, rect.bottom + 6, items, {
+      anchor: event.currentTarget,
+      align: 'left',
+      anchorRect: rect
+    })
+  }
+
+  /**
+   * Songloft 下拉的菜单项：按「浏览 → 收藏与历史 → 设置」排，只放「去哪儿」不放管理动作。
+   * 「文件夹」不单列 —— 它是曲库页里的一个标签；「扩展」也不在这里 —— 它有自己那颗按钮与下拉。
    */
   const navMenuItems = (): MenuItem[] => [
     {
@@ -145,21 +188,8 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
       icon: <IconClock size={16} />,
       onClick: () => navigate({ name: 'recent' })
     },
-    // 「扩展 / 设置」与上面那串「去哪儿」不是一类：分割线把这一段单独划出来
+    // 设置与上面那串「去哪儿」不是一类：分割线把这一段单独划出来
     { key: 'sep-manage', label: '', separator: true },
-    {
-      key: 'extensions',
-      label: '扩展',
-      icon: <IconPuzzle size={16} />,
-      /**
-       * 进扩展主框架（落上次那一栏）。
-       *
-       * 刻意**不再有二级菜单**：扩展主框架的侧栏里就是一整列可打开的扩展，菜单再列一份
-       * 等于同一个名单出现在两处 —— 而入口条那种「挤出去了要有个兜底」的处境已经不存在了
-       * （侧栏是滚动的，不裁切）。要直奔某个扩展，进框架后在侧栏里点一下即可。
-       */
-      onClick: () => navigate({ name: 'extensions', pane: extensionPane })
-    },
     {
       key: 'settings',
       label: '设置',
@@ -168,68 +198,136 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
     }
   ]
 
-  const toggleNavMenu = (event: React.MouseEvent<HTMLButtonElement>): void => {
-    const menu = useContextMenu.getState()
-    // 宿主对「点触发器」刻意不关（anchor），所以这里读到的仍是开着 → 收起
-    if (menu.open) {
-      menu.hide()
-      return
-    }
-    const rect = event.currentTarget.getBoundingClientRect()
-    menu.show(rect.left, rect.bottom + 6, navMenuItems(), { anchor: event.currentTarget })
-  }
+  /**
+   * 扩展下拉的菜单项：把当前**已开启**的扩展直接列出来。
+   *
+   * * 用 useDisplayablePlugins 而不是「plugins 里 enabled 为真那些」：只有后端报 active
+   *   的才真点得进去，把运行异常的也列出来只会让人点出一片空白。与扩展侧栏同一份过滤。
+   * * 每项都是「双面」的：悬浮展开对它自己的操作，单击直接进去。
+   * * 菜单项在**渲染期**算好（不是一个被调用的函数）：每一项要读「正在出声 / 已静音」这份
+   *   运行时状态，而 hook 不能在事件回调里调用。
+   * * 空列表给一条不可点的说明：空框会让人以为是坏了（与「歌单」那一项同一个做法）。
+   */
+  const extensionMenuItems: MenuItem[] = extensions.length
+    ? extensions.map((plugin) => {
+        const live = runtime[plugin.entryPath]
+        const name = pluginDisplayName(plugin)
+
+        const actions: MenuItem[] = []
+        // 静音只在它真的在出声（或已经被静音）时才摆出来：没出声的扩展静音了也听不出来，
+        // 摆着只会让人以为「静音没生效」
+        if (live?.playing || live?.muted) {
+          actions.push({
+            key: 'mute',
+            label: live?.muted ? '取消静音' : '静音',
+            icon: live?.muted ? <IconVolume size={16} /> : <IconVolumeX size={16} />,
+            onClick: () => toggleMuted(plugin.entryPath)
+          })
+        }
+        actions.push(
+          {
+            key: 'disable',
+            label: '停用',
+            icon: <IconPause size={16} />,
+            onClick: () => togglePlugin(plugin, false)
+          },
+          {
+            key: 'uninstall',
+            label: '卸载',
+            icon: <IconTrash size={16} />,
+            variant: 'danger',
+            onClick: () => uninstallPlugin(plugin)
+          }
+        )
+
+        return {
+          key: `extension-${plugin.entryPath}`,
+          // 名字后面缀上「播放中」：菜单项的标签只能是字符串，而「哪个在出声」正是
+          // 在这里唯一能顺带交代的状态（侧栏那边是靠图标上的蒙版）
+          label: live?.playing ? `${name} · 播放中` : name,
+          icon: <PluginIcon plugin={plugin} size={16} />,
+          onClick: () => navigate({ name: 'plugin', entryPath: plugin.entryPath }),
+          children: actions
+        }
+      })
+    : [{ key: 'extension-empty', label: '还没有开启的扩展', disabled: true }]
 
   return (
     <header className="titlebar" onDoubleClick={handleDoubleClick}>
       <div className="titlebar-brand">
-        {/* 点它 = 回播放页（首页）。它落在拖拽区里，靠 base.css 的
-            `.titlebar button { -webkit-app-region: no-drag }` 才点得动。 */}
-        <button
-          type="button"
-          className="titlebar-home"
-          data-tip="回到播放页"
-          aria-label="回到播放页"
-          onClick={() => navigate({ name: 'home' })}
-        >
-          <img src="./icon.png" alt="" onError={(e) => (e.currentTarget.style.display = 'none')} />
-          <span>Songloft</span>
-        </button>
+        {/* 拆分按钮：左半回播放页，右半开导航菜单。
+            它落在拖拽区里，靠 base.css 的 `.titlebar button { -webkit-app-region: no-drag }`
+            才点得动。 */}
+        <div className="titlebar-split" data-open={songloftOpen ? 'true' : undefined}>
+          <button
+            type="button"
+            className="titlebar-home"
+            data-tip="回到播放页"
+            aria-label="回到播放页"
+            onClick={() => navigate({ name: 'home' })}
+          >
+            <img
+              src="./icon.png"
+              alt=""
+              onError={(e) => (e.currentTarget.style.display = 'none')}
+            />
+            <span className="truncate">Songloft</span>
+          </button>
+
+          {!solo ? (
+            <button
+              ref={songloftMenuRef}
+              type="button"
+              className="titlebar-split-caret"
+              data-tip="导航菜单"
+              aria-label="导航菜单"
+              aria-haspopup="menu"
+              aria-expanded={songloftOpen}
+              onClick={(event) => openDropdown(event, navMenuItems())}
+            >
+              <IconChevronDown size={12} />
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {!solo ? (
         /**
-         * 扩展入口。
+         * 扩展入口。同样是一颗拆分按钮：左半进扩展主框架（落上次那一栏），右半列出
+         * 已开启的扩展。
          *
-         * 图标复用 IconPuzzle：拼图就是「扩展」这个概念的通用图形，插件管理的标题、
-         * 折叠菜单里那一项也都是它 —— 同一个去处给同一种记号，比再造一个语义重复的图形好。
-         * 名字照样写出来（不挂 data-tip：文字就在眼前，再浮一层同名提示是噪音）；窄窗口里
-         * 名字会被省略号截断，而窗口最小宽度 1080 下截不到它，所以不必为它再补一层提示。
+         * 图标复用 IconPuzzle：拼图就是「扩展」这个概念的通用图形，插件管理的标题
+         * 那一项也是它 —— 同一个去处给同一种记号，比再造一个语义重复的图形好。
          */
-        <button
-          type="button"
-          className="titlebar-entry"
+        <div
+          className="titlebar-split"
           data-active={inExtensions ? 'true' : undefined}
-          aria-label="扩展"
-          aria-current={inExtensions ? 'page' : undefined}
-          onClick={() => navigate({ name: 'extensions', pane: extensionPane })}
+          data-open={extensionOpen ? 'true' : undefined}
         >
-          <IconPuzzle size={16} />
-          <span className="titlebar-entry-text">扩展</span>
-        </button>
-      ) : null}
+          <button
+            type="button"
+            className="titlebar-entry"
+            aria-label="扩展"
+            aria-current={inExtensions ? 'page' : undefined}
+            onClick={() => navigate({ name: 'extensions', pane: extensionPane })}
+          >
+            <IconPuzzle size={16} />
+            <span className="titlebar-entry-text">扩展</span>
+          </button>
 
-      {!solo ? (
-        <button
-          type="button"
-          className="win-btn"
-          data-tip="导航菜单"
-          aria-label="导航菜单"
-          aria-haspopup="menu"
-          aria-expanded={navMenuOpen}
-          onClick={toggleNavMenu}
-        >
-          <IconMenu size={16} />
-        </button>
+          <button
+            ref={extensionMenuRef}
+            type="button"
+            className="titlebar-split-caret"
+            data-tip="已开启的扩展"
+            aria-label="已开启的扩展"
+            aria-haspopup="menu"
+            aria-expanded={extensionOpen}
+            onClick={(event) => openDropdown(event, extensionMenuItems)}
+          >
+            <IconChevronDown size={12} />
+          </button>
+        </div>
       ) : null}
 
       {/* 右端固定在右缘：左侧那几项都是 flex:none，中间空出来的就是拖拽区 */}
