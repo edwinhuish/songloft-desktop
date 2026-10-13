@@ -121,6 +121,19 @@ function NowPlaying(): React.JSX.Element {
  *   两套实现迟早分叉（拖拽排序、右键菜单、跟随当前曲滚动…都得各写一遍）。
  *   注意它自己不带滚动容器 —— 谁挂它谁负责给（抽屉那边是 .panel-body，迷你那边是 .mini-queue）。
  */
+/**
+ * 从队列列表往上找**第一个真的能滚的祖先**：抽屉里是 .panel-body，迷你模式里是 .mini-queue。
+ *
+ * 存在的理由见下面那段 effect：我们要自己滚，就不能再让浏览器替我们猜容器。
+ */
+function findScrollParent(el: HTMLElement | null): HTMLElement | null {
+  for (let node = el?.parentElement ?? null; node; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node)
+    if (overflowY === 'auto' || overflowY === 'scroll') return node
+  }
+  return null
+}
+
 export function Queue(): React.JSX.Element {
   const queue = usePlayer((s) => s.queue)
   const order = usePlayer((s) => s.order)
@@ -137,8 +150,27 @@ export function Queue(): React.JSX.Element {
   // 播放到下一首时把当前项滚进视野
   useEffect(() => {
     if (currentIndex < 0) return
-    const el = listRef.current?.querySelector<HTMLElement>(`[data-queue-index="${currentIndex}"]`)
-    el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    const list = listRef.current
+    const item = list?.querySelector<HTMLElement>(`[data-queue-index="${currentIndex}"]`)
+    const container = findScrollParent(list ?? null)
+    if (!item || !container) return
+
+    /*
+     * ★ 自己算偏移，**不用 item.scrollIntoView()**：那个 API 会把「它所有的祖先滚动容器」
+     *   依次滚一遍，视口也在内。迷你模式下窗口只有 400×480，而列表项在文档里的位置可能
+     *   远在窗口下方（被 .mini-queue 剪掉的那些仍然占着文档坐标），于是那一下会连着视口
+     *   一起滚 —— 整条迷你播放器被顶出窗外，右上角那三颗窗口钮跟着不见。
+     *   这里只滚这一个容器，而且只在需要时滚**最小**的距离（等价于 block: 'nearest'：
+     *   在上方露不出来就贴顶、在下方露不出来就贴底，已经在视野里就不动）。
+     */
+    const cRect = container.getBoundingClientRect()
+    const iRect = item.getBoundingClientRect()
+    let delta = 0
+    if (iRect.top < cRect.top) delta = iRect.top - cRect.top
+    else if (iRect.bottom > cRect.bottom) delta = iRect.bottom - cRect.bottom
+    if (delta === 0) return
+
+    container.scrollTo({ top: container.scrollTop + delta, behavior: 'smooth' })
   }, [currentIndex])
 
   if (queue.length === 0) {
