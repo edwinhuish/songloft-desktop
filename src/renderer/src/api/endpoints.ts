@@ -37,8 +37,11 @@ import type {
   SongListResponse,
   SongQuery,
   ServerUpgradeCheck,
+  ServerUpgradeProgress,
+  ServerUpdateTarget,
   SongType,
   TokenListResponse,
+  UploadedServerBinary,
   VolumeNormalizeSetting
 } from '@shared/types'
 import { normalizePlaylist, type FacetField } from '@shared/types'
@@ -707,21 +710,107 @@ export function importPlaylists(
     }))
 }
 
-/* ───────────────────────── 更新检查 ───────────────────────── */
+/* ───────────────────────── 服务端升级 ───────────────────────── */
 
 /**
  * 问服务端有没有新版本。
  *
- * 只查不升：升级是把服务器上的二进制换掉，得在服务器那边做（Docker / 命令行）。
- * 桌面端负责把「有没有新版本、新在哪」讲清楚，顺带给出发布说明。
+ * `githubProxy` 必须由调用方显式带上：后端**不会**去读它自己存的那份「GitHub 代理」配置 ——
+ * 检查与升级都只看这个查询参数，漏了就只能在墙内干等到超时（这正是设置页有那一项的原因）。
  */
-export function checkServerUpgrade(client: ApiClient): Promise<ServerUpgradeCheck> {
-  return client.request<Partial<ServerUpgradeCheck>>('/upgrade/check').then((res) => ({
-    has_update: res.has_update ?? false,
-    current_version: res.current_version ?? '',
-    latest_version: res.latest_version ?? '',
-    release_notes: res.release_notes ?? '',
-    is_docker: res.is_docker ?? false
+export function checkServerUpgrade(
+  client: ApiClient,
+  githubProxy?: string
+): Promise<ServerUpgradeCheck> {
+  type RawCheck = Partial<ServerUpgradeCheck> & {
+    updates?: Record<string, Partial<ServerUpdateTarget> | undefined>
+  }
+  return client
+    .request<RawCheck>('/upgrade/check', { query: { github_proxy: githubProxy } })
+    .then((res) => ({
+      has_update: res.has_update ?? false,
+      current_version: res.current_version ?? '',
+      current_channel: res.current_channel ?? '',
+      current_build_type: res.current_build_type ?? '',
+      latest_version: res.latest_version ?? '',
+      release_notes: res.release_notes ?? '',
+      is_docker: res.is_docker ?? false,
+      // 后端的 updates 是 {stable: {...}, dev: {...}}；按固定顺序读出来，
+      // 免得界面上的排列随 JSON 的键序漂移
+      updates: ['stable', 'dev']
+        .map((type): ServerUpdateTarget | null => {
+          const item = res.updates?.[type]
+          if (!item?.version) return null
+          return {
+            type,
+            version: item.version,
+            build_time: item.build_time,
+            release_notes: item.release_notes
+          }
+        })
+        .filter((item): item is ServerUpdateTarget => item !== null)
+    }))
+}
+
+/**
+ * 让服务端自己去 GitHub 拉新版本装上（阶段一：下载 + 校验）。
+ *
+ * 只有 Docker 部署能这么升 —— 裸机换二进制得在服务器那边动手。进度去 /upgrade/progress 看。
+ */
+export function startServerUpgrade(
+  client: ApiClient,
+  versionType: string,
+  githubProxy?: string
+): Promise<void> {
+  return client.request<void>('/upgrade/start', {
+    method: 'POST',
+    body: { version_type: versionType, github_proxy: githubProxy ?? '' }
+  })
+}
+
+/**
+ * 上传本地二进制到服务端（阶段一：上传 + 校验，只暂存不替换）。
+ *
+ * 分两段是刻意的：先让服务端把文件读一遍、把版本号与通道报回来，由人确认「这确实是我想装的那份」
+ * （尤其是跨通道），再去 /upgrade/upload/confirm 落地。上传走 XHR 带进度，见 ApiClient.upload。
+ */
+export function uploadServerBinary(
+  client: ApiClient,
+  file: File,
+  onProgress?: (sent: number, total: number) => void
+): Promise<UploadedServerBinary> {
+  const form = new FormData()
+  // 字段名必须是 file：后端按 multipart 的 file 字段取文件
+  form.append('file', file, file.name)
+  return client
+    .upload<Partial<UploadedServerBinary>>('/upgrade/upload', form, onProgress)
+    .then((res) => ({
+      version: res.version ?? '',
+      channel: res.channel ?? '',
+      build_time: res.build_time ?? '',
+      build_type: res.build_type ?? '',
+      current_version: res.current_version ?? '',
+      current_channel: res.current_channel ?? '',
+      channel_mismatch: res.channel_mismatch ?? false
+    }))
+}
+
+/** 确认执行上传的那份升级（阶段二：替换二进制 + 重启）。之后服务端会断开一会儿 */
+export function confirmServerUploadUpgrade(client: ApiClient): Promise<void> {
+  return client.request<void>('/upgrade/upload/confirm', { method: 'POST' })
+}
+
+/**
+ * 读升级进度。
+ *
+ * 服务端换完二进制就 exit，重启期间这条会连不上 —— 那是正常现象，不是失败。
+ * 完成判据是 status = 'restarting'（协议里没有 completed）。
+ */
+export function getServerUpgradeProgress(client: ApiClient): Promise<ServerUpgradeProgress> {
+  return client.request<Partial<ServerUpgradeProgress>>('/upgrade/progress').then((res) => ({
+    status: res.status ?? 'idle',
+    progress: res.progress ?? 0,
+    current_step: res.current_step ?? ''
   }))
 }
 

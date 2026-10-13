@@ -442,14 +442,62 @@ export interface CacheDirCheck {
 
 /* ───────────────────────── 更新检查（关于与更新）───────────────────────── */
 
-/** `/upgrade/check` 里桌面端真正用得到的那几个字段 */
+/**
+ * 一条可升级到的版本。
+ *
+ * 后端会给 stable 与 dev 两条通道各自的最新版；某一条查不到（GitHub 连不上、或该通道没有
+ * 发布）时那一条就不在列表里 —— 所以列表是「能升的目标」，而不是「一定有两条」。
+ */
+export interface ServerUpdateTarget {
+  /** 通道：'stable' | 'dev' */
+  type: string
+  version: string
+  build_time?: string
+  release_notes?: string
+}
+
+/** `/upgrade/check` */
 export interface ServerUpgradeCheck {
   has_update: boolean
   current_version: string
+  /** 当前通道：stable / dev */
+  current_channel: string
+  /** 当前构建类型：docker / full / lite…（后端原样给，界面只做展示） */
+  current_build_type: string
   latest_version: string
   release_notes: string
   /** 服务器跑在容器里（升级方式与裸机不同） */
   is_docker: boolean
+  /** 可升级到的版本；已是最新时为空 */
+  updates: ServerUpdateTarget[]
+}
+
+/**
+ * `/upgrade/progress`：升级任务的进度。
+ *
+ * 状态取值：idle / uploading / downloading / testing / replacing / resetting / restarting / failed。
+ * 「跑完了」这件事在协议里是 **restarting**（100%）—— 后端换完二进制就 exit(0) 等容器重启，
+ * 没有单独的 completed 态。所以别拿 completed 当完成判据，那会永远等不到。
+ */
+export interface ServerUpgradeProgress {
+  status: string
+  /** 0–100 */
+  progress: number
+  /** 当前这一步在做什么；失败时这里是原因 */
+  current_step: string
+}
+
+/** `/upgrade/upload` 的返回：传上来的那份二进制自报家门 */
+export interface UploadedServerBinary {
+  version: string
+  /** 上传文件的通道 */
+  channel: string
+  build_time: string
+  build_type: string
+  current_version: string
+  current_channel: string
+  /** 与当前通道不一致 —— 装上会把通道切过去，要额外确认一次 */
+  channel_mismatch: boolean
 }
 
 /* ───────────────────────── 歌单备份（数据管理）───────────────────────── */

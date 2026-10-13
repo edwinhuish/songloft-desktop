@@ -1916,6 +1916,24 @@ select.input option {
   background: var(--danger);
 }
 
+/* ── 升级弹窗里的发布说明 ─────────────────────────────────────────────── */
+
+.notes-block {
+  margin-top: 10px;
+  padding: 12px 14px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--line-1);
+  border-radius: var(--r-sm);
+  background: var(--surface-1);
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.7;
+  /* 发布说明是后端给的带换行纯文本：默认的空白折叠会把它挤成一整段 */
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ── 指纹统计 / 失败清单（重复歌曲检测面板） ───────────────────────────── */
 
 .stat-list {

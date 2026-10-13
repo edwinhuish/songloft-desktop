@@ -25,7 +25,10 @@ import type {
   ScanProgress,
   ScanTitleSource,
   ServerUpgradeCheck,
-  TokenInfo
+  ServerUpgradeProgress,
+  ServerUpdateTarget,
+  TokenInfo,
+  UploadedServerBinary
 } from '@shared/types'
 import { useContextMenu, type MenuItem } from '@/components/ContextMenu'
 import { ExcludeDirsEditor } from '@/components/ExcludeDirsEditor'
@@ -61,6 +64,7 @@ import {
   cleanCache,
   cleanMissingSongs,
   computeFingerprints,
+  confirmServerUploadUpgrade,
   deleteSong,
   exportPlaylists,
   findDuplicates,
@@ -78,6 +82,7 @@ import {
   getProxyAllowlist,
   getRemoteTitleSource,
   getScanProgress,
+  getServerUpgradeProgress,
   getScanAutoCreatePlaylists,
   getScanAutoFingerprint,
   getScanPlaylistMode,
@@ -101,8 +106,10 @@ import {
   setVolumeNormalize,
   startMetadataRefresh,
   startScan,
+  startServerUpgrade,
   updateCacheConfig,
   updateMusicPath,
+  uploadServerBinary,
   validateCacheDir
 } from '@/api/endpoints'
 import { useAsync } from '@/hooks/useAsync'
@@ -2827,51 +2834,31 @@ function AboutSettings(): React.JSX.Element {
 }
 
 /**
- * 更新检查。
+ * 更新。
  *
- * 桌面端**只查不升**：升级是把服务器上的二进制换掉，得在服务器那侧做（Docker 重新拉镜像 /
- * 命令行替换），客户端替它做主反而容易把一份跑得好好的服务端换坏。所以这里把「有没有新版本、
- * 新在哪」讲清楚，再给一条发布说明的链接。
+ * 服务端那条开弹窗（UpgradeModal）：检查 → 选通道 → 在线升级或上传二进制 → 盯进度，
+ * 这一整套塞不进一行设置里。客户端那条只给一个发布页入口 —— 桌面端由安装包 / 包管理器更新，
+ * 应用不该去换自己的二进制（换到一半失败，用户手上就剩一个跑不起来的东西）。
  */
 function UpdateCard(): React.JSX.Element {
-  const [check, setCheck] = useState<ServerUpgradeCheck | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const run = (): void => {
-    setBusy(true)
-    void checkServerUpgrade(requireClient())
-      .then(setCheck)
-      .catch((error: unknown) =>
-        toast('检查更新失败', 'error', error instanceof Error ? error.message : undefined)
-      )
-      .finally(() => setBusy(false))
-  }
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
 
   return (
     <Card title="更新">
       <Row
-        title="检查服务端更新"
-        desc={
-          check
-            ? check.has_update
-              ? `有新版本：${formatVersion(check.current_version)} → ${formatVersion(check.latest_version)}${
-                  check.is_docker ? ' · 服务端跑在容器里，拉新镜像重启即可' : ''
-                }`
-              : `已是最新（${formatVersion(check.current_version)}）`
-            : '查一下服务端有没有新版本；不会自动升级'
-        }
+        title="服务端更新"
+        desc="检查服务端有没有新版本；Docker 部署可以直接在线升级，也可以上传本地的二进制文件"
       >
-        <button type="button" className="btn" disabled={busy} onClick={run}>
-          {busy ? <IconLoader size={15} /> : <IconRefresh size={15} />}
-          检查
+        <button
+          type="button"
+          className="btn"
+          data-variant="primary"
+          onClick={() => setUpgradeOpen(true)}
+        >
+          <IconRefresh size={15} />
+          检查更新
         </button>
       </Row>
-
-      {check?.has_update && check.release_notes ? (
-        <Row block title="新版本说明" desc={check.release_notes}>
-          <span />
-        </Row>
-      ) : null}
 
       <Row
         title="客户端更新"
@@ -2887,6 +2874,385 @@ function UpdateCard(): React.JSX.Element {
           打开发布页
         </button>
       </Row>
+
+      {upgradeOpen ? <UpgradeModal onClose={() => setUpgradeOpen(false)} /> : null}
     </Card>
+  )
+}
+
+/* ───────────────────────── 服务端升级弹窗 ───────────────────────── */
+
+/** 进度状态 → 文案。取值见 ServerUpgradeProgress */
+const UPGRADE_STATUS_LABEL: Record<string, string> = {
+  idle: '空闲',
+  uploading: '正在上传',
+  downloading: '正在下载升级包',
+  testing: '正在校验',
+  replacing: '正在替换二进制',
+  resetting: '正在回退',
+  restarting: '正在重启服务',
+  failed: '升级失败'
+}
+
+/**
+ * 「已经收工」的状态。
+ *
+ * ★ 协议里**没有** completed —— 后端换完二进制就 exit(0) 交给容器重启，那一帧的 status 是
+ *   restarting。拿 completed 当完成判据会永远等不到。
+ */
+const UPGRADE_DONE_STATUS = new Set(['restarting', 'completed'])
+
+/** 通道名（后端给的是 stable / dev） */
+function channelLabel(channel: string): string {
+  if (channel === 'stable') return '正式版'
+  if (channel === 'dev') return '测试版'
+  return channel || '未知通道'
+}
+
+/**
+ * 服务端升级。
+ *
+ * 两条路：让服务端自己去 GitHub 拉（Docker 部署可用），或者把本地那份二进制传上去。
+ * 上传刻意分两段（上传校验 → 确认替换）：先让服务端把文件读一遍、把版本与通道报回来，
+ * 由人确认「这确实是我要装的那份」，再落地。跨通道升级尤其需要这一道 —— 装错了会把通道切过去。
+ */
+function UpgradeModal({ onClose }: { onClose: () => void }): React.JSX.Element {
+  const [check, setCheck] = useState<ServerUpgradeCheck | null>(null)
+  const [checking, setChecking] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [selected, setSelected] = useState(0)
+  /** 上传完成、等着人确认的那份文件 */
+  const [uploaded, setUploaded] = useState<UploadedServerBinary | null>(null)
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null)
+  const [starting, setStarting] = useState(false)
+  const [progress, setProgress] = useState<ServerUpgradeProgress | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  const pollRef = useRef<number | null>(null)
+  /** GitHub 代理：检查与升级都得显式带给后端（后端不会去读自己存的那份配置） */
+  const proxyRef = useRef('')
+
+  const runCheck = useCallback((): void => {
+    setChecking(true)
+    setError(null)
+    // 已经收工的进度（失败 / 重启完）别再占着版面：重新检查就是要回到「能不能升」这一页，
+    // 但**正在跑**的那份要留着 —— 打开弹窗时它会先被拉回来，清掉就等于把进度抹了
+    setProgress((prev) =>
+      prev && (UPGRADE_DONE_STATUS.has(prev.status) || prev.status === 'failed') ? null : prev
+    )
+    void checkServerUpgrade(requireClient(), proxyRef.current)
+      .then((next) => {
+        setCheck(next)
+        setSelected(0)
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : '检查更新失败'))
+      .finally(() => setChecking(false))
+  }, [])
+
+  useEffect(() => {
+    // 升级可能是上次打开弹窗时起的（甚至是别的客户端起的）：先问一句进度，
+    // 否则关掉再打开，进度条会从零开始，看着像又升了一遍
+    void getServerUpgradeProgress(requireClient())
+      .then((next) => {
+        if (next.status !== 'idle') setProgress(next)
+      })
+      .catch(() => undefined)
+    // 代理取回来再查：墙内没有它，/upgrade/check 会一直等到超时（后端不会自动读那项配置）
+    void getGithubProxy(requireClient())
+      .catch(() => '')
+      .then((value) => {
+        proxyRef.current = value
+        runCheck()
+      })
+  }, [runCheck])
+
+  const status = progress?.status ?? 'idle'
+  const done = UPGRADE_DONE_STATUS.has(status)
+  const failed = status === 'failed'
+  const running = progress !== null && !done && !failed
+  const busy = checking || starting || uploadPercent !== null || running
+
+  // 只要还在跑就一直问，1 秒一次：后端那几步都是秒级推进，再密没必要
+  useEffect(() => {
+    if (!running) return
+    pollRef.current = window.setInterval(() => {
+      void getServerUpgradeProgress(requireClient())
+        .then((next) => {
+          // idle 是「还没开始」：刚点完升级时后端还在调度，丢掉这一帧，别把进度打回去
+          if (next.status !== 'idle') setProgress(next)
+        })
+        // 升级成功后服务端会 exit，重启那几秒连不上是正常的，别把弹窗画成失败
+        .catch(() => undefined)
+    }, 1000)
+    return () => {
+      if (pollRef.current !== null) {
+        window.clearInterval(pollRef.current)
+        pollRef.current = null
+      }
+    }
+  }, [running])
+
+  const targets = check?.updates ?? []
+  /*
+   * 老后端只给扁平的 latest_version / release_notes（没有 updates）。那时退回一条，
+   * 通道按 stable 走 —— 后端自己挑扁平字段时也是「优先 stable，其次 dev」。
+   */
+  const fallback: ServerUpdateTarget[] =
+    check?.has_update && check.latest_version
+      ? [{ type: 'stable', version: check.latest_version, release_notes: check.release_notes }]
+      : []
+  const list = targets.length > 0 ? targets : fallback
+  const target = list[selected] ?? list[0]
+
+  const canUpload = (check?.is_docker ?? true) && !busy && progress === null
+  const canStartOnline =
+    Boolean(check?.is_docker && check.has_update && target) && !busy && progress === null
+
+  const onFile = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = event.target.files?.[0]
+    // 清掉 value：同一个文件想再选一次时，change 也得照样触发
+    event.target.value = ''
+    if (!file) return
+    setError(null)
+    setUploaded(null)
+    setUploadPercent(0)
+    void uploadServerBinary(requireClient(), file, (sent, total) => {
+      setUploadPercent(total > 0 ? Math.round((sent / total) * 100) : 0)
+    })
+      .then((info) => {
+        setUploaded(info)
+        toast('已上传，等待确认', 'success', info.version ? formatVersion(info.version) : undefined)
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : '上传失败'))
+      .finally(() => setUploadPercent(null))
+  }
+
+  const startOnline = (): void => {
+    if (!target) return
+    setStarting(true)
+    setError(null)
+    void startServerUpgrade(requireClient(), target.type, proxyRef.current)
+      .then(() =>
+        setProgress({
+          status: 'downloading',
+          progress: 0,
+          current_step: '已请求升级，等待服务端开始'
+        })
+      )
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : '升级请求失败'))
+      .finally(() => setStarting(false))
+  }
+
+  const confirmUpload = (): void => {
+    setStarting(true)
+    setError(null)
+    void confirmServerUploadUpgrade(requireClient())
+      .then(() => {
+        setUploaded(null)
+        setProgress({ status: 'replacing', progress: 0, current_step: '已确认，正在替换二进制' })
+      })
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : '确认失败'))
+      .finally(() => setStarting(false))
+  }
+
+  const body = (): React.ReactNode => {
+    if (uploaded) {
+      return (
+        <>
+          <div className="probe-result" data-state={uploaded.channel_mismatch ? 'error' : 'ok'}>
+            {uploaded.channel_mismatch ? <IconAlert size={15} /> : <IconCheck size={15} />}
+            <span>
+              已上传 {channelLabel(uploaded.channel)} {formatVersion(uploaded.version)}
+              {uploaded.build_type ? ` · ${uploaded.build_type}` : ''}
+            </span>
+          </div>
+          <p className="field-hint" style={{ marginTop: 8 }}>
+            {uploaded.channel_mismatch
+              ? `这份文件走 ${channelLabel(uploaded.channel)} 通道，而服务端现在跑的是 ${channelLabel(
+                  uploaded.current_channel
+                )}（${formatVersion(uploaded.current_version)}）—— 装上去会把通道一起切过去。`
+              : `服务端现在是 ${formatVersion(uploaded.current_version)}，确认后替换并重启。`}
+          </p>
+          {uploaded.build_time ? (
+            <p className="field-hint" style={{ marginTop: 6 }}>
+              文件构建时间 {uploaded.build_time}
+            </p>
+          ) : null}
+        </>
+      )
+    }
+
+    if (progress) {
+      const percent = Math.min(100, Math.max(0, progress.progress))
+      return (
+        <>
+          <div className="stat-list">
+            <div className="stat-row">
+              <span>状态</span>
+              <span className="stat-row-value">{UPGRADE_STATUS_LABEL[status] ?? status}</span>
+            </div>
+            <div className="stat-row">
+              <span>进度</span>
+              <span className="stat-row-value">{Math.round(percent)}%</span>
+            </div>
+          </div>
+          <div className="progress-track" style={{ marginTop: 10 }}>
+            <div
+              className="progress-fill"
+              data-tone={failed ? 'danger' : undefined}
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+          {progress.current_step ? (
+            <p className="field-hint" style={{ marginTop: 8 }}>
+              {progress.current_step}
+            </p>
+          ) : null}
+          {done ? (
+            <p className="field-hint" style={{ marginTop: 8 }}>
+              服务端正在重启，界面会短暂连不上，稍后自动恢复。
+            </p>
+          ) : null}
+          {running ? (
+            <p className="field-hint" style={{ marginTop: 8 }}>
+              升级在服务端后台进行，关掉这个弹窗不会中断它。
+            </p>
+          ) : null}
+        </>
+      )
+    }
+
+    if (checking) {
+      return (
+        <div className="probe-result">
+          <IconLoader size={15} />
+          <span>正在检查服务端版本…</span>
+        </div>
+      )
+    }
+
+    if (!check) return null
+
+    return (
+      <>
+        <div className="stat-list">
+          <div className="stat-row">
+            <span>当前版本</span>
+            <span className="stat-row-value">
+              {formatVersion(check.current_version)}
+              {check.current_channel ? ` · ${channelLabel(check.current_channel)}` : ''}
+            </span>
+          </div>
+          <div className="stat-row">
+            <span>部署方式</span>
+            <span className="stat-row-value">{check.current_build_type || '未知'}</span>
+          </div>
+        </div>
+
+        {list.length === 0 ? (
+          <p className="field-hint" style={{ marginTop: 8 }}>
+            已是最新版本。
+          </p>
+        ) : (
+          <>
+            <div className="segmented" role="group" aria-label="升级通道" style={{ marginTop: 10 }}>
+              {list.map((item, index) => (
+                <button
+                  key={item.type}
+                  type="button"
+                  aria-pressed={selected === index}
+                  onClick={() => setSelected(index)}
+                >
+                  {channelLabel(item.type)} {formatVersion(item.version)}
+                </button>
+              ))}
+            </div>
+            {target?.release_notes ? (
+              <div className="notes-block">{target.release_notes}</div>
+            ) : null}
+            {target?.build_time ? (
+              <p className="field-hint" style={{ marginTop: 8 }}>
+                文件构建时间 {target.build_time}
+              </p>
+            ) : null}
+          </>
+        )}
+
+        {!check.is_docker ? (
+          <p className="field-hint" style={{ marginTop: 8 }}>
+            服务端不是 Docker 部署：在线升级与上传都用不了，到发布页拿新版本、在服务器上替换二进制。
+          </p>
+        ) : null}
+      </>
+    )
+  }
+
+  const footer = uploaded ? (
+    <>
+      <button type="button" className="btn" disabled={starting} onClick={() => setUploaded(null)}>
+        取消
+      </button>
+      <button
+        type="button"
+        className="btn"
+        data-variant="danger"
+        disabled={starting}
+        onClick={confirmUpload}
+      >
+        {starting ? <IconLoader size={15} /> : <IconUpload size={15} />}
+        确认升级
+      </button>
+    </>
+  ) : (
+    <>
+      {/* 升级是服务端的后台任务，关掉弹窗不会中断它 —— 所以关闭永远可用，别把人锁在里面 */}
+      <button type="button" className="btn" onClick={onClose}>
+        关闭
+      </button>
+      {canUpload ? (
+        <button
+          type="button"
+          className="btn"
+          disabled={busy}
+          onClick={() => fileRef.current?.click()}
+        >
+          {uploadPercent === null ? <IconUpload size={15} /> : <IconLoader size={15} />}
+          {uploadPercent === null ? '上传升级' : `上传中 ${uploadPercent}%`}
+        </button>
+      ) : null}
+      {canStartOnline ? (
+        <button
+          type="button"
+          className="btn"
+          data-variant="primary"
+          disabled={busy}
+          onClick={startOnline}
+        >
+          {starting ? <IconLoader size={15} /> : <IconDownload size={15} />}
+          立即升级
+        </button>
+      ) : null}
+      {error !== null || failed ? (
+        <button type="button" className="btn" disabled={busy} onClick={runCheck}>
+          <IconRefresh size={15} />
+          重新检查
+        </button>
+      ) : null}
+    </>
+  )
+
+  return (
+    <Modal title="服务端更新" onClose={onClose} closeOnBackdrop={!busy} footer={footer}>
+      {error ? (
+        <div className="probe-result" data-state="error" style={{ marginBottom: 12 }}>
+          <IconAlert size={15} />
+          <span>{error}</span>
+        </div>
+      ) : null}
+
+      {body()}
+
+      {/* 选文件必须由点击直接触发，所以这个 input 一直挂着、只是看不见 */}
+      <input ref={fileRef} type="file" hidden onChange={onFile} />
+    </Modal>
   )
 }
