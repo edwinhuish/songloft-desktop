@@ -6,7 +6,7 @@
  *   底栏那个文件里，另外两处便各自 import 了一份「主播放器」的模块；而迷你条还跑在**另一个
  *   窗口**里（见 main/mini-window.ts），那一下等于让迷你窗反向依赖主窗口的界面。「播放模式
  *   长什么样」本就不属于任何一个播放界面 —— 搬出来之后三处都是它的下游，谁也不欠谁。
- * ★ 也不放进 shared/：这里要 IconRepeat / IconRepeatOne / IconShuffle 这几个 React 组件
+ * ★ 也不放进 shared/：这里要 IconArrowRight / IconRepeat / IconRepeatOne / IconShuffle 这几颗图标
  *   （见 Icons.tsx），而 shared/ 只放两侧共用的**纯代码**（不 import 渲染层的任何东西，
  *   见 AGENTS.md 的硬性约定），主进程也用不到这几颗图标。
  * ★ 下面两张表都声明成 Record<PlayMode, …> 而非普通对象：shared/types.ts 那边加一档模式时，
@@ -15,11 +15,16 @@
 
 import type { PlayMode } from '@shared/types'
 
-import { IconRepeat, IconRepeatOne, IconShuffle } from './Icons'
+import { IconArrowRight, IconRepeat, IconRepeatOne, IconShuffle } from './Icons'
 
 /**
  * 播放模式 → 图标。
  *
+ * ★★ 四档**必须四颗不同的图标**，这不是审美问题：模式是「点一下换一档」的循环，而按钮上
+ *   只有这一颗图标在示意当前是哪一档（文案只进 aria-label，界面上不显示）。两档共用一颗，
+ *   那一次点击看上去就是「没反应」—— 用户报回来的「点到顺序、再点还是顺序」正是这么来的
+ *   （顺带说：循环逻辑本身没错，是对应关系糊了）。
+ *   ★ 顺序播放给直箭头、列表循环给环形箭头（见 Icons.tsx 的 IconArrowRight）。
  * ★ 做成**收尺寸的函数**而不是一张固定尺寸的表：模式键出现在三处，三处的图标尺寸并不相同
  *   （底栏与满窗播放走下面那张表，迷你条自己给 16，见 MiniPlayer.tsx 的 ICON_CTL），而
  *   「哪种模式配哪颗图标」只有这一份事实源 —— 复制成三张表出去，迟早只有一处还记得
@@ -27,13 +32,14 @@ import { IconRepeat, IconRepeatOne, IconShuffle } from './Icons'
  */
 export function modeIcon(mode: PlayMode, size: number): React.ReactNode {
   switch (mode) {
+    case 'order':
+      return <IconArrowRight size={size} />
+    case 'loop':
+      return <IconRepeat size={size} />
     case 'single':
       return <IconRepeatOne size={size} />
     case 'random':
       return <IconShuffle size={size} />
-    default:
-      // order 与 loop 是同一颗图标（有区别的只是行为与文案，见 MODE_LABEL）
-      return <IconRepeat size={size} />
   }
 }
 
