@@ -9,13 +9,16 @@
  *   关闭）都得自己给，少一颗就是「这个窗挪不动 / 回不去 / 关不掉」。三颗照标题栏右端那一组
  *   的样子来（同用 .win-btn，只是各小一档），并排落在条的**右上角** —— 那是这个动作在桌面
  *   应用里的固定位置，两种形态下长相一致，用户不必重新找。
- * ★ 条上那一行只放播放必需的东西（封面 / 歌名与时长 / 上一首 / 播放 / 下一首 / 歌词 / 队列）：
+ * ★ 条上那一行只放播放必需的东西（封面 / 三行信息 / 上一首 / 播放 / 下一首 / 歌词 / 队列）：
  *   迷你模式的意思就是把它挂在屏幕一角，不该再摆音量条、播放模式、收藏那一整套。
  *   右上角那三颗窗口钮**不进那一行**（绝对定位，落在这 64px 上方本来就空着的那条缝里，
- *   见 .mini-window-actions）：条里那点横向余量只有歌名在吃，让三颗去占一行就是把歌名挤窄。
- * ★ 封面右边那两行见下面 ScrollingLine 与 .mini-info：**这一栏的宽度是被条宽定死的**
- *   （flex: 1 1 0 + min-width: 0 + overflow: hidden），歌名再长也撑不开它 —— 右边那几颗钮
- *   因此永远钉在各自的位置上。放不下时第一行**循环滚动**（不是来回蹭），两遍之间不留空档。
+ *   见 .mini-window-actions）：条里那点横向余量只有信息那三行在吃，让三颗去占一行就是
+ *   把三行一起挤窄。
+ * ★ 封面右边是**三行**（歌名 / 歌手 / 播放时间），见下面 ScrollingLine 与 .mini-info：
+ *   行高由条高等分出来（栅格三行），所以哪一行有没有内容都不影响另外两行的位置；
+ *   这一栏的宽度是被条宽定死的（栅格列定死 + flex: 1 1 0 + min-width: 0 + overflow: hidden），
+ *   歌名再长也撑不开它 —— 右边那几颗钮因此永远钉在各自的位置上。
+ *   哪一行放不下，**那一行自己**循环滚（不是来回蹭），另外两行不动。
  * ★ 歌词与队列**共用下方那一块面板**（见 MiniPanel）：两颗钮互斥，尺寸只跟「开没开」有关，
  *   所以换内容不闪不跳。
  * ★ 栅格的顺序是「播放条在**上**、面板在下」（DOM 顺序同此），不是反过来：窗口加高时长的是
@@ -113,17 +116,30 @@ export function MiniPlayer(): React.JSX.Element {
           kind="song"
         />
 
+        {/*
+          歌名 / 歌手 / 时间各占一行（`.mini-info` 是三等分的栅格，见样式表）。
+          三行**各滚各的**：谁放不下谁滚，另外两行该静止还是静止 —— 行与行之间没有任何联动。
+          ★ key 取歌曲 id：换歌要**从头**滚起（重挂一次 DOM = 动画重来），不然新歌一上来
+            就接在上一首滚到一半的位置上。时间那一行不挂 key —— 它每秒都在变，重挂纯属浪费，
+            而它又永远放得下（见 styles/components.css 里 .mini-time 那段）。
+        */}
         <div className="mini-info">
-          {/* key 取歌曲 id：换歌要**从头**滚起（重挂一次 DOM = 动画重来），
-              不然新歌一上来就接在上一首滚到一半的位置上 */}
           <ScrollingLine
-            key={song?.id ?? 0}
-            title={song?.title ?? '未在播放'}
-            artist={song ? displayArtist(song.artist) : ''}
+            key={`title-${song?.id ?? 0}`}
+            className="playerbar-title"
+            text={song?.title ?? '未在播放'}
           />
-          <div className="mini-time">
-            {formatDuration(position)}/{formatDuration(duration)}
-          </div>
+          {/* 歌手与歌名分了两行，这里就没有「 - 」那半截了 —— 没在播放时这一行整行空着，
+              不画占位符（行高由栅格给，空行也不会把另外两行拽歪） */}
+          <ScrollingLine
+            key={`artist-${song?.id ?? 0}`}
+            className="playerbar-artist"
+            text={song ? displayArtist(song.artist) : ''}
+          />
+          <ScrollingLine
+            className="mini-time"
+            text={`${formatDuration(position)}/${formatDuration(duration)}`}
+          />
         </div>
 
         <button
@@ -253,26 +269,38 @@ const LOOP_SPEED = 40
 const LOOP_DWELL = 0.14
 
 /**
- * 「歌名 - 歌手」那一行：**放不下就循环滚动**（跑马灯那一套，不是来回蹭）。
+ * 迷你条上的一行文本：**放不下就循环滚动**（跑马灯那一套，不是来回蹭）。
+ *
+ * 歌名 / 歌手 / 时间各是一个实例，各自量各自的宽度、各自决定滚不滚 ——
+ * 一行在滚不会让另外两行动一下（它们连动画都没挂）。
  *
  * ★ 「循环」= 文本连续两份首尾相接，动画只把整条往左推**一份**（含间隔）的距离，推到尽头时
  *   第二份的脑袋正好落在第一份原来的位置上 —— 于是画面与起点逐像素相同，接得严丝合缝。
  *   `animation-direction: alternate`（来回滚）做不到这一点：它滚到头会**倒着**退回去，
  *   读到一半的信息被倒放一遍，长标题尤其明显。
- * ★ 位移与时长由 JS 量、动画交给 CSS：速度得跟着**文本宽度**走 —— 长歌名该滚得久一点、
+ * ★ 位移与时长由 JS 量、动画交给 CSS：速度得跟着**文本宽度**走 —— 长的该滚得久一点、
  *   短的三两下就到头；写死一个 animation-duration 的结果是「短的慢得发慌、长的还在挪」。
  *   量出来的值写成 CSS 变量，动画本身仍在样式表里（见 .mini-line-track）。
  * ★ 有两条前提，缺一条这套就静默失效：
- *   ① 外层 .mini-line 的宽度由条上的 flex 定死（.mini-info 是 flex: 1 1 0 + min-width: 0），
+ *   ① 外层 .mini-line 的宽度由外面定死（.mini-info 那一栏：栅格列 + min-width: 0），
  *      所以「量出来的溢出」是真实溢出，而不是被文本自己撑宽的假象；
  *   ② 内层 .mini-line-track 是 width: max-content，不会被外层剪窄 —— 否则量到的永远是 0，
  *      滚动就静默不触发了。
- * ★ 不溢出时**一个 data 属性、一份重复文本都不挂**：绝大多数时候这行是静态的，常挂着
+ * ★ 不溢出时**一个 data 属性、一份重复文本都不挂**：绝大多数时候这几行是静态的，常挂着
  *   animation 只是白烧电，重复的那份还会被读屏软件念第二遍。
  *   prefers-reduced-motion 由 base.css 那条全局规则兜住（时长压到 0.01ms 且只跑一次），
  *   那种情况下它停在行首，效果与「截断显示」等价。
+ * ★ text 单独传、不直接收 children：effect 的依赖数组得看得见「文本变了」这件事，
+ *   收成一个 ReactNode 就只能靠引用比较 —— 每次都不同，等于每帧重测。
  */
-function ScrollingLine({ title, artist }: { title: string; artist: string }): React.JSX.Element {
+function ScrollingLine({
+  text,
+  className
+}: {
+  text: string
+  /** 文本自己的样式（.playerbar-title / .playerbar-artist / .mini-time 那一套），行本身不带 */
+  className: string
+}): React.JSX.Element {
   const outerRef = useRef<HTMLDivElement>(null)
   const copyRef = useRef<HTMLSpanElement>(null)
   /** 循环一周期要往左推的距离（一份文本宽 + 间隔）：0 = 这一行放得下，不滚 */
@@ -297,15 +325,7 @@ function ScrollingLine({ title, artist }: { title: string; artist: string }): Re
     const observer = new ResizeObserver(measure)
     observer.observe(outer)
     return () => observer.disconnect()
-  }, [title, artist])
-
-  const text = (
-    <>
-      <span className="playerbar-title">{title}</span>
-      {/* 没在播放时没有歌手，那半截连分隔号一起不画 —— 不能留下一个孤零零的「-」 */}
-      {artist ? <span className="playerbar-artist"> - {artist}</span> : null}
-    </>
-  )
+  }, [text])
 
   return (
     <div className="mini-line" ref={outerRef}>
@@ -324,12 +344,12 @@ function ScrollingLine({ title, artist }: { title: string; artist: string }): Re
             : undefined
         }
       >
-        <span className="mini-line-copy" ref={copyRef}>
+        <span className={`mini-line-copy ${className}`} ref={copyRef}>
           {text}
         </span>
         {/* 第二份只为「第一份走出去时」垫在后面。读屏软件不该把它念第二遍 */}
         {loop > 0 ? (
-          <span className="mini-line-copy" aria-hidden="true">
+          <span className={`mini-line-copy ${className}`} aria-hidden="true">
             {text}
           </span>
         ) : null}
