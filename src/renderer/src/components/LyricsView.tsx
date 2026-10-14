@@ -64,7 +64,8 @@ export function LyricsView({ compact = false }: { compact?: boolean }): React.JS
        *   面板里它上面还压着大封面与歌名，那一段高度会被白算进去 —— 目标一偏就是几百 px，
        *   于是每次滚动都过头，高亮行反而被顶到视野之外（原先就是这个病）。
        *   矩形相减得到的是「行相对容器可视区」的真实偏移，与祖先是谁无关；
-       *   顺带还免疫祖先上的 transform（迷你模式歌词展开时那层淡入动画就是）。
+       *   顺带还免疫祖先上的 transform —— 这层保护对任何祖先动效都成立（面板展开那层动画
+       *   2026-10-15 起改用 clip-path，不再产生 transform，但别因此退回 offsetTop）。
        */
       const rect = container.getBoundingClientRect()
       const lineRect = line.getBoundingClientRect()

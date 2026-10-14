@@ -15,36 +15,44 @@
  *   永远在主窗口 —— 两个窗口各放一份音频就是同一首歌响两遍。
  *
  * ── 条上有什么（从左到右）────────────────────────────────────────────────
- *   · 封面：贴左缘的全高方块，是条上**唯一一块拖窗口的把手**（样式表里只有它写了 drag）：
+ *   · 封面：贴左缘的全高方块，**拖窗口的把手**之一（条整体都是把手区，见样式表 .mini-bar）：
  *     按住封面即拖窗口。代价写在样式表 .mini-cover 那一节：这一格在 Wayland / Windows 上收不到
- *     指针事件 —— 中栏的悬浮判据因此不能写成 `:hover`（会闪），见下面的 pointerInside。
- *     ★ 右键封面开**不透明度那张菜单**（与右上角那颗下拉钮同一份 opacityMenu）——拖拽区里的右键
- *       能不能到页面看平台，见 .mini-cover 的说明（那颗钮是保底入口）。
+ *     指针事件 —— 页面里的悬浮与右键都到不了它；它也不在那条交互带里（带只到它的右缘）。
+ *     ★ 右键封面**不开应用菜单**：拖拽区就是非客户区，右键由**系统**弹窗口菜单（Electron 文档
+ *       那条：可拖拽区的右键会弹系统菜单）—— 比自绘一张更对。旋钮因此只剩右上角那颗下拉钮。
  *   · 中栏：两行 —— 第一行歌名，第二行「歌手（可滚动）+ 播放时间/时长」。时间**钉在右端**，
  *     歌手再长也挤不到它（见样式表 .mini-info-sub）。
- *     **鼠标落在迷你播放器上时中栏换成控制**（音量 / 播放模式 / 收藏）：这三样都要占地方，
- *     常态挂着会一直挤着歌名，而它们又不是「看播放器」时时刻要盯的东西。**整窗都算**（条 /
- *     面板 / 菜单 / 那块透明容器），见样式表 .mini-info-hover 那一段。
- *     ★ 这份判据**只能在 JS 里维护**（下面的 pointerInside）：拖拽区那一格收不到任何事件，
- *       `:hover` 分不出「指针挪到了封面上」与「指针已经移出窗口」—— 而这两件事一个要留住、
- *       一个要收起来，分不出就是「鼠标一到封面、中栏闪一下」。理由与做法见样式表那一段。
+ *     **鼠标落在条上那条交互带时中栏换成控制**（音量 / 播放模式 / 收藏）：这三样都要占地方，
+ *     常态挂着会一直挤着歌名，而它们又不是「看播放器」时时刻要盯的东西。
+ *     ★ 判据是**那条带自己的框** —— 中栏与右侧控件组那一行：**带上下的空带不算**，封面与右上角
+ *       那两颗窗口钮不算，**面板**（歌词 / 队列）也不算（指着面板时中栏保持歌名那两行，不冒按钮）。
+ *       范围与理由见样式表 .mini-info-hover 那一段。
+ *     ★ 这份判据就是 CSS 的 `:hover`，**不再由 JS 维护** —— 带整块是放行面，指针在它里外、
+ *       跨它的边界，浏览器都算得准。从前要 JS 是因为判据写在整窗上、而封面那一格收不到事件
+ *       （见样式表那一段的历史）。
+ *   ★ 中栏与右边那一组控件**同属一个元素**（.mini-stage，样式表里管它叫「交互带」）：一块从
+ *     封面右缘直通窗口右缘、**只有那一行那么高**的矩形（带上下的空带在它框外，不算，见样式表
+ *     那一节）。**它同时是条上那个「能操作的洞」** —— 条整体是拖拽区（非客户区），这一块是
+ *     唯一被挖回来的大面（no-drag），「悬浮换层 / 点钮」两件事都只在这一行里成立。
  *   · 控件：上一首 / 播放 / 下一首 / 歌词 / 队列。比底栏那套小一档（见 .mini-bar 的
  *     --mini-ctl-h），因为这一条总共只有 64px 高。
- *     ★ 这一组连同它上下那两条空带**整块**是悬浮面（样式表 .mini-controls）：指针十有八九落在
- *       右半边，所以它收得到事件（悬浮换层、点钮）而**不拖窗口、也不开右键菜单**（后者显式写在
- *       JSX 里，见下面那个 onContextMenu）。
+ *     ★ 这一组是放行面（样式表 .mini-controls）：它收得到事件（悬浮换层、点钮）而**不拖窗口**。
+ *       右键一律**不开应用菜单** —— 与落在中栏两行 / 钮间那几条 2px 缝 / 进度线 / 窗口钮间那道
+ *       缝上一样，由条上那句否决统一处理（见 suppressContextMenu）。
  *   · 右上角：**不透明度那颗 + 关闭**。**没有「退出迷你模式」** —— 那颗钮的语义（把窗口换回
  *     原样）在独立窗口下不存在了：迷你窗关掉就是关掉，主窗口一直好好的。最小化那颗也已去掉：
  *     迷你窗的用处正是「一直摆在那儿」，缩进任务栏就等于看不见了（系统那一侧的最小化仍在，
  *     从底栏那颗按钮或托盘再点一下就唤回来，见 main/mini-window.ts 的 openMiniWindow）。
- *     ★ 那颗钮开出来的就是**共享的那份菜单**（components/ContextMenu，两根滑块；封面右键开的是
- *       同一份）：它长在窗口
+ *     ★ 那颗钮（从右数第二个）开出来的就是**共享的那份菜单**（components/ContextMenu，两根滑块，
+ *       全条唯一入口）：它长在窗口
  *       **内部**、条下面那块透明容器让出来的地方 —— HTML 画不出窗口之外，而 Wayland 下又没法给
  *       新建的弹窗定位，所以菜单要地方，只能是窗口自己让出一段（加高的是窗口，不是播放器，
  *       见 shared/ipc.ts 的 MINI_MENU_HEIGHT）。
  *
- * ★ 无边框窗口没有系统标题栏：把手得自己给 —— 条上是**封面**（`-webkit-app-region: drag` 只写在
- *   它自己身上，整条放行 —— 见样式表那份分工），另外窗口比内容多出来的那块透明容器也是把手。
+ * ★ 无边框窗口没有系统标题栏：把手得自己给 —— **条整体**（`-webkit-app-region: drag` 写在
+ *   .mini-bar 上）与**透明容器**都是把手，条上要能操作的地方各自挖回来（见样式表那份「拖拽区
+ *   四项 + 放行面三项」的总表）。顺带白拿一件事：拖拽区的右键由**系统**弹窗口菜单 —— 那正是
+ *   无边框窗口本来缺的那一份。
  *   关闭这一颗也得自己给 —— 少了它就是「这个窗关不掉」。
  *
  * ★ 面板高度可拖（把手压在窗口下边缘，见 .mini-resize）：窗口只会**向下**长，所以默认位置
@@ -67,7 +75,7 @@ import {
   IconVolume,
   IconVolumeX
 } from './Icons'
-import { openMenuFromEvent, useContextMenu, type MenuItem } from './ContextMenu'
+import { useContextMenu, type MenuItem } from './ContextMenu'
 import { LyricsView } from './LyricsView'
 import { Queue } from './Panel'
 import { MODE_LABEL, modeIcon } from './play-mode'
@@ -83,6 +91,26 @@ import { useSettings } from '@/state/useSettings'
 const ICON_CTL = 16
 const ICON_NAV = 17
 
+/**
+ * 条上的右键一律**否决**：不弹应用菜单，也不放行 Chromium 那份默认菜单。
+ *
+ * ★ 本组件的自定义菜单（不透明度那两个旋钮）**只有一个入口** —— 右上角从右数第二个按钮（那颗
+ *   .win-btn，见下面 .mini-window-actions 那一段）。条上其余任何落点都不开菜单。
+ * ★ 挂在**整条**（.mini-bar）上，不是挂在交互带上：条上收得到页面事件的地方不止带子一处（还有
+ *   进度线与右上角那颗钮那一组，见样式表那份总表），挂带上的话那两处就得各自再写一遍。一处否决
+ *   整条，将来给条加新的放行面也不会漏出一块「右键弹出默认菜单」的死角。
+ * ★ 挂在条上**不会**碰到拖拽区：空带 / 封面 / 透明容器是非客户区，它们的 contextmenu 压根不产生
+ *   页面事件，由**系统**弹窗口菜单（Electron 文档那条）—— 那是需求要的效果，不是被这里拦掉。
+ * ★ 从前这里是一份「按落点分派」的函数（落在控件上掐掉，其余开应用菜单），已经删掉：条上不再有
+ *   任何一处开应用菜单，分派也就无事可分 —— 剩下的唯一动作就是否决。
+ *   `event.stopPropagation()` 留着是防上层：将来谁在 .mini-surface / .mini-player 上挂菜单宿主，
+ *   不会顺着冒泡漏进条里来。
+ */
+const suppressContextMenu = (event: React.MouseEvent<HTMLElement>): void => {
+  event.preventDefault()
+  event.stopPropagation()
+}
+
 export function MiniPlayer(): React.JSX.Element {
   const player = usePlayer()
   /** 下方那块面板装什么（null = 收起）。★ 这份状态在 useMiniView 上，见那里的说明 */
@@ -95,11 +123,18 @@ export function MiniPlayer(): React.JSX.Element {
   const miniOpacity = useSettings((s) => s.settings.miniWindowOpacity)
   const panelOpacity = useSettings((s) => s.settings.miniPanelOpacity)
   const patchSettings = useSettings((s) => s.patch)
+  /** 那颗下拉钮（右上角从右数第二个）。既是菜单的入口，也是「再点一次收起」的判据（见 menuOpen） */
+  const opacityBtnRef = useRef<HTMLButtonElement>(null)
   /**
-   * 菜单开着没有。**本组件之外**那件事（窗口临时加高到放得下菜单）由 MiniApp 报给主进程，
+   * 这一份菜单开着没有。**本组件之外**那件事（窗口临时加高到放得下菜单）由 MiniApp 报给主进程，
    * 这里只用它给那颗钮一个 aria-expanded。
+   *
+   * ★ 连 anchor 一起认（与 SettingSelect / TitleBar 同一口径）：菜单宿主是**全窗共用**的一份，而
+   *   迷你窗里还有第二个来源 —— 队列里右键某首歌（Panel.tsx 走 openMenuFromEvent，那份不带
+   *   anchor）。只认 `s.open` 的话，那个菜单开着时这颗钮会谎报 aria-expanded=true。
+   * ★ 也不另存一份「我开着」的本地 state：宿主的 anchor 就是那份事实，抄一份只会多一个会漂的副本。
    */
-  const menuOpen = useContextMenu((s) => s.open)
+  const menuOpen = useContextMenu((s) => s.open && s.anchor === opacityBtnRef.current)
   /**
    * 整棵迷你树**不接受焦点**（Tab、鼠标、程序化三条路都堵掉 —— 见 hooks/useUnfocusable）。
    *
@@ -112,42 +147,6 @@ export function MiniPlayer(): React.JSX.Element {
   const rootRef = useUnfocusable<HTMLDivElement>()
   /** 拖动进度条时手上的位置（null = 没在拖），与底栏同一套语义 */
   const [scrub, setScrub] = useState<number | null>(null)
-  /**
-   * 指针在不在迷你窗里 —— 中栏要不要换成控制由它定（样式表 .mini-info-hover 挂在它上面）。
-   *
-   * ★★ 这份状态**只能在这儿维护**，不能写成 `.mini-player:hover`：拖拽区（封面、以及窗口比内容
-   *   多出来的那块透明容器）在 Wayland / Windows 上被从 surface 的**输入区里挖掉**，指针落在
-   *   上面**一个事件都收不到** —— 于是 CSS 眼里「指针挪到封面上」与「指针移出窗口」长得一模一样
-   *   （`:hover` 灭掉）：中栏当场换回歌名，指针再挪回中栏又亮起来，也就是「鼠标从外面移到封面时
-   *   中栏闪一下」。
-   *   ★ 「挖掉」不是「盖住」：它不看可见性、也不吃 pointer-events，只能在收得到事件这一侧兜。
-   * ★ enter / leave 只在跨边界时触发（不是每次 pointermove），所以这一份每次进出只过一次渲染
-   *   —— 从前坚持用 CSS 的那条理由（怕每动一下鼠标就重渲染）在这里不成立。
-   */
-  const [pointerInside, setPointerInside] = useState(false)
-
-  /**
-   * 指针离开这一层：只有**真的离开窗口**才算离开。
-   *
-   * ★ 坐标还留在窗框里（留 2px 余量，免得贴边出去、坐标被钳到边界上时误判）说明指针只是走进了
-   *   那一格挖掉的拖拽区（封面 / 透明容器）—— 它明明还停在挂件上，控制不该收。收了就与 `:hover`
-   *   一样闪，那正是这一份要修的东西。
-   * ★ 已知的边界：从封面那一格**直接**移出窗口时收不到任何事件（那一格本来就不在输入区里），
-   *   这份状态会多留一会儿，直到下一次真的 leave 才纠正 —— 表现为「歌名那两行晚一点才回来」，
-   *   比闪一下轻。
-   */
-  const handlePointerLeave = (event: React.PointerEvent<HTMLDivElement>): void => {
-    const box = rootRef.current?.getBoundingClientRect()
-    if (!box) return
-    const margin = 2
-    const stillInside =
-      event.clientX > box.left + margin &&
-      event.clientX < box.right - margin &&
-      event.clientY > box.top + margin &&
-      event.clientY < box.bottom - margin
-    if (!stillInside) setPointerInside(false)
-  }
-
   const song = useMemo(
     () =>
       player.cursor >= 0 && player.cursor < player.order.length
@@ -160,12 +159,13 @@ export function MiniPlayer(): React.JSX.Element {
   const position = scrub ?? player.currentTime
 
   /**
-   * 迷你窗的窗口菜单：两个不透明度旋钮。**两个入口共用这一份** —— 右上角那颗下拉钮（点开）与
-   * 封面右键（见下面 .mini-cover 那一段）。
+   * 迷你窗的窗口菜单：两个不透明度旋钮。**全条唯一的入口是右上角从右数第二个按钮**（那颗
+   * .win-btn）—— 交互带的右键已撤、封面右键让给系统，条上别处一律不开应用菜单（见
+   * suppressContextMenu）。
    *
-   * ★ 为什么钮那一份是保底：封面归拖拽区，那一格上的鼠标事件**能不能到页面看平台**（X11 上实测
-   *   不分左右键都被吞，见 styles/components.css 里那份分工的说明）；挂在按钮上则不受影响 ——
-   *   条上除了封面全是放行面，button 一定收得到。
+   * ★ 封面右键不再开这一份：拖拽区（= 非客户区）的右键由**系统**弹窗口菜单（Electron 文档那条），
+   *   旋钮改由按钮独占。挂在按钮上本来也是最稳的那条路 —— 它在窗口钮组里、整组标着 no-drag，
+   *   一定收得到。
    * ★ 做成**函数**而不是模块级常量：两个 value 与 onChange 要取「点开这一刻」的设置值，
    *   常量数组会把它们钉死在首次渲染那一份上。
    */
@@ -185,6 +185,9 @@ export function MiniPlayer(): React.JSX.Element {
       /*
         面板那层底色是**相对播放条**的浓度（100 = 与条一致），见 tokens.css ——
         所以它在深浅两个主题下都说得通，不必分两套默认值。
+        ★ 它顺带牵动**窗口那圈阴影**：面板调淡时，围着「条 + 面板」那一圈跟着淡出，
+          围着播放条自己那一圈按互补比例淡入（面板透到 0，挂件的下边缘就是条的下边缘）。
+          两个落点见样式表 .mini-surface 与 .mini-player::before，这里不必额外做什么。
       */
       label: '面板背景不透明度',
       slider: {
@@ -196,15 +199,41 @@ export function MiniPlayer(): React.JSX.Element {
     }
   ]
 
+  /**
+   * 点那颗钮：**开着就收起，关着就展开**。
+   *
+   * ★ 收起这一半只能由这里给：菜单宿主那条「点别处就关」的监听挂在 window **捕获阶段**，
+   *   按下去的一瞬间就该关掉菜单 —— 它刻意把触发器自己（anchor）放行，以免「刚关又被 onClick
+   *   打开」看起来像点不掉（见 ContextMenu 的 onPointerDown）。放行之后，「再点一次」到底是
+   *   收起还是重新展开，宿主不再管，判断权交回按钮 —— 也就是这个函数。
+   * ★ 读 `getState()` 而不是读 menuOpen 那个布尔量：后者是**渲染那一刻**的快照，而收起与展开
+   *   之间隔着一次窗口尺寸变化（主进程为放下菜单把迷你窗临时加高，见 MiniApp 的 MINI_MENU_SIZE），
+   *   重渲染不一定赶得上这一次点击。与 SettingSelect 同款。
+   * ★ 判据要写成 `open && anchor === 这一颗`，不能只写 `open`：迷你窗里队列歌曲的右键菜单是
+   *   第二个来源（不带 anchor）。它开着时点这颗钮应当是**换一份菜单**，而不是把别人的收掉 ——
+   *   那种情况下宿主的捕获监听已经先把那份关掉了（点的是别处），这里读到 false，自然走展开分支。
+   */
+  const toggleOpacityMenu = (event: React.MouseEvent<HTMLButtonElement>): void => {
+    const menu = useContextMenu.getState()
+    if (menu.open && menu.anchor === event.currentTarget) {
+      menu.hide()
+      return
+    }
+    const rect = event.currentTarget.getBoundingClientRect()
+    // 右对齐：触发器就贴着窗口右缘，左对齐会让面板整块探到窗外去
+    menu.show(rect.left, rect.bottom + 6, opacityMenu(), {
+      anchor: event.currentTarget,
+      align: 'right',
+      anchorRect: rect
+    })
+  }
+
   return (
-    /* 指针在不在窗里 → data-hover（判据由 JS 给，理由见上面的 pointerInside 与样式表那一段） */
-    <div
-      className="mini-player"
-      ref={rootRef}
-      data-hover={pointerInside ? 'true' : undefined}
-      onPointerEnter={() => setPointerInside(true)}
-      onPointerLeave={handlePointerLeave}
-    >
+    /* 根上**不挂任何指针判据**：换层由 CSS 认那条交互带，右键由条上那句否决统一处理（见
+       suppressContextMenu），根这一层只管把整棵树收进来（含 useUnfocusable）。
+       ★ 条上留白处（控件行上下的那两条空带）、封面、透明容器是**拖拽区**，它们的右键归**系统**
+         窗口菜单（见样式表 .mini-bar 那段「两种口径」）—— 与这一棵树无关，所以这里没有对应代码。 */
+    <div className="mini-player" ref={rootRef}>
       {/*
         ★★ 内容层（播放条 + 面板）：**窗口阴影画在这一层的框上**，不画在 .mini-player 上。
           后者撑满整窗 —— 菜单开着、或系统事件（平铺 / 全屏）把窗口拉大时，多出来的那一段也
@@ -215,32 +244,18 @@ export function MiniPlayer(): React.JSX.Element {
           接缝落在框内，那里天然没有阴影（见样式表 .mini-surface）。
       */}
       <div className="mini-surface">
-        <footer className="mini-bar">
-          <PlayerProgress
-            duration={duration}
-            position={player.currentTime}
-            scrub={scrub}
-            onScrub={setScrub}
-            onSeek={(seconds) => player.seek(seconds)}
-            onSeekBy={(delta) => player.seekBy(delta)}
-          />
-
+        <footer className="mini-bar" onContextMenu={suppressContextMenu}>
           {/*
-          封面：包一层是为了给它一个「接右键的容器」—— Cover 自己只认展示用的 props。
-          ★★ 这一层是**拖窗口的把手**（样式表里只有它写了 drag）：按住封面即拖窗口，条上只有
-            这一块。它因此**收不到指针事件** —— 指针落在上面时中栏**保持原样**：那一格收不到
-            事件，判据就按坐标认「指针还在窗里」，见上面的 pointerInside。
-          ★ 右键菜单挂在它上面（与右上角那颗下拉钮同一份 opacityMenu）：拖拽区里的右键**能不能
-            到页面看平台** —— X11 上实测不分左右键都被吞，Wayland 上那一格压根不在输入区里，
-            事件一个都到不了。送得到就开菜单，送不到时右上角那颗钮照旧是入口（所以两处都在，
-            一颗钮是保底）。
+          封面：包一层是为了给它一个「接事件的容器」—— Cover 自己只认展示用的 props。
+          ★★ 这一层是**拖窗口的把手**之一（条整体也是把手区，见样式表 .mini-bar）：按住封面即
+            拖窗口。它因此**收不到指针事件** —— 指针落在上面时中栏保持原样（不换层）。
+            它也不在交互带里：带只到它的右缘为止（见 .mini-stage）。
+          ★ 右键**这里什么都不挂**：封面是拖拽区 = 非客户区，右键由**系统**弹窗口菜单（Electron
+            文档那条：可拖拽区的右键会弹系统菜单）。事件到不了页面，也就轮不到条上那句否决。
           尺寸直接取 CSS 那条 --mini-bar-h（不在这儿另写一份数值），圆角给 0：贴着窗口
           边缘的圆角块看着像没对齐。width 是向后端要的缩略宽度（?w=），按显示尺寸的两倍给。
         */}
-          <div
-            className="mini-cover"
-            onContextMenu={(event) => openMenuFromEvent(event, opacityMenu())}
-          >
+          <div className="mini-cover">
             <Cover
               coverUrl={song?.cover_url}
               width={128}
@@ -251,171 +266,181 @@ export function MiniPlayer(): React.JSX.Element {
           </div>
 
           {/*
-          中栏：文本两行 + 悬浮时盖在上面的控制条（两层都在 .mini-info 里，见样式表）。
-          ★ 常态那两行各有各的滚动（ScrollingLine）：谁放不下谁滚，另外一行不动。
-          ★ key 取歌曲 id：换歌要**从头**滚起（重挂一次 DOM = 动画重来），不然新歌一上来
-            就接在上一首滚到一半的位置上。
+          交互带：**中栏与右侧控件组合起来的一整块矩形** —— 从封面右缘直通窗口右缘、**只有那一行
+          那么高**（上下空带落在它框外，不算）。样式表见 .mini-stage，那里写的是「为什么它必须是
+          一个元素」与「为什么高度是这一行、不是整条」。
+          ★★ 它是条上那个**能操作的洞**：条整体是拖拽区（非客户区，见样式表 .mini-bar），这一块
+            标着 no-drag 被挖回来 —— 于是上下那两条空带留在拖拽区里，拿到「按住能拖窗口 + 右键
+            出系统菜单」，而这一行拿到「悬浮换层 + 点钮」。
+          ★ 它自己不排版、也不许排版：包起来之后「指针落在这一整块里」第一次是一个**元素的事实**
+            —— 判据（`:hover`）挂在它身上，内部那几道缝（控件组里那几条 2px）自然跟着算。
+          ★ 这一层**不标底色**：它没有自己的背景，所以这一行看起来就是条本身（见样式表那一节）。
+            画一层悬浮底会与条 / 封面 / 面板的合成色对不上，出现一块色差。
+          ★ 这一层上**不挂任何 handler**：换层判据是 CSS 的 `:hover`（挂在它的框上，见样式表
+            .mini-info-hover），右键由条上那句否决统一处理（见 suppressContextMenu，它挂在整条上，
+            本层不开菜单）。于是「这一块是哪儿」只有一个出处 —— 这一层的框，不会与某处 handler
+            的范围对不上。
         */}
-          <div className="mini-info">
-            <div className="mini-info-text">
-              <ScrollingLine
-                key={`title-${song?.id ?? 0}`}
-                className="playerbar-title"
-                text={song?.title ?? '未在播放'}
-              />
-              <div className="mini-info-sub">
+          <div className="mini-stage">
+            {/*
+            中栏：文本两行 + 悬浮时盖在上面的控制条（两层都在 .mini-info 里，见样式表）。
+            ★ 常态那两行各有各的滚动（ScrollingLine）：谁放不下谁滚，另外一行不动。
+            ★ key 取歌曲 id：换歌要**从头**滚起（重挂一次 DOM = 动画重来），不然新歌一上来
+              就接在上一首滚到一半的位置上。
+          */}
+            <div className="mini-info">
+              <div className="mini-info-text">
                 <ScrollingLine
-                  key={`artist-${song?.id ?? 0}`}
-                  className="playerbar-artist"
-                  text={song ? displayArtist(song.artist) : ''}
+                  key={`title-${song?.id ?? 0}`}
+                  className="playerbar-title"
+                  text={song?.title ?? '未在播放'}
                 />
-                {/* 时间不挂 key：它每秒都在变，重挂纯属浪费；它也永远放得下，不必滚 */}
-                <span className="mini-time">
-                  {formatDuration(position)}/{formatDuration(duration)}
-                </span>
+                <div className="mini-info-sub">
+                  <ScrollingLine
+                    key={`artist-${song?.id ?? 0}`}
+                    className="playerbar-artist"
+                    text={song ? displayArtist(song.artist) : ''}
+                  />
+                  {/* 时间不挂 key：它每秒都在变，重挂纯属浪费；它也永远放得下，不必滚 */}
+                  <span className="mini-time">
+                    {formatDuration(position)}/{formatDuration(duration)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mini-info-hover">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label={player.muted ? '取消静音' : '静音'}
+                  onClick={() => player.toggleMute()}
+                >
+                  {player.muted || player.volume === 0 ? (
+                    <IconVolumeX size={ICON_CTL} />
+                  ) : (
+                    <IconVolume level={player.volume > 0.55 ? 2 : 1} size={ICON_CTL} />
+                  )}
+                </button>
+                <Slider
+                  ariaLabel="音量"
+                  className="mini-volume"
+                  value={player.muted ? 0 : player.volume * 100}
+                  max={100}
+                  // 与底栏那条音量条同一套：拖动期间只改内存，松手立刻 flush（避免拖完就关掉丢最后一次）
+                  onChange={(value) => player.setVolume(value / 100)}
+                  onCommit={(value) => {
+                    player.setVolume(value / 100)
+                    player.flushVolume()
+                  }}
+                />
+                {/* 与底栏那颗同口径：模式由图标示意，不靠变色（见 PlayerBar.tsx 的说明） */}
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label={MODE_LABEL[player.playMode]}
+                  onClick={() => player.cyclePlayMode()}
+                >
+                  {modeIcon(player.playMode, ICON_CTL)}
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  data-active={favorite}
+                  aria-label={favorite ? '取消收藏' : '收藏'}
+                  disabled={!song}
+                  onClick={() => void window.songloft.mini.command({ kind: 'toggle-favorite' })}
+                >
+                  <IconHeart size={ICON_CTL} filled={favorite} />
+                </button>
               </div>
             </div>
 
-            <div className="mini-info-hover">
+            {/*
+            右侧那一组控件（见样式表 .mini-controls）：**不拖窗口**。
+            拖不了是结构上的 —— 它在交互带里，而带整块是放行面（no-drag），按下的事件进页面、
+            由钮自己接手。
+            ★ 这里**什么都不挂**，右键也一样：条上那句否决（见 suppressContextMenu，挂在整条上）
+              把这一组连同钮间那几条 2px 缝一起管掉了 —— 一处口径，不必在每颗钮上再写一遍。
+          */}
+            <div className="mini-controls">
               <button
                 type="button"
                 className="icon-btn"
-                aria-label={player.muted ? '取消静音' : '静音'}
-                onClick={() => player.toggleMute()}
-              >
-                {player.muted || player.volume === 0 ? (
-                  <IconVolumeX size={ICON_CTL} />
-                ) : (
-                  <IconVolume level={player.volume > 0.55 ? 2 : 1} size={ICON_CTL} />
-                )}
-              </button>
-              <Slider
-                ariaLabel="音量"
-                className="mini-volume"
-                value={player.muted ? 0 : player.volume * 100}
-                max={100}
-                // 与底栏那条音量条同一套：拖动期间只改内存，松手立刻 flush（避免拖完就关掉丢最后一次）
-                onChange={(value) => player.setVolume(value / 100)}
-                onCommit={(value) => {
-                  player.setVolume(value / 100)
-                  player.flushVolume()
-                }}
-              />
-              {/* 与底栏那颗同口径：模式由图标示意，不靠变色（见 PlayerBar.tsx 的说明） */}
-              <button
-                type="button"
-                className="icon-btn"
-                aria-label={MODE_LABEL[player.playMode]}
-                onClick={() => player.cyclePlayMode()}
-              >
-                {modeIcon(player.playMode, ICON_CTL)}
-              </button>
-              <button
-                type="button"
-                className="icon-btn"
-                data-active={favorite}
-                aria-label={favorite ? '取消收藏' : '收藏'}
+                aria-label="上一首"
                 disabled={!song}
-                onClick={() => void window.songloft.mini.command({ kind: 'toggle-favorite' })}
+                onClick={() => void player.previous()}
               >
-                <IconHeart size={ICON_CTL} filled={favorite} />
+                <IconSkipBack size={ICON_NAV} />
+              </button>
+              <button
+                type="button"
+                className="play-btn"
+                aria-label={player.playing ? '暂停' : '播放'}
+                disabled={!song}
+                onClick={() => void player.toggle()}
+              >
+                {/*
+                两颗图标尺寸刻意不同：三角形那个字形本身只占方框的四成宽，而**面积**只有它
+                外接矩形的一半（暂停那两根竖条是实打实的满框），同一个 size 下三角形看着就是
+                小一号。所以播放给 14、暂停给 12 —— 切换时才不会像「图标突然缩了一截」。
+              */}
+                {player.playing ? <IconPause size={12} /> : <IconPlay size={14} />}
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label="下一首"
+                disabled={!song}
+                onClick={() => void player.next(false)}
+              >
+                <IconSkipForward size={ICON_NAV} />
+              </button>
+
+              <button
+                type="button"
+                className="icon-btn"
+                data-active={panel === 'lyrics'}
+                aria-label={panel === 'lyrics' ? '收起歌词' : '歌词'}
+                onClick={() => togglePanel('lyrics')}
+              >
+                <IconLyrics size={ICON_CTL} />
+              </button>
+              {/* 队列与歌词共用下面那一块面板，所以两颗钮互斥：点另一颗是**换内容**，不是叠一层 */}
+              <button
+                type="button"
+                className="icon-btn"
+                data-active={panel === 'queue'}
+                aria-label={panel === 'queue' ? '收起播放队列' : '播放队列'}
+                onClick={() => togglePanel('queue')}
+              >
+                <IconQueue size={ICON_CTL} />
               </button>
             </div>
-          </div>
-
-          {/*
-          右侧整块（控件行 + 它上下那两条空带，见样式表 .mini-controls）：**不拖窗口、也没有右键
-          菜单**。拖不了是结构上的 —— 条上只有封面一块拖拽区（样式表那份分工），这一块不在其中，
-          按下的事件进页面、没人接手；「没有菜单」这一半在这里**显式**写下来：掐掉默认菜单本身由
-          main.tsx 那条全局监听
-          兜着，这里挡的是「将来有人把菜单挂到 .mini-bar 上」时顺着冒泡漏进右半边 —— 条上开菜单
-          的入口只有封面与右上角那颗下拉钮，它们在自己的层里挂，冒泡到这儿被截住也不会互相影响。
-        */}
-          <div
-            className="mini-controls"
-            onContextMenu={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-            }}
-          >
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="上一首"
-              disabled={!song}
-              onClick={() => void player.previous()}
-            >
-              <IconSkipBack size={ICON_NAV} />
-            </button>
-            <button
-              type="button"
-              className="play-btn"
-              aria-label={player.playing ? '暂停' : '播放'}
-              disabled={!song}
-              onClick={() => void player.toggle()}
-            >
-              {/*
-              两颗图标尺寸刻意不同：三角形那个字形本身只占方框的四成宽，而**面积**只有它
-              外接矩形的一半（暂停那两根竖条是实打实的满框），同一个 size 下三角形看着就是
-              小一号。所以播放给 14、暂停给 12 —— 切换时才不会像「图标突然缩了一截」。
-            */}
-              {player.playing ? <IconPause size={12} /> : <IconPlay size={14} />}
-            </button>
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="下一首"
-              disabled={!song}
-              onClick={() => void player.next(false)}
-            >
-              <IconSkipForward size={ICON_NAV} />
-            </button>
-
-            <button
-              type="button"
-              className="icon-btn"
-              data-active={panel === 'lyrics'}
-              aria-label={panel === 'lyrics' ? '收起歌词' : '歌词'}
-              onClick={() => togglePanel('lyrics')}
-            >
-              <IconLyrics size={ICON_CTL} />
-            </button>
-            {/* 队列与歌词共用下面那一块面板，所以两颗钮互斥：点另一颗是**换内容**，不是叠一层 */}
-            <button
-              type="button"
-              className="icon-btn"
-              data-active={panel === 'queue'}
-              aria-label={panel === 'queue' ? '收起播放队列' : '播放队列'}
-              onClick={() => togglePanel('queue')}
-            >
-              <IconQueue size={ICON_CTL} />
-            </button>
           </div>
 
           {/*
           右上角那一组：下拉菜单 + 关闭（关闭那颗与主窗口标题栏右端同款 .win-btn，只是小一档）。
-          ★ 下拉那颗是那份菜单**一定收得到**的那个入口：封面右键同开一份，但封面归拖拽区，
-            那一格的右键到不到页面看平台（见 opacityMenu 与样式表那份分工里「挖掉」那一条）。
+          ★ 下拉那颗（从右数第二个）是那份菜单**全条唯一的入口** —— 条上别处一律不开应用菜单
+            （见 suppressContextMenu）：封面右键让给了系统窗口菜单，交互带也不再开自绘菜单。
+            这一组在样式表里整组标着 no-drag（见 .mini-window-actions），所以两颗钮都点得动。
+          ★ 它是个**开关**：开着时再点一次收起（见 toggleOpacityMenu）。收起逻辑必须由按钮自己给
+            —— 宿主那条「点别处关」的捕获监听刻意放行触发器，判断权交回按钮。
           ★ 原先这里还有一颗最小化，已去掉 —— 理由见文件头那一段（系统那一侧的最小化还在，
             从底栏那颗按钮或托盘再点一下就唤回来）。
-          它们整个落在控件行上方那条缝里（高度由 CSS 按条高与控件高算出来），所以那一行
-          的空隙有多高，这里的图标就只能是多大 —— 11px 是这条缝能舒服放下的上限。
+          它们整个落在控件行上方那条空带里（高度由 CSS 按条高与控件高算出来），所以那条带
+          有多高，这里的图标就只能是多大 —— 11px 是它能舒服放下的上限。
+          ★ 代价：这一小块（两颗钮 + 钮间那道缝）从拖拽区里挖走了 —— 它上下左右那一圈空带仍然
+            能拖窗口、右键仍出系统菜单，只有钮自己这一格不行。
         */}
           <div className="mini-window-actions">
             <button
+              ref={opacityBtnRef}
               type="button"
               className="win-btn"
               aria-label="不透明度"
+              aria-haspopup="menu"
               aria-expanded={menuOpen}
-              onClick={(event) => {
-                const rect = event.currentTarget.getBoundingClientRect()
-                // 右对齐：触发器就贴着窗口右缘，左对齐会让面板整块探到窗外去
-                useContextMenu.getState().show(rect.left, rect.bottom + 6, opacityMenu(), {
-                  anchor: event.currentTarget,
-                  align: 'right',
-                  anchorRect: rect
-                })
-              }}
+              onClick={toggleOpacityMenu}
             >
               <IconChevronDown size={11} />
             </button>
@@ -429,11 +454,39 @@ export function MiniPlayer(): React.JSX.Element {
               <IconClose size={11} />
             </button>
           </div>
+
+          {/*
+          进度线：贴条的下边缘、横跨整条（含封面那一段）。
+
+          ★★ 它**必须是条里最后一个子元素**，别按视觉顺序挪到前面去 —— 这一条不是排版偏好，是
+            输入区归属的决定因素。条整体标着 drag（见样式表 .mini-bar），进度线靠 no-drag 被挖
+            回来；而 Blink 收集这些矩形时走的是 **LayoutObject 树的先后顺序**（父先于子、子按
+            DOM 序，`SlowFirstChild()/NextSibling()`）**而不是 z-index**，Electron 侧再按这个
+            列表逐条 add / subtract —— 于是「同一个像素上，谁在 DOM 里靠后，谁的值说了算」。
+            排在封面后面，它挖的那一格才真的挖得动（封面那一段也才拖得了播放头）；排在前面时，
+            封面（drag）后处理会把那一段重新盖回去 —— 表现就是「线明明画在封面上、指针却按不动」。
+            ⚠️ z-index 管的是**画面**，管不了**输入区**。两者在这一个元素上是两个独立机制，
+              别指望其中一个能替另一个干活（见样式表那一节的说明）。
+          ★ 它是 absolute 定位，所以排在最前还是最后**不影响布局**：条还是那个 flex 行，
+            封面 / 交互带 / 窗口钮的占位一个像素都不动。
+          ★ 命中带比看得见的那条线高（样式表：盒 10px、可见 3px→5px）：3px 的细线要「轻松」压住
+            不容易，手稍偏一点就滑到封面上、变成拖窗口了。加高之后封面底部那一小条也归它管，
+            从封面那一段按下并横向拖动照样能拖播放头（按下即 setPointerCapture，见下面这个组件）。
+        */}
+          <PlayerProgress
+            duration={duration}
+            position={player.currentTime}
+            scrub={scrub}
+            onScrub={setScrub}
+            onSeek={(seconds) => player.seek(seconds)}
+            onSeekBy={(delta) => player.seekBy(delta)}
+          />
         </footer>
 
         {/*
         展开时才挂面板，且挂在播放条**之后**（它在进度线下方）。窗口高度是主进程一步到位的
-        （原生窗口的尺寸做不了动画），内容这边补一点淡入，看着才不像「啪」地一下多出一块。
+        （原生窗口的尺寸做不了动画），内容这边补一段**自顶向下拉出来**的展开，看着才不像
+        「啪」地一下多出一块 —— 展开方向是刻意的，见样式表 @keyframes mini-panel-in。
 
         ★ 歌词与队列共用这一块地方：主进程那边只有「开没开」一个布尔量，换内容不动窗口尺寸，
           所以两颗钮之间来回点不会闪也不会跳。队列那一份要自己给滚动容器（见 .mini-queue）——

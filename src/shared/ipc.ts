@@ -372,6 +372,11 @@ export interface AppSettings {
    * ★ 与 windowOpacity / miniWindowOpacity 不是一回事：那两个调的是**整窗**（桌面会透进来），
    *   这一个只在窗口内部透 —— 面板淡下去露出的是同一窗口里它下面那层。
    *   与 lyricPanelOpacity 也不是一个：那个只作用于歌词区域，且只在歌词那边生效。
+   * ★★ 它还牵动**窗口那圈阴影**（面板淡下去之后，围着一块透明区域画阴影就是错的）：
+   *   围着「条 + 面板」那一圈按同一比例淡出，围着播放条自己那一圈按互补比例淡入 ——
+   *   面板透到 0 时，挂件的下边缘就是**条的下边缘**，阴影跟过来围住它。
+   *   两份权重在 tokens.css（--mini-shadow-keep / --mini-shadow-bar），
+   *   两个落点在 components.css 的 .mini-surface 与 .mini-player::before。
    */
   miniPanelOpacity: number
   /**
