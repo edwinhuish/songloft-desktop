@@ -120,7 +120,21 @@ export interface WindowState {
  *     莫名其妙的空档（透明，但鼠标落在上面就是在拖窗口）。
  */
 export const MINI_BAR_HEIGHT = 64
+/** 播放条（与面板）自己的宽度 —— **窗口**比它宽，两侧多出来的那圈留给阴影，见 MINI_SHADOW_EDGE */
 export const MINI_WIDTH = 380
+/**
+ * 窗口四周留给**窗口阴影**的透明边距（每边这么多）。
+ *
+ * ★ 为什么需要它：窗口是透明的（frame: false + transparent），阴影只能画在窗口**内部** ——
+ *   `box-shadow` 画在元素框**外面**，可见面若贴着窗口边缘，那圈阴影就被窗口边界裁掉了。
+ *   于是可见面（.mini-player / .shell）从窗口边缘缩进这一圈，缩出来的地方只画阴影
+ *   （见 styles/base.css 的 #root 与 --win-shadow）。
+ * ★ 与样式表里的 `--win-edge` 是同一个数（那边给渲染层用，这边给主进程算窗口尺寸用）——
+ *   与 MINI_WIDTH / --mini-w 是同一个道理：两处差一档，条就会比窗口窄出一块或反过来被裁。
+ */
+export const MINI_SHADOW_EDGE = 10
+/** 迷你窗**窗口**的尺寸 = 播放器本体 + 两侧留给阴影的那一圈 */
+export const MINI_WINDOW_WIDTH = MINI_WIDTH + MINI_SHADOW_EDGE * 2
 /** 面板能拖到的最小高度：再矮就只剩一行歌词的位置，那个高度没有意义 */
 export const MINI_PANEL_MIN_HEIGHT = 180
 /** 面板的默认高度（首次打开 / 没拖过时用） */

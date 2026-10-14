@@ -17,6 +17,21 @@ body,
 }
 
 /*
+ * 给**窗口阴影**留一圈透明边距（令牌见 tokens.css 的 --win-edge / --win-shadow）。
+ *
+ * ★ 为什么不能直接往可见面（.shell / .mini-player）上写 box-shadow：窗口是透明窗口，
+ *   `box-shadow` 画在元素框**外面** —— 可见面若贴着窗口边缘，那圈阴影当场被窗口边界裁掉。
+ *   所以让可见面从窗口边缘缩进 --win-edge，缩出来的地方只画阴影。
+ * ★ 挂在 #root 上而不是可见面自己身上：两个窗口共用这一条。主窗口里 #root 的孩子是 .shell，
+ *   迷你窗里是 .mini-player（见文件末尾那条 html[data-mini] 规则），两边都只管缩进。
+ * ★ 最大化 / 全屏时收成 0：那时窗口铺满屏幕，留着边距反而会在四周露出一圈桌面。
+ *   （迷你窗没有这两种状态 —— 它的 min/max 尺寸被主进程钉死，见 main/mini-window.ts。）
+ */
+#root {
+  padding: var(--win-edge);
+}
+
+/*
  * 最外面这两层**不许铺底色**。
  *
  * 窗口是**透明窗口**（main/windows.ts 的 transparent），整个界面的底色一律由下面 .shell
@@ -145,6 +160,20 @@ a {
     ),
     var(--bg-0);
   transition: background var(--dur-3) var(--ease);
+  /* 窗口四周那圈阴影（#root 已经把地方让出来了，见上面那一段） */
+  box-shadow: var(--win-shadow);
+}
+
+/* 最大化 / 全屏：不留边距、不画阴影（那时的边框就是屏幕边缘，见 #root 那一段）。
+   ★ 属性用**存在性**判定（App.tsx 那边走 toggleAttribute，值是空串），别写成 ='true'。 */
+html[data-maximized] #root,
+html[data-fullscreen] #root {
+  padding: 0;
+}
+
+html[data-maximized] .shell,
+html[data-fullscreen] .shell {
+  box-shadow: none;
 }
 
 /*

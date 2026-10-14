@@ -125,7 +125,7 @@ export function App(): React.JSX.Element {
   const status = useAuth((s) => s.status)
   const started = useRef(false)
 
-  /* ── 迷你窗那两条接线（可以、也必须反复装卸）────────────────────── */
+  /* ── 窗级订阅：迷你窗那两条 + 窗口状态（可以、也必须反复装卸）────────── */
   /*
    * 一条是 installMiniHost()：把播放状态推给迷你窗、把它发来的遥控命令落到真播放器上
    * （见 state/mini-host.ts）。装在这里而不是某个组件里，因为全应用只有**这一个**真播放器
@@ -134,6 +134,9 @@ export function App(): React.JSX.Element {
    * 另一条是「迷你窗此刻开着没有」：底栏那颗按钮的高亮要看它（窗口是主进程开的，渲染层没有
    * 别的渠道知道这件事）。两条都走模块级订阅而不是 React —— 它们只影响一个布尔量与几份快照，
    * 让整棵界面树为它重渲染一次不划算（理由同 ContextMenuHost 那条 dataset）。
+   * 再加上一条窗口状态（最大化 / 全屏）：自绘标题栏要知道什么时候显示「还原」图标，而
+   * 「窗口四周那圈阴影」也要知道 —— 最大化 / 全屏时不留边距、不画阴影（见 base.css 的 #root）。
+   * 它同样写成 dataset，两个消费者都只是「换一层样式」。
    *
    * ★★ 这一段**刻意不放进下面那个带一次性守卫的 effect**里，这坑已经踩过：
    *   严格模式（dev）会「挂上 → 卸下 → 再挂上」，而守卫让第二次挂载直接 return ——
@@ -146,9 +149,15 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     const disposeHost = installMiniHost()
     const disposeOpen = window.songloft.mini.onOpen((open) => useUi.getState().setMiniOpen(open))
+    const disposeState = window.songloft.on.windowState((state) => {
+      const root = document.documentElement
+      root.toggleAttribute('data-maximized', state.maximized)
+      root.toggleAttribute('data-fullscreen', state.fullscreen)
+    })
     return () => {
       disposeHost()
       disposeOpen()
+      disposeState()
     }
   }, [])
 

@@ -25,7 +25,8 @@ import {
   IPC,
   MINI_BAR_HEIGHT,
   MINI_PANEL_MIN_HEIGHT,
-  MINI_WIDTH,
+  MINI_SHADOW_EDGE,
+  MINI_WINDOW_WIDTH,
   type MiniCommand,
   type MiniPlayerSnapshot,
   type MiniWindowLayout
@@ -104,18 +105,20 @@ function applyBounds(layout: MiniWindowLayout): void {
   const panel = Math.max(MINI_PANEL_MIN_HEIGHT, Math.round(layout.panelHeight))
   const bar = MINI_BAR_HEIGHT + (layout.expanded ? panel : 0)
   /* 菜单那一段：关着时渲染层报 0。浮在条（与面板）下方，见 applyBounds 上面那段 */
-  const height = bar + Math.max(0, Math.round(layout.menuHeight))
+  /* 上下各留一圈给窗口阴影（渲染层那边由 #root 的 padding 让出来，见 base.css） */
+  const pad = MINI_SHADOW_EDGE * 2
+  const height = bar + Math.max(0, Math.round(layout.menuHeight)) + pad
 
   const [x, y] = win.getPosition()
   const { workArea } = screen.getDisplayNearestPoint({ x, y })
   // 工作区兜底：面板拖到比屏幕还高时窗口不该比屏幕还高
-  const maxHeight = Math.max(MINI_BAR_HEIGHT, workArea.height - MARGIN)
+  const maxHeight = Math.max(MINI_BAR_HEIGHT + pad, workArea.height - MARGIN)
   const target = Math.min(height, maxHeight)
 
-  win.setMinimumSize(MINI_WIDTH, MINI_BAR_HEIGHT)
-  win.setMaximumSize(MINI_WIDTH, target)
-  win.setBounds({ x, y, width: MINI_WIDTH, height: target })
-  win.setMinimumSize(MINI_WIDTH, target)
+  win.setMinimumSize(MINI_WINDOW_WIDTH, MINI_BAR_HEIGHT + pad)
+  win.setMaximumSize(MINI_WINDOW_WIDTH, target)
+  win.setBounds({ x, y, width: MINI_WINDOW_WIDTH, height: target })
+  win.setMinimumSize(MINI_WINDOW_WIDTH, target)
 }
 
 /**
@@ -158,15 +161,15 @@ export function openMiniWindow(): void {
 
   const { workArea } = screen.getPrimaryDisplay()
   const win = new BrowserWindow({
-    x: workArea.x + workArea.width - MINI_WIDTH - MARGIN,
+    x: workArea.x + workArea.width - MINI_WINDOW_WIDTH - MARGIN,
     y: workArea.y + MARGIN,
-    width: MINI_WIDTH,
-    height: MINI_BAR_HEIGHT,
-    minWidth: MINI_WIDTH,
-    minHeight: MINI_BAR_HEIGHT,
+    width: MINI_WINDOW_WIDTH,
+    height: MINI_BAR_HEIGHT + MINI_SHADOW_EDGE * 2,
+    minWidth: MINI_WINDOW_WIDTH,
+    minHeight: MINI_BAR_HEIGHT + MINI_SHADOW_EDGE * 2,
     /* 宽度是死的（迷你条只有一个宽度），顺手也钉住上限；高度那一头由 applyBounds 每次现调 */
-    maxWidth: MINI_WIDTH,
-    maxHeight: MINI_BAR_HEIGHT,
+    maxWidth: MINI_WINDOW_WIDTH,
+    maxHeight: MINI_BAR_HEIGHT + MINI_SHADOW_EDGE * 2,
     icon: loadAppIcon() ?? undefined,
     frame: false,
     // 与主窗口同一套：透明窗口 + 自绘界面（条/面板的底色由渲染层画，桌面能透过来）

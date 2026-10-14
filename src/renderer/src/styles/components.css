@@ -1145,6 +1145,12 @@
   /* 高度由 base.css 那条 html[data-mini] 规则拉满整窗（窗口高度是主进程算的） */
   min-height: 0;
   overflow: hidden;
+  /*
+   * 窗口四周那圈阴影：画在 .mini-player 的**外面**（base.css 的 #root 已经把 --win-edge
+   * 那么一圈透明边距让出来了，阴影就落在那里面）—— 窗口是透明的，不这么让位就会被裁掉。
+   * ★ overflow: hidden 不影响它：那一条剪的是子孙，元素自己的阴影不受牵连。
+   */
+  box-shadow: var(--win-shadow);
 }
 
 /*

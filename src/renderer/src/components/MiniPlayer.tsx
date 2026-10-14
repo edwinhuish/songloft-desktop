@@ -44,7 +44,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { MINI_BAR_HEIGHT, MINI_PANEL_MIN_HEIGHT } from '@shared/ipc'
+import { MINI_BAR_HEIGHT, MINI_PANEL_MIN_HEIGHT, MINI_SHADOW_EDGE } from '@shared/ipc'
 import {
   IconChevronDown,
   IconClose,
@@ -443,10 +443,12 @@ function ResizeHandle(): React.JSX.Element {
    * 窗口只会**向下**长（位置不动），拖过屏幕下边缘的部分就看不见了 —— 所以上限不能只是
    * 「一个很大的数」，得以当前屏幕为准。主进程那边还有一道同样的钳制（工作区高度），
    * 两道都要：这里管的是「手上的感觉」不越界，那边管的是「窗口真的不越界」。
+   * ★ 减去的两项要与主进程算窗口高度时的一致：播放条那一档 + 窗口上下那两圈阴影边距
+   *   （MINI_SHADOW_EDGE）。少减一边，拖到底时窗口会被主进程钳住、面板最下面一截被裁掉。
    */
   const maxHeight = Math.max(
     MINI_PANEL_MIN_HEIGHT,
-    window.screen.availHeight - MINI_BAR_HEIGHT - 24
+    window.screen.availHeight - MINI_BAR_HEIGHT - MINI_SHADOW_EDGE * 2 - 24
   )
 
   const clamp = (height: number): number =>
