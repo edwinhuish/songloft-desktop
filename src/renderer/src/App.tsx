@@ -128,6 +128,18 @@ export function App(): React.JSX.Element {
 
     const disposers: (() => void)[] = []
 
+    /*
+     * 迷你窗那一侧的接线**同步装上**，压在下面那段启动编排之前。
+     *
+     * ★ 不能等启动编排（读设置 → 校验会话）走完：底栏那颗按钮随时可能被点，而它点什么都要
+     *   靠这两条 —— 一条是「迷你窗开没开」（也是继续推送状态的闸门），一条是遥控命令的落点。
+     *   晚装的话，用户手快一点就会点开一个永远空着的迷你窗（它要的状态没人推）。
+     * ★ 装在这里而不是某个组件里：全应用只有**这一个**真播放器（就在这个窗口里）。
+     * ★ 同步装还有一件好处：StrictMode 那次「卸下」能真的把它们拆掉，第二次挂载再装回来。
+     */
+    disposers.push(installMiniHost())
+    disposers.push(window.songloft.mini.onOpen((open) => useUi.getState().setMiniOpen(open)))
+
     void (async () => {
       // 先读设置：主题/强调色要在第一帧就正确，否则会闪一下默认配色
       await useSettings.getState().load()
@@ -142,18 +154,6 @@ export function App(): React.JSX.Element {
         bootstrapped = true
         disposers.push(installMediaSessionHandlers())
         disposers.push(installNowPlayingSync())
-        /*
-         * 迷你窗那一侧的接线：把播放状态推给它、把它发来的遥控命令落到真播放器上
-         * （见 state/mini-host.ts）。装在这里而不是某个组件里，是因为全应用只有**这一个**
-         * 真播放器（就在这个窗口里）—— 迷你窗的一切都要靠它。
-         */
-        disposers.push(installMiniHost())
-        /*
-         * 迷你窗此刻开着没有：那颗按钮的高亮要看它（窗口是主进程开的，渲染层没有别的渠道
-         * 知道这件事）。同样走模块级订阅而不是 React —— 它影响的只是那一颗按钮的 data-active，
-         * 让整棵界面树为它重渲染一次不划算（理由同 ContextMenuHost 那条 dataset）。
-         */
-        disposers.push(window.songloft.mini.onOpen((open) => useUi.getState().setMiniOpen(open)))
       }
 
       await useAuth.getState().bootstrap()

@@ -18,7 +18,7 @@
  *   —— 反过来的话用户会先看到一帧默认主题 + 默认高度的窗口。
  */
 
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 
 import type { MiniWindowLayout } from '@shared/ipc'
 import { ContextMenuHost, useContextMenu } from './components/ContextMenu'
@@ -32,13 +32,18 @@ export function MiniApp(): React.JSX.Element {
   const panel = useMiniView((s) => s.panel)
   const panelHeight = useMiniView((s) => s.panelHeight)
   const menuOpen = useContextMenu((s) => s.open)
-  /** 「只该发生一次」的那几件接线（与 App.tsx 用 started ref 的理由一样：StrictMode 会挂两次） */
-  const started = useRef(false)
 
+  /**
+   * 接线（订阅设置推送、订阅播放状态、报尺寸、要状态）。
+   *
+   * ★ 这里**不用** App.tsx 那种 `started` ref 的一次性守卫：StrictMode 会「挂上 → 卸下 →
+   *   再挂上」，而守卫在第二次挂载时会直接 return —— 于是第一次挂载装好的订阅被那次卸下
+   *   拆掉了，却再也没有人装回来（表现是迷你窗一片空白：状态永远推不进来）。
+   *   下面的写法两次挂载都完整地装一遍、也完整地拆一遍，第二次挂载装上的那份才是活的。
+   *   ★ 顺带的重复调用都是幂等的：`settings.load()` 是读一次的请求；`resize` / `ready`
+   *   对主进程来说就是「摆尺寸」与「显示我」，重复一次没有副作用。
+   */
   useEffect(() => {
-    if (started.current) return
-    started.current = true
-
     const disposeSettings = window.songloft.on.settingsChanged((next) => {
       useSettings.getState().apply(next)
     })

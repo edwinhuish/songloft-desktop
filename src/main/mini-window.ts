@@ -38,6 +38,12 @@ import { DEV_SERVER_URL } from './windows'
 /** 迷你窗与屏幕边缘留的缝（默认摆在工作区右上角） */
 const MARGIN = 16
 
+/**
+ * ready 之后等这么久还没等到第一份状态，就先把窗口显示出来（见 handleMiniReady）。
+ * 取值只是「比一次 IPC 来回长得多、又短到用户察觉不到」—— 正常路上它永远不会被用到。
+ */
+const SHOW_FALLBACK_MS = 1500
+
 export interface MiniWindowBridge {
   /** 迷你窗开 / 关了：告诉主窗口（按钮高亮、要不要继续推状态都看它） */
   onOpenChanged: (open: boolean) => void
@@ -50,6 +56,15 @@ export interface MiniWindowBridge {
 let store: ConfigStore | null = null
 let bridge: MiniWindowBridge | null = null
 let miniWindow: BrowserWindow | null = null
+
+/**
+ * 迷你窗那边的界面挂好没有（它 invoke 过 ready）。
+ *
+ * 只有这时候推过去的状态才会被接住（订阅是它挂载后装的），也只有这时候才谈得上「让窗口
+ * 跟着第一份状态露面」—— 早于此的推送落在还没有听众的一页上，用它去触发 show 只会让窗口
+ * 先空着出现（见 sendMiniSnapshot / handleMiniReady）。
+ */
+let rendererReady = false
 
 /** 迷你窗口开着没有（主窗口那颗按钮的高亮、推送的开关都看它） */
 export function isMiniWindowOpen(): boolean {
@@ -112,10 +127,12 @@ export function applyMiniWindowOnTop(): void {
  */
 export function openMiniWindow(): void {
   if (isMiniWindowOpen()) {
+    // 已经开着：再点一次是「把它唤回来」（可能被最小化了，或压在别的窗口下面）
     miniWindow?.show()
     return
   }
   if (!store) return
+  rendererReady = false
 
   const { workArea } = screen.getPrimaryDisplay()
   const win = new BrowserWindow({
@@ -132,8 +149,17 @@ export function openMiniWindow(): void {
     backgroundColor: '#00000000',
     show: false,
     skipTaskbar: true,
-    // 尺寸由 applyBounds 定（用户拖的只是面板高度，那是自定义的把手，不是系统边框）
-    resizable: false,
+    /*
+     * ★ `resizable: true` 是**必要的**，不是顺手开的：窗口高度由 applyBounds 反复改（展开面板、
+     *   拖那根把手），而 Linux 上 `resizable: false` 会把窗口的尺寸提示设成 min = max ——
+     *   之后从主进程改尺寸会被窗口管理器按那对提示挡回去，表现是「点了歌词，窗口不长」。
+     *   代价是用户也能拖窗口自己的边缘改尺寸：那种情况下面板只是被拉长拉短（它会自己适应），
+     *   而设置里记住的高度没变 —— 下次开面板又会回到那个值，不是坏账。
+     * ★ maximizable 关掉：它是屏幕角上的挂件，没有「最大化」这个语义（最小化留着 ——
+     *   条上那颗按钮得能用，从托盘或底栏那颗按钮再点一下就能唤回）。
+     */
+    resizable: true,
+    maximizable: false,
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.cjs'),
@@ -175,6 +201,7 @@ export function openMiniWindow(): void {
    */
   win.on('closed', () => {
     if (miniWindow === win) miniWindow = null
+    rendererReady = false
     bridge?.onOpenChanged(false)
   })
 
@@ -206,28 +233,47 @@ export function setMiniWindowOpen(open: boolean): void {
   else closeMiniWindow()
 }
 
-/** 把主窗口推来的播放状态转给迷你窗 */
+/**
+ * 把主窗口推来的播放状态转给迷你窗。
+ *
+ * ★ 第一份快照顺带**把窗口显示出来**（见 handleMiniReady 里为什么先露面）。这样用户看到的
+ *   第一帧就带着歌名 / 歌词，而不是先闪一下「未在播放」再换过来。
+ */
 export function sendMiniSnapshot(snapshot: MiniPlayerSnapshot): void {
   const win = miniWindow
   if (!win || win.isDestroyed()) return
   win.webContents.send(IPC.onMiniState, snapshot)
+  if (rendererReady && !win.isVisible()) win.show()
 }
 
 /**
  * 迷你窗报来的布局 / 就绪信号 —— 从 index.ts 的 IPC 里转过来。
  *
- * 分成两件是因为它们的副作用完全不同：resize 只动窗口几何，ready 还要**显示窗口**并向主窗口
- * 要一份状态（那份状态是异步来的，不能在这里同步等）。
+ * 分成两件是因为它们的副作用完全不同：resize 只动窗口几何，ready 还要向主窗口要一份状态。
  */
 export function handleMiniResize(layout: MiniWindowLayout): void {
   applyBounds(layout)
 }
 
+/**
+ * 迷你窗的界面与设置都到位了：**要一份状态，然后等它到了再露面**（见 sendMiniSnapshot）。
+ *
+ * ★ 为什么不在这里 show：那一刻这一窗里还没有任何歌曲信息（渲染层刚挂上、状态还在路上），
+ *   直接显示就是「先闪一下空的条」。让它跟着第一份快照一起出现，用户看到的第一帧就是对的。
+ * ★ 兜底那 1.5 秒是必要的：主窗口要是因为什么原因没能推过来（它自己崩了、正卡在某个
+ *   同步操作里），这一窗就永远不显示了 —— 而「点开迷你播放器什么都没出现、也关不掉」
+ *   是最糟的失败方式。到点无论如何先让它露面，那时的空白条至少还能被关掉（底栏那颗按钮
+ *   与它右上角那颗都还在）。
+ */
 export function handleMiniReady(): void {
   const win = miniWindow
   if (!win || win.isDestroyed()) return
-  win.show()
+  rendererReady = true
   bridge?.onRequestSnapshot()
+
+  setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) win.show()
+  }, SHOW_FALLBACK_MS)
 }
 
 /** mini-window 的接线。index.ts 在 ready 时调一次（与其他模块的接线同一条路）。 */
