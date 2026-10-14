@@ -196,7 +196,6 @@ export function MiniPlayer(): React.JSX.Element {
             <button
               type="button"
               className="icon-btn"
-              data-tip={player.muted ? '取消静音' : '静音'}
               aria-label={player.muted ? '取消静音' : '静音'}
               onClick={() => player.toggleMute()}
             >
@@ -222,7 +221,6 @@ export function MiniPlayer(): React.JSX.Element {
               type="button"
               className="icon-btn"
               data-active={player.playMode === 'random'}
-              data-tip={MODE_LABEL[player.playMode]}
               aria-label={MODE_LABEL[player.playMode]}
               onClick={() => player.cyclePlayMode()}
             >
@@ -232,7 +230,6 @@ export function MiniPlayer(): React.JSX.Element {
               type="button"
               className="icon-btn"
               data-active={favorite}
-              data-tip={favorite ? '取消收藏' : '收藏'}
               aria-label={favorite ? '取消收藏' : '收藏'}
               disabled={!song}
               onClick={() => void window.songloft.mini.command({ kind: 'toggle-favorite' })}
@@ -246,7 +243,6 @@ export function MiniPlayer(): React.JSX.Element {
           <button
             type="button"
             className="icon-btn"
-            data-tip="上一首"
             aria-label="上一首"
             disabled={!song}
             onClick={() => void player.previous()}
@@ -256,7 +252,6 @@ export function MiniPlayer(): React.JSX.Element {
           <button
             type="button"
             className="play-btn"
-            data-tip={player.playing ? '暂停' : '播放'}
             aria-label={player.playing ? '暂停' : '播放'}
             disabled={!song}
             onClick={() => void player.toggle()}
@@ -271,7 +266,6 @@ export function MiniPlayer(): React.JSX.Element {
           <button
             type="button"
             className="icon-btn"
-            data-tip="下一首"
             aria-label="下一首"
             disabled={!song}
             onClick={() => void player.next(false)}
@@ -283,7 +277,6 @@ export function MiniPlayer(): React.JSX.Element {
             type="button"
             className="icon-btn"
             data-active={panel === 'lyrics'}
-            data-tip={panel === 'lyrics' ? '收起歌词' : '歌词'}
             aria-label={panel === 'lyrics' ? '收起歌词' : '歌词'}
             onClick={() => togglePanel('lyrics')}
           >
@@ -294,7 +287,6 @@ export function MiniPlayer(): React.JSX.Element {
             type="button"
             className="icon-btn"
             data-active={panel === 'queue'}
-            data-tip={panel === 'queue' ? '收起播放队列' : '播放队列'}
             aria-label={panel === 'queue' ? '收起播放队列' : '播放队列'}
             onClick={() => togglePanel('queue')}
           >
@@ -315,7 +307,6 @@ export function MiniPlayer(): React.JSX.Element {
           <button
             type="button"
             className="win-btn"
-            data-tip="不透明度"
             aria-label="不透明度"
             onClick={(event) => {
               const rect = event.currentTarget.getBoundingClientRect()
@@ -333,7 +324,6 @@ export function MiniPlayer(): React.JSX.Element {
             type="button"
             className="win-btn"
             data-variant="close"
-            data-tip="关闭"
             aria-label="关闭"
             onClick={() => void window.songloft.window.close()}
           >

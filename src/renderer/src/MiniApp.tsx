@@ -23,7 +23,6 @@ import { useEffect } from 'react'
 import type { MiniWindowLayout } from '@shared/ipc'
 import { ContextMenuHost, useContextMenu } from './components/ContextMenu'
 import { MiniPlayer } from './components/MiniPlayer'
-import { TooltipHost } from './components/Tooltip'
 import { installMiniBridge } from './state/remotePlayer'
 import { useMiniView } from './state/useMiniView'
 import { useSettings } from './state/useSettings'
@@ -80,7 +79,12 @@ export function MiniApp(): React.JSX.Element {
     <>
       <MiniPlayer />
       <ContextMenuHost />
-      <TooltipHost />
+      {/*
+        ★ 这里**不挂** TooltipHost：迷你窗整窗只有 64px 高的条（展开也只多一块面板），
+          提示框一弹就盖住它自己那几颗钮，而这几颗钮本来就是「一看就懂 + aria-label 齐备」
+          （条上所有按钮都与 data-tip 成对给了 aria-label）。渲染层那份 data-tip 也一并去掉了
+          —— 不挂 host 的话它们只是看着像能用而已；主窗口那份照旧（见 App.tsx）。
+      */}
     </>
   )
 }
