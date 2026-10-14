@@ -155,17 +155,27 @@ export function MiniPlayer(): React.JSX.Element {
 
   return (
     <div className="mini-player" ref={rootRef}>
-      <footer className="mini-bar">
-        <PlayerProgress
-          duration={duration}
-          position={player.currentTime}
-          scrub={scrub}
-          onScrub={setScrub}
-          onSeek={(seconds) => player.seek(seconds)}
-          onSeekBy={(delta) => player.seekBy(delta)}
-        />
+      {/*
+        ★★ 内容层（播放条 + 面板）：**窗口阴影画在这一层的框上**，不画在 .mini-player 上。
+          后者撑满整窗 —— 菜单开着、或系统事件（平铺 / 全屏）把窗口拉大时，多出来的那一段也
+          含在它里面。阴影画在它身上，描的就是「一块透明地方」的边：菜单一开，那圈阴影跟着
+          长到菜单底下那片空地上去了。
+        ★ 条与面板收进**同一层**而不是各自画一份阴影：各画各的，接缝两侧就会各出一条阴影
+          （面板上方一条、播放条下方一条），叠在一起正是最难看的「错位阴影」；收进一层之后
+          接缝落在框内，那里天然没有阴影（见样式表 .mini-surface）。
+      */}
+      <div className="mini-surface">
+        <footer className="mini-bar">
+          <PlayerProgress
+            duration={duration}
+            position={player.currentTime}
+            scrub={scrub}
+            onScrub={setScrub}
+            onSeek={(seconds) => player.seek(seconds)}
+            onSeekBy={(delta) => player.seekBy(delta)}
+          />
 
-        {/*
+          {/*
           封面：包一层是为了给它一个「不接事件的容器」—— Cover 自己只认展示用的 props。
           ★ 这一层**在拖拽区里**（左键按住即拖窗口，样式表里那份 no-drag 名单不含它），所以
             它上面**不再挂任何鼠标动作**：那一格的事件整片被窗口系统收走，挂了也是死代码。
@@ -173,145 +183,145 @@ export function MiniPlayer(): React.JSX.Element {
           尺寸直接取 CSS 那条 --mini-bar-h（不在这儿另写一份数值），圆角给 0：贴着窗口
           边缘的圆角块看着像没对齐。width 是向后端要的缩略宽度（?w=），按显示尺寸的两倍给。
         */}
-        <div className="mini-cover">
-          <Cover
-            coverUrl={song?.cover_url}
-            width={128}
-            size="var(--mini-bar-h)"
-            radius={0}
-            kind="song"
-          />
-        </div>
+          <div className="mini-cover">
+            <Cover
+              coverUrl={song?.cover_url}
+              width={128}
+              size="var(--mini-bar-h)"
+              radius={0}
+              kind="song"
+            />
+          </div>
 
-        {/*
+          {/*
           中栏：文本两行 + 悬浮时盖在上面的控制条（两层都在 .mini-info 里，见样式表）。
           ★ 常态那两行各有各的滚动（ScrollingLine）：谁放不下谁滚，另外一行不动。
           ★ key 取歌曲 id：换歌要**从头**滚起（重挂一次 DOM = 动画重来），不然新歌一上来
             就接在上一首滚到一半的位置上。
         */}
-        <div className="mini-info">
-          <div className="mini-info-text">
-            <ScrollingLine
-              key={`title-${song?.id ?? 0}`}
-              className="playerbar-title"
-              text={song?.title ?? '未在播放'}
-            />
-            <div className="mini-info-sub">
+          <div className="mini-info">
+            <div className="mini-info-text">
               <ScrollingLine
-                key={`artist-${song?.id ?? 0}`}
-                className="playerbar-artist"
-                text={song ? displayArtist(song.artist) : ''}
+                key={`title-${song?.id ?? 0}`}
+                className="playerbar-title"
+                text={song?.title ?? '未在播放'}
               />
-              {/* 时间不挂 key：它每秒都在变，重挂纯属浪费；它也永远放得下，不必滚 */}
-              <span className="mini-time">
-                {formatDuration(position)}/{formatDuration(duration)}
-              </span>
+              <div className="mini-info-sub">
+                <ScrollingLine
+                  key={`artist-${song?.id ?? 0}`}
+                  className="playerbar-artist"
+                  text={song ? displayArtist(song.artist) : ''}
+                />
+                {/* 时间不挂 key：它每秒都在变，重挂纯属浪费；它也永远放得下，不必滚 */}
+                <span className="mini-time">
+                  {formatDuration(position)}/{formatDuration(duration)}
+                </span>
+              </div>
+            </div>
+
+            <div className="mini-info-hover">
+              <button
+                type="button"
+                className="icon-btn"
+                aria-label={player.muted ? '取消静音' : '静音'}
+                onClick={() => player.toggleMute()}
+              >
+                {player.muted || player.volume === 0 ? (
+                  <IconVolumeX size={ICON_CTL} />
+                ) : (
+                  <IconVolume level={player.volume > 0.55 ? 2 : 1} size={ICON_CTL} />
+                )}
+              </button>
+              <Slider
+                ariaLabel="音量"
+                className="mini-volume"
+                value={player.muted ? 0 : player.volume * 100}
+                max={100}
+                // 与底栏那条音量条同一套：拖动期间只改内存，松手立刻 flush（避免拖完就关掉丢最后一次）
+                onChange={(value) => player.setVolume(value / 100)}
+                onCommit={(value) => {
+                  player.setVolume(value / 100)
+                  player.flushVolume()
+                }}
+              />
+              <button
+                type="button"
+                className="icon-btn"
+                data-active={player.playMode === 'random'}
+                aria-label={MODE_LABEL[player.playMode]}
+                onClick={() => player.cyclePlayMode()}
+              >
+                {modeIcon(player.playMode, ICON_CTL)}
+              </button>
+              <button
+                type="button"
+                className="icon-btn"
+                data-active={favorite}
+                aria-label={favorite ? '取消收藏' : '收藏'}
+                disabled={!song}
+                onClick={() => void window.songloft.mini.command({ kind: 'toggle-favorite' })}
+              >
+                <IconHeart size={ICON_CTL} filled={favorite} />
+              </button>
             </div>
           </div>
 
-          <div className="mini-info-hover">
+          <div className="mini-controls">
             <button
               type="button"
               className="icon-btn"
-              aria-label={player.muted ? '取消静音' : '静音'}
-              onClick={() => player.toggleMute()}
-            >
-              {player.muted || player.volume === 0 ? (
-                <IconVolumeX size={ICON_CTL} />
-              ) : (
-                <IconVolume level={player.volume > 0.55 ? 2 : 1} size={ICON_CTL} />
-              )}
-            </button>
-            <Slider
-              ariaLabel="音量"
-              className="mini-volume"
-              value={player.muted ? 0 : player.volume * 100}
-              max={100}
-              // 与底栏那条音量条同一套：拖动期间只改内存，松手立刻 flush（避免拖完就关掉丢最后一次）
-              onChange={(value) => player.setVolume(value / 100)}
-              onCommit={(value) => {
-                player.setVolume(value / 100)
-                player.flushVolume()
-              }}
-            />
-            <button
-              type="button"
-              className="icon-btn"
-              data-active={player.playMode === 'random'}
-              aria-label={MODE_LABEL[player.playMode]}
-              onClick={() => player.cyclePlayMode()}
-            >
-              {modeIcon(player.playMode, ICON_CTL)}
-            </button>
-            <button
-              type="button"
-              className="icon-btn"
-              data-active={favorite}
-              aria-label={favorite ? '取消收藏' : '收藏'}
+              aria-label="上一首"
               disabled={!song}
-              onClick={() => void window.songloft.mini.command({ kind: 'toggle-favorite' })}
+              onClick={() => void player.previous()}
             >
-              <IconHeart size={ICON_CTL} filled={favorite} />
+              <IconSkipBack size={ICON_NAV} />
             </button>
-          </div>
-        </div>
-
-        <div className="mini-controls">
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="上一首"
-            disabled={!song}
-            onClick={() => void player.previous()}
-          >
-            <IconSkipBack size={ICON_NAV} />
-          </button>
-          <button
-            type="button"
-            className="play-btn"
-            aria-label={player.playing ? '暂停' : '播放'}
-            disabled={!song}
-            onClick={() => void player.toggle()}
-          >
-            {/*
+            <button
+              type="button"
+              className="play-btn"
+              aria-label={player.playing ? '暂停' : '播放'}
+              disabled={!song}
+              onClick={() => void player.toggle()}
+            >
+              {/*
               两颗图标尺寸刻意不同：三角形那个字形本身只占方框的四成宽，而**面积**只有它
               外接矩形的一半（暂停那两根竖条是实打实的满框），同一个 size 下三角形看着就是
               小一号。所以播放给 14、暂停给 12 —— 切换时才不会像「图标突然缩了一截」。
             */}
-            {player.playing ? <IconPause size={12} /> : <IconPlay size={14} />}
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            aria-label="下一首"
-            disabled={!song}
-            onClick={() => void player.next(false)}
-          >
-            <IconSkipForward size={ICON_NAV} />
-          </button>
+              {player.playing ? <IconPause size={12} /> : <IconPlay size={14} />}
+            </button>
+            <button
+              type="button"
+              className="icon-btn"
+              aria-label="下一首"
+              disabled={!song}
+              onClick={() => void player.next(false)}
+            >
+              <IconSkipForward size={ICON_NAV} />
+            </button>
 
-          <button
-            type="button"
-            className="icon-btn"
-            data-active={panel === 'lyrics'}
-            aria-label={panel === 'lyrics' ? '收起歌词' : '歌词'}
-            onClick={() => togglePanel('lyrics')}
-          >
-            <IconLyrics size={ICON_CTL} />
-          </button>
-          {/* 队列与歌词共用下面那一块面板，所以两颗钮互斥：点另一颗是**换内容**，不是叠一层 */}
-          <button
-            type="button"
-            className="icon-btn"
-            data-active={panel === 'queue'}
-            aria-label={panel === 'queue' ? '收起播放队列' : '播放队列'}
-            onClick={() => togglePanel('queue')}
-          >
-            <IconQueue size={ICON_CTL} />
-          </button>
-        </div>
+            <button
+              type="button"
+              className="icon-btn"
+              data-active={panel === 'lyrics'}
+              aria-label={panel === 'lyrics' ? '收起歌词' : '歌词'}
+              onClick={() => togglePanel('lyrics')}
+            >
+              <IconLyrics size={ICON_CTL} />
+            </button>
+            {/* 队列与歌词共用下面那一块面板，所以两颗钮互斥：点另一颗是**换内容**，不是叠一层 */}
+            <button
+              type="button"
+              className="icon-btn"
+              data-active={panel === 'queue'}
+              aria-label={panel === 'queue' ? '收起播放队列' : '播放队列'}
+              onClick={() => togglePanel('queue')}
+            >
+              <IconQueue size={ICON_CTL} />
+            </button>
+          </div>
 
-        {/*
+          {/*
           右上角那一组：下拉菜单 + 关闭（关闭那颗与主窗口标题栏右端同款 .win-btn，只是小一档）。
           ★ 下拉那颗是不透明度那两个旋钮**唯一**的入口：封面归拖拽区之后右键到不了页面
             （见 opacityMenu 与样式表里那份 no-drag 名单）。
@@ -320,37 +330,37 @@ export function MiniPlayer(): React.JSX.Element {
           它们整个落在控件行上方那条缝里（高度由 CSS 按条高与控件高算出来），所以那一行
           的空隙有多高，这里的图标就只能是多大 —— 11px 是这条缝能舒服放下的上限。
         */}
-        <div className="mini-window-actions">
-          <button
-            type="button"
-            className="win-btn"
-            aria-label="不透明度"
-            aria-expanded={menuOpen}
-            onClick={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect()
-              // 右对齐：触发器就贴着窗口右缘，左对齐会让面板整块探到窗外去
-              useContextMenu.getState().show(rect.left, rect.bottom + 6, opacityMenu(), {
-                anchor: event.currentTarget,
-                align: 'right',
-                anchorRect: rect
-              })
-            }}
-          >
-            <IconChevronDown size={11} />
-          </button>
-          <button
-            type="button"
-            className="win-btn"
-            data-variant="close"
-            aria-label="关闭"
-            onClick={() => void window.songloft.window.close()}
-          >
-            <IconClose size={11} />
-          </button>
-        </div>
-      </footer>
+          <div className="mini-window-actions">
+            <button
+              type="button"
+              className="win-btn"
+              aria-label="不透明度"
+              aria-expanded={menuOpen}
+              onClick={(event) => {
+                const rect = event.currentTarget.getBoundingClientRect()
+                // 右对齐：触发器就贴着窗口右缘，左对齐会让面板整块探到窗外去
+                useContextMenu.getState().show(rect.left, rect.bottom + 6, opacityMenu(), {
+                  anchor: event.currentTarget,
+                  align: 'right',
+                  anchorRect: rect
+                })
+              }}
+            >
+              <IconChevronDown size={11} />
+            </button>
+            <button
+              type="button"
+              className="win-btn"
+              data-variant="close"
+              aria-label="关闭"
+              onClick={() => void window.songloft.window.close()}
+            >
+              <IconClose size={11} />
+            </button>
+          </div>
+        </footer>
 
-      {/*
+        {/*
         展开时才挂面板，且挂在播放条**之后**（它在进度线下方）。窗口高度是主进程一步到位的
         （原生窗口的尺寸做不了动画），内容这边补一点淡入，看着才不像「啪」地一下多出一块。
 
@@ -364,19 +374,19 @@ export function MiniPlayer(): React.JSX.Element {
           固定尺寸的 flex 项 —— 否则窗口被系统事件拉高时，多出来的高度会落进面板里，用户拖出来
           的那个高度就不作数了（见样式表 .mini-player 那一段）。
       */}
-      {panel ? (
-        <div className="mini-panel" style={{ height: panelHeight }}>
-          {panel === 'lyrics' ? (
-            <LyricsView compact />
-          ) : (
-            <div className="mini-queue">
-              {/* currentSlot = 2：当前曲固定落在**从上往下第 3 格**（上面留两行）。
+        {panel ? (
+          <div className="mini-panel" style={{ height: panelHeight }}>
+            {panel === 'lyrics' ? (
+              <LyricsView compact />
+            ) : (
+              <div className="mini-queue">
+                {/* currentSlot = 2：当前曲固定落在**从上往下第 3 格**（上面留两行）。
                   面板最矮只有 180px，只保证「看得见」的话它会贴着下边缘、或干脆在视野之外。 */}
-              <Queue currentSlot={2} menu={false} />
-            </div>
-          )}
+                <Queue currentSlot={2} menu={false} />
+              </div>
+            )}
 
-          {/*
+            {/*
             面板高度的拖拽把手：压在**面板**的下边缘（见样式表 .mini-resize）。
             ★ 挂在面板**里面**（不再是面板后面的兄弟）：它要贴的是面板的下边缘，而窗口下边缘在
               「系统把窗口拉高」时并不等于面板下边缘（中间那段是透明容器）。
@@ -385,9 +395,10 @@ export function MiniPlayer(): React.JSX.Element {
             ★ 松手才落盘（settings.miniPanelHeight），拖动期间只改内存 —— 每个 pointermove 写一次
               配置就是几十次全量落盘，主进程会被拖住（与音量那套合并写同一个理由）。
           */}
-          <ResizeHandle />
-        </div>
-      ) : null}
+            <ResizeHandle />
+          </div>
+        ) : null}
+      </div>
 
       {/*
         透明容器：窗口比「条 + 面板」多出来的那一部分全归它（系统事件把窗口拉成半屏 / 全屏时

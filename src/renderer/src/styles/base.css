@@ -19,11 +19,13 @@ body,
 /*
  * 给**窗口阴影**留一圈透明边距（令牌见 tokens.css 的 --win-edge / --win-shadow）。
  *
- * ★ 为什么不能直接往可见面（.shell / .mini-player）上写 box-shadow：窗口是透明窗口，
+ * ★ 为什么不能直接往可见面（.shell / .mini-surface）上写 box-shadow：窗口是透明窗口，
  *   `box-shadow` 画在元素框**外面** —— 可见面若贴着窗口边缘，那圈阴影当场被窗口边界裁掉。
  *   所以让可见面从窗口边缘缩进 --win-edge，缩出来的地方只画阴影。
  * ★ 挂在 #root 上而不是可见面自己身上：两个窗口共用这一条。主窗口里 #root 的孩子是 .shell，
- *   迷你窗里是 .mini-player（见文件末尾那条 html[data-mini] 规则），两边都只管缩进。
+ *   迷你窗里是 .mini-player（见文件末尾那条 html[data-mini] 规则），两边都只管缩进
+ *   —— 迷你窗真正画阴影的是它里面的 .mini-surface（条 + 面板那一层，见 components.css：
+ *   阴影跟着内容走，而不是跟着那块撑满整窗的容器走）。
  * ★ 最大化 / 全屏时收成 0：那时窗口铺满屏幕，留着边距反而会在四周露出一圈桌面。
  *   （迷你窗没有这两种状态 —— 它的 min/max 尺寸被主进程钉死，见 main/mini-window.ts。）
  */
