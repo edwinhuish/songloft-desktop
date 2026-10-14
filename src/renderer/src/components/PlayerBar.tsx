@@ -9,7 +9,6 @@
 
 import { useMemo, useState } from 'react'
 
-import type { PlayMode } from '@shared/types'
 import {
   IconHeart,
   IconLyrics,
@@ -17,15 +16,13 @@ import {
   IconPause,
   IconPlay,
   IconQueue,
-  IconRepeat,
-  IconRepeatOne,
-  IconShuffle,
   IconSkipBack,
   IconSkipForward,
   IconVolume,
   IconVolumeX
 } from './Icons'
 import { PlayerProgress } from './PlayerProgress'
+import { MODE_ICON, MODE_LABEL } from './play-mode'
 import { Cover, Slider } from './primitives'
 import { displayArtist, formatDuration } from '@/lib/format'
 import { usePlayer } from '@/state/usePlayer'
@@ -40,49 +37,12 @@ import { useUi } from '@/state/useUi'
  *   主播放键（44px 实心圆 + 19px 图标）刻意没动：它靠「整条上唯一的实心圆 + accent 填充」
  *   立在那儿，不必再靠尺寸压别人一头。旁边的钮跟着长了一档（38px，见 components.css
  *   的 .playerbar .icon-btn），否则 1.5 倍的字形会顶到悬浮底色的边上。
+ * ★ 播放模式那一颗的尺寸不在这三档里：它由 play-mode.tsx 自己定（三处播放界面共用，
+ *   包括跑在另一个窗口里的迷你条），底栏只是取用方。
  */
-const ICON_SM = 24 // 原 16：收藏、播放模式
+const ICON_SM = 24 // 原 16：收藏
 const ICON_MD = 26 // 原 17：歌词 / 队列 / 迷你 / 音量
 const ICON_LG = 28 // 原 19：上一首 / 下一首
-
-/**
- * 播放模式 → 图标。
- *
- * ★ 做成**收尺寸的函数**而不是一张固定尺寸的表：模式键出现在三处，三处的图标尺寸都不一样
- *   （底栏 24、满窗播放 28、迷你条 16，见各自的调用点），而「哪种模式配哪颗图标」只有这一份
- *   事实源 —— 复制成三张表出去，迟早只有一处还记得 `random` 该换成 IconShuffle。
- */
-export function modeIcon(mode: PlayMode, size: number): React.ReactNode {
-  switch (mode) {
-    case 'single':
-      return <IconRepeatOne size={size} />
-    case 'random':
-      return <IconShuffle size={size} />
-    default:
-      // order 与 loop 是同一颗图标（有区别的只是行为与文案，见 MODE_LABEL）
-      return <IconRepeat size={size} />
-  }
-}
-
-/**
- * 底栏那一档的模式图标（满窗播放也直接用它）。
- *
- * 保留这张表而不是让调用方各写 `modeIcon(playMode, 24)`：底栏与满窗播放的尺寸本来就不同
- * （见它们各自的 ICON_* 常量），把尺寸写死在调用点，改一处就得连着改两处。
- */
-export const MODE_ICON: Record<PlayMode, React.ReactNode> = {
-  order: modeIcon('order', ICON_SM),
-  loop: modeIcon('loop', ICON_SM),
-  single: modeIcon('single', ICON_SM),
-  random: modeIcon('random', ICON_SM)
-}
-
-export const MODE_LABEL: Record<PlayMode, string> = {
-  order: '顺序播放',
-  loop: '列表循环',
-  single: '单曲循环',
-  random: '随机播放'
-}
 
 export function PlayerBar(): React.JSX.Element {
   const player = usePlayer()

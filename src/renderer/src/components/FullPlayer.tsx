@@ -36,7 +36,7 @@ import {
   IconVolumeX
 } from './Icons'
 import { LyricsView } from './LyricsView'
-import { MODE_ICON, MODE_LABEL } from './PlayerBar'
+import { MODE_ICON, MODE_LABEL } from './play-mode'
 import { PlayerProgress } from './PlayerProgress'
 import { Cover, EmptyState, Slider } from './primitives'
 import { displayArtist, formatDuration } from '@/lib/format'
