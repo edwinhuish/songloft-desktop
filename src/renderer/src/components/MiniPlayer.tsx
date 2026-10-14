@@ -14,7 +14,7 @@
  *   右上角那三颗窗口钮**不进那一行**（绝对定位，落在这 64px 上方本来就空着的那条缝里，
  *   见 .mini-window-actions）：条里那点横向余量只有信息那三行在吃，让三颗去占一行就是
  *   把三行一起挤窄。
- * ★ 封面右边是**三行**（歌名 / 歌手 / 播放时间），见下面 ScrollingLine 与 .mini-info：
+ * ★ 封面右边是**三行**（歌手 / 歌名 / 播放时间），见下面 ScrollingLine 与 .mini-info：
  *   行高由条高等分出来（栅格三行），所以哪一行有没有内容都不影响另外两行的位置；
  *   这一栏的宽度是被条宽定死的（栅格列定死 + flex: 1 1 0 + min-width: 0 + overflow: hidden），
  *   歌名再长也撑不开它 —— 右边那几颗钮因此永远钉在各自的位置上。
@@ -133,24 +133,27 @@ export function MiniPlayer(): React.JSX.Element {
         />
 
         {/*
-          歌名 / 歌手 / 时间各占一行（`.mini-info` 是三等分的栅格，见样式表）。
+          **歌手 / 歌名 / 时间**各占一行（`.mini-info` 是三等分的栅格，见样式表）。
           三行**各滚各的**：谁放不下谁滚，另外两行该静止还是静止 —— 行与行之间没有任何联动。
+          ★ 顺序是**歌手在上、歌名在下**（与底栏那种「歌名 - 歌手」写在同一行的排法不同）。
+            这只是换了位置：字号与颜色都跟着**内容**走，不跟着行号走 —— 第二行仍是三行里
+            最重的那一行（.playerbar-title），第一行仍是更小更浅的 .playerbar-artist。
           ★ key 取歌曲 id：换歌要**从头**滚起（重挂一次 DOM = 动画重来），不然新歌一上来
             就接在上一首滚到一半的位置上。时间那一行不挂 key —— 它每秒都在变，重挂纯属浪费，
             而它又永远放得下（见 styles/components.css 里 .mini-time 那段）。
         */}
         <div className="mini-info">
-          <ScrollingLine
-            key={`title-${song?.id ?? 0}`}
-            className="playerbar-title"
-            text={song?.title ?? '未在播放'}
-          />
-          {/* 歌手与歌名分了两行，这里就没有「 - 」那半截了 —— 没在播放时这一行整行空着，
-              不画占位符（行高由栅格给，空行也不会把另外两行拽歪） */}
+          {/* 没在播放时没有歌手，这一行整行空着 —— 不画占位符，行高由栅格给，
+              空行也不会把另外两行拽歪 */}
           <ScrollingLine
             key={`artist-${song?.id ?? 0}`}
             className="playerbar-artist"
             text={song ? displayArtist(song.artist) : ''}
+          />
+          <ScrollingLine
+            key={`title-${song?.id ?? 0}`}
+            className="playerbar-title"
+            text={song?.title ?? '未在播放'}
           />
           <ScrollingLine
             className="mini-time"
@@ -290,7 +293,7 @@ const LOOP_DWELL = 0.14
 /**
  * 迷你条上的一行文本：**放不下就循环滚动**（跑马灯那一套，不是来回蹭）。
  *
- * 歌名 / 歌手 / 时间各是一个实例，各自量各自的宽度、各自决定滚不滚 ——
+ * 歌手 / 歌名 / 时间各是一个实例，各自量各自的宽度、各自决定滚不滚 ——
  * 一行在滚不会让另外两行动一下（它们连动画都没挂）。
  *
  * ★ 「循环」= 文本连续两份首尾相接，动画只把整条往左推**一份**（含间隔）的距离，推到尽头时
