@@ -106,8 +106,7 @@ export function MiniPlayer(): React.JSX.Element {
     <div
       className="mini-player"
       data-expanded={panel !== null ? 'true' : undefined}
-      /* 不透明度浮层开着时，条上别的东西（封面 / 中栏）让开，浮层独占这 64px（见 .mini-opacity） */
-      data-opacity={opacityOpen ? 'true' : undefined}
+      /* 不透明度浮层开着时条上别的东西不再让开 —— 它是浮在内容之上的一张小卡片（见 .mini-opacity） */
     >
       <footer className="mini-bar">
         <PlayerProgress
@@ -266,45 +265,51 @@ export function MiniPlayer(): React.JSX.Element {
         </div>
 
         {/*
-          不透明度浮层：**画在播放条自己这 64px 里**，窗口尺寸一点不动（这一条是硬要求，
-          也是它没有做成「真的下拉菜单」的唯一原因 —— 见下面那段说明）。
-          ★ 两根滑条各占一行（行高 26px，两行 + 2px 缝正好落在 64px 里）。左边的名字与右边的
-            百分数都给了固定宽度：两根滑条的轨道才会上下对齐。
-          ★ 面板那层底色是**相对播放条**的浓度（100 = 与条一致，见 tokens.css）—— 所以它在
-            深浅两个主题下都说得通，不必分两套默认值。
-          ★ 整块都在播放条这个拖拽区上，所以它自己必须是 no-drag（样式表里那份名单里也有一份），
-            否则这两根滑条拖不动 —— 中栏那根音量条踩过同一个坑。
+          不透明度浮层：**浮在播放条上的一块小卡片**（自己的底色 + 边框 + 阴影），窗口尺寸
+          一点不动（这是硬要求，也是它没做成「真的下拉菜单」的原因 —— 见样式表那一段）。
+          ★★ **关着时它压根不在 DOM 里**（条件渲染，不是 opacity: 0）。原因是踩过两次的
+            同一条实测结论：拖拽区只看矩形、不看可见性 —— 一块盖满整条的 no-drag 矩形会把
+              · 整条的拖拽区挖空（窗口拖不动），
+              · 或反过来（声明成 drag）把悬浮的移动事件吞掉（Wayland 上中栏换不出控件）。
+             它只在开着时存在，于是这两种副作用都只发生在「开着」这一态里，而那一态本来
+             就该把条让给它。
+          ★ 两根滑条各占一行（行高 --mini-ctl-h，两行加 2px 缝正好落在卡片里）。左边的名字与
+            右边的百分数都给固定宽度：两根滑条的轨道才会上下对齐。
+          ★ 卡片自己必须是 no-drag（它在条这个拖拽区上面），否则这两根滑条拖不动 ——
+            中栏那根音量条踩过同一个坑。
         */}
-        <div className="mini-opacity" data-open={opacityOpen ? 'true' : undefined}>
-          <div className="mini-opacity-row">
-            <span className="mini-opacity-label">播放器不透明度</span>
-            <Slider
-              ariaLabel="播放器不透明度"
-              className="mini-opacity-slider"
-              value={miniOpacity}
-              max={100}
-              onChange={(value) => void patchSettings({ miniWindowOpacity: value })}
-            />
-            <span className="mini-opacity-value">{miniOpacity}%</span>
+        {opacityOpen && (
+          <div className="mini-opacity">
+            <div className="mini-opacity-row">
+              <span className="mini-opacity-label">播放器不透明度</span>
+              <Slider
+                ariaLabel="播放器不透明度"
+                className="mini-opacity-slider"
+                value={miniOpacity}
+                max={100}
+                onChange={(value) => void patchSettings({ miniWindowOpacity: value })}
+              />
+              <span className="mini-opacity-value">{miniOpacity}%</span>
+            </div>
+            <div className="mini-opacity-row">
+              <span className="mini-opacity-label">面板背景不透明度</span>
+              <Slider
+                ariaLabel="面板背景不透明度"
+                className="mini-opacity-slider"
+                value={panelOpacity}
+                max={100}
+                onChange={(value) => void patchSettings({ miniPanelOpacity: value })}
+              />
+              <span className="mini-opacity-value">{panelOpacity}%</span>
+            </div>
           </div>
-          <div className="mini-opacity-row">
-            <span className="mini-opacity-label">面板背景不透明度</span>
-            <Slider
-              ariaLabel="面板背景不透明度"
-              className="mini-opacity-slider"
-              value={panelOpacity}
-              max={100}
-              onChange={(value) => void patchSettings({ miniPanelOpacity: value })}
-            />
-            <span className="mini-opacity-value">{panelOpacity}%</span>
-          </div>
-        </div>
+        )}
 
         {/*
           右上角那一组：不透明度那颗 + 关闭（关闭那颗与主窗口标题栏右端同款 .win-btn，只是小一档）。
           ★ 那颗是那两个旋钮**唯一**的入口，也是浮层的开关（开着时 data-active 亮着，再点一次
             或者按 Esc 收起）：封面归拖拽区之后右键到不了页面（见样式表里那份 no-drag 名单）。
-          ★ z-index 压在浮层之上（见样式表）：浮层盖满整条，这两颗得留在外头才点得到。
+          ★ z-index 压在浮层之上（见样式表）：浮层就长在紧挨它的左边，这一组得留在外头。
           ★ 原先这里还有一颗最小化，已去掉 —— 理由见文件头那一段（系统那一侧的最小化还在，
             从底栏那颗按钮或托盘再点一下就唤回来）。
           它们整个落在控件行上方那条缝里（高度由 CSS 按条高与控件高算出来），所以那一行
