@@ -73,11 +73,17 @@ export function isMiniWindowOpen(): boolean {
 /**
  * 摆一次窗口尺寸。
  *
- * 面板展开时的高度 = 播放条 + 面板高度（下限 MINI_PANEL_MIN_HEIGHT 兜住），未展开时就是
- * 播放条那一档 —— 就这两档。曾经还有「菜单开着就临时加高」第三种，已拆掉：那份菜单现在画在
- * 条内部（见 shared/ipc.ts 的常量说明），窗口尺寸与它无关。
+ * 高度 = 播放条 + （展开时的）面板 + （开着时的）菜单：
+ *   · 播放条那一档是死的（MINI_BAR_HEIGHT）；
+ *   · 面板高度由用户拖出来（下限 MINI_PANEL_MIN_HEIGHT 兜住）；
+ *   · 菜单那一段由渲染层量出来（MiniWindowLayout.menuHeight）—— 它浮在条下方，窗口得正好
+ *     让出那么高，菜单才画得进窗口里。
+ * ★★ 这三样之外的**余量**不属于任何人：窗口若比这个和高（系统事件把窗口拉成半屏 / 全屏、
+ *   或窗口管理器自作主张），多出来的部分全落在`.mini-slack` 那块透明容器里 —— 播放条与面板
+ *   的尺寸一个像素都不跟着变（见 components.css 的 .mini-player）。以前没有那块容器时，
+ *   窗口一变高，面板那一行就会被拉长。
  *
- * 不展开时也走同一条路（而不是「只在展开时才算」）：面板收起也要缩回去。
+ * 面板收起也要缩回去，所以不展开时同样走这条路。
  * 位置不动 —— 窗只会**向下**长，用户把它拖到哪儿就一直在那儿。
  *
  * ★★ 摆完之后窗口是**固定尺寸**的（min = max = 当前这一档），这是刻意的：窗口管理器只会去
@@ -96,7 +102,9 @@ function applyBounds(layout: MiniWindowLayout): void {
   if (!win || win.isDestroyed()) return
 
   const panel = Math.max(MINI_PANEL_MIN_HEIGHT, Math.round(layout.panelHeight))
-  const height = layout.expanded ? MINI_BAR_HEIGHT + panel : MINI_BAR_HEIGHT
+  const bar = MINI_BAR_HEIGHT + (layout.expanded ? panel : 0)
+  /* 菜单那一段：关着时渲染层报 0。浮在条（与面板）下方，见 applyBounds 上面那段 */
+  const height = bar + Math.max(0, Math.round(layout.menuHeight))
 
   const [x, y] = win.getPosition()
   const { workArea } = screen.getDisplayNearestPoint({ x, y })

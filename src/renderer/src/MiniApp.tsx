@@ -10,9 +10,9 @@
  *        mirroredMedia —— 两个渲染层各持一个 ApiClient 会在刷新令牌轮换时互相踢下线。
  *        它需要的媒体地址与 token 由主窗口随快照喂进来。
  *   2. 订阅主窗口推来的播放状态（state/remotePlayer 的 installMiniBridge）；
- *   3. 报布局：面板开合与高度一变就告诉主进程，窗口高度由它算（见 main/mini-window.ts）；
- *      ★ 只有面板这一项 —— 不透明度那个浮层画在条内部，不动窗口（见 components.css 的
- *        .mini-opacity 与 shared/ipc.ts 里 MINI_MENU_HEIGHT 那段说明）；
+ *   3. 报布局：面板开合与高度、菜单开合一变就告诉主进程，窗口高度由它算（见 main/mini-window.ts）；
+ *      ★ 菜单那一段也要报：它是浮在条下方的一块卡片，窗口得为它让出高度，否则菜单会被窗口
+ *        下边缘裁掉（见 components.css 的 .mini-opacity 与 .mini-slack 两段）；
  *   4. 设置被主窗口改了要跟着变（主进程推 settings:changed，见 shared/ipc.ts）。
  *
  * ★ 顺序上唯一要紧的是**先报尺寸、再 ready**：窗口在收到 ready 之前一直是隐藏的
@@ -31,6 +31,7 @@ import { useSettings } from './state/useSettings'
 export function MiniApp(): React.JSX.Element {
   const panel = useMiniView((s) => s.panel)
   const panelHeight = useMiniView((s) => s.panelHeight)
+  const menuHeight = useMiniView((s) => s.menuHeight)
 
   /**
    * 接线（订阅设置推送、订阅播放状态、报尺寸、要状态）。
@@ -70,10 +71,13 @@ export function MiniApp(): React.JSX.Element {
     }
   }, [])
 
-  /* 布局一变就报（只有面板开合与拖动面板会改窗口高度 —— 菜单不再算在内，见 shared/ipc 说明） */
+  /*
+   * 布局一变就报：面板开合、拖动面板、菜单开合（菜单那一段高度由 MiniPlayer 量好写进 store）。
+   * 三个量必须**一起**报 —— 分两次的话主进程会在中间先摆出一个尺寸，那一下看得见。
+   */
   useEffect(() => {
-    void window.songloft.mini.resize({ expanded: panel !== null, panelHeight })
-  }, [panel, panelHeight])
+    void window.songloft.mini.resize({ expanded: panel !== null, panelHeight, menuHeight })
+  }, [panel, panelHeight, menuHeight])
 
   return (
     <>
@@ -93,6 +97,7 @@ function layout(): MiniWindowLayout {
   const view = useMiniView.getState()
   return {
     expanded: view.panel !== null,
-    panelHeight: view.panelHeight
+    panelHeight: view.panelHeight,
+    menuHeight: view.menuHeight
   }
 }
