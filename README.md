@@ -2,11 +2,13 @@
 
 > 本仓库：<https://github.com/songloft-org/songloft-desktop>
 
-[Songloft](https://github.com/songloft-org/songloft-player) 的 **Electron 桌面客户端**。
+[Songloft](https://github.com/songloft-org/songloft-player) 的 **Electron 桌面客户端**，
+**Windows / macOS / Linux 三端均已提供安装包**（下载见
+[Releases](https://github.com/songloft-org/songloft-desktop/releases)）。
 
 Songloft 是「客户端 + 自建 Go 后端」的结构：后端管曲库、标签与转码，客户端只做展示与播放。
-本仓库重写的是**客户端**，只面向 Windows / macOS / Linux 桌面，不含移动端与 Web 端，
-也**不含后端**（后端见 [songloft-org/songloft](https://github.com/songloft-org/songloft)）。
+本仓库重写的是**客户端**，只做桌面三端（不含移动端与 Web 端），也**不含后端**
+（后端见 [songloft-org/songloft](https://github.com/songloft-org/songloft)）。
 
 > **为什么换成 Electron**：完整的选型论证（性能、体积、跨平台一致性、开发效率、生态与维护
 > 成本，以及 vs Tauri / Wails / Qt / Avalonia / Compose Multiplatform / 全原生 等 10 条技术
@@ -29,7 +31,7 @@ Songloft 是「客户端 + 自建 Go 后端」的结构：后端管曲库、标�
 | ![迷你模式](docs/screenshots/mini-player.png) | ![登录页](docs/screenshots/login-error.png) |
 
 其余界面的单张图在 [`docs/screenshots/`](docs/screenshots/)（首页 / 歌单 / 歌单详情 / 文件夹 /
-多选与批量操作 / 歌曲右键菜单 / 设置 / 插件管理），**全部 73 个巡览状态**的一览见
+多选与批量操作 / 歌曲右键菜单 / 设置 / 插件管理），**全部 74 个巡览状态**的一览见
 [`docs/e2e-walkthrough.png`](docs/e2e-walkthrough.png)。
 
 ---
@@ -116,13 +118,26 @@ Songloft 是「客户端 + 自建 Go 后端」的结构：后端管曲库、标�
 首次启动在登录页填写后端地址；自签证书可在设置里单独放开。后端没起来时应用不会崩，
 会停在带可操作提示的登录页。
 
-Linux x64 提供三种形态：
+安装包在 [Releases](https://github.com/songloft-org/songloft-desktop/releases) 里，三端各一份；
+同一个 Release 还带 `SHA256SUMS.txt`，可用来校验下载到的文件：
 
-| 形态 | 适用 |
-|---|---|
-| `.deb` | Debian / Ubuntu |
-| `AppImage` | 免安装，双击即用 |
-| `.tar.gz` | 解压即用，适合自行放置 |
+| 平台 | 产物 | 说明 |
+|---|---|---|
+| Windows x64 | `.exe`（NSIS 安装包） | 可选安装目录；按**当前用户**安装，不弹 UAC；安装界面中文 / 英文；卸载时保留用户数据 |
+| macOS arm64 / x64 | `.dmg` / `.zip` | dmg 供人工安装，zip 给不便挂载 dmg 的场景。**未签名、未公证**，首次打开会被 Gatekeeper 拦下（见下） |
+| Linux x64 | `.deb` / `AppImage` / `.tar.gz` | deb 适配 Debian / Ubuntu；AppImage 免安装、双击即用（已内置静态 runtime，不依赖 `libfuse2`）；tar.gz 解压即用 |
+
+### macOS：首次打开被 Gatekeeper 拦下
+
+CI 里没有签名证书，所以 macOS 产物**未签名、未公证**：首次打开会被拦下（提示「已损坏」或
+「无法验证开发者」），**这不是产物坏了**。任选一种方式放行，之后正常双击即可：
+
+* 右键点图标 → 「打开」→ 在弹窗里再点一次「打开」；
+* 或在终端执行 `xattr -dr com.apple.quarantine "/Applications/Songloft Desktop.app"`。
+
+正式分发需要补签名与公证：填 `CSC_LINK` / `CSC_KEY_PASSWORD` secrets，并删掉
+`release.yml` 里的 `CSC_IDENTITY_AUTO_DISCOVERY: 'false'`（细节见
+[`electron-builder.yml`](electron-builder.yml) 的 `mac` 段）。
 
 ### 任务栏图标（Linux / GNOME）
 
@@ -139,15 +154,27 @@ GNOME（Wayland）画任务栏图标只认**宿主上**的 `.desktop` 条目：�
     install /path/to/Songloft.Desktop-x.AppImage` 可指向某个 AppImage；卸载用
     `pnpm run desktop:uninstall`）。它只写 `~/.local/share` 下两份文件，并把路径打出来。
 
-**目前没有自动更新**，升级需要手动替换。自行构建的方式见 [`docs/development.md`](docs/development.md)。
+**三端都没有自动更新**（也没接崩溃上报），升级需要手动下载新安装包替换。自行构建的方式见
+[`docs/development.md`](docs/development.md)。
 
 ---
 
 ## 平台支持现状
 
-代码是按三平台（Windows / macOS / Linux）写的，但**当前只交付 Linux x64**：打包配置里只有
-Linux 目标，Windows / macOS 的安装包、代码签名与公证尚未落地，也尚未在这两个平台上做过验证
-—— 例如 macOS 上无边框窗口的窗口控制仍在右上角，与系统惯例不符。
+Windows / macOS / Linux **三端都交付安装包**。三份产物由
+[`.github/workflows/release.yml`](.github/workflows/release.yml) 在各自平台的 runner 上**并行构建**
+（跨平台打包不可行：`pack:win` 要在 Windows 上跑，`pack:mac` 要在 macOS 上跑），三份全部成功
+才创建 Release —— 任何一个平台失败都不会留下半份已发布的 Release。
+
+| 平台 | 状态 | 已知欠缺 |
+|---|---|---|
+| Windows x64 | 出 NSIS 安装包 | 无代码签名（SmartScreen 会拦一次）；未做与 Linux 同等的产物级断言 |
+| macOS arm64 / x64 | 出 dmg / zip | **未签名、未公证**；窗口控制钮仍是自绘、位于右上角（macOS 惯例是左上角）；未做产物级断言 |
+| Linux x64 | 出 deb / AppImage / tar.gz | GNOME 下 AppImage / tar.gz 的任务栏图标需要额外集成（见上文）；`pnpm run verify:package` 只覆盖 Linux 产物 |
+
+「产物级断言」指 [`scripts/verify-package.sh`](scripts/verify-package.sh) 那一套：解包产物后断言
+桌面条目、图标、AppArmor profile 真的在包里。Windows / macOS 目前只由 CI 断言产物**存在**
+（`.exe` / `.dmg` 等一个不缺），没有同等深度的检查。
 
 ---
 
@@ -194,7 +221,7 @@ JS 插件（扩展）的安装 / 启停 / 卸载 / 排序 / 本地包上传 / �
 
 | 维度 | 上游 Flutter 版 | 本版本 |
 |---|---|---|
-| 交付平台 | 六端（含移动端与 Web） | 仅桌面三平台，当前实际交付 Linux x64 |
+| 交付平台 | 六端（含移动端与 Web） | 只做桌面三平台（Windows / macOS / Linux），三端均已提供安装包 |
 | 音频链路 | 横跨 8 个包 + libmpv 原生库 + 每平台一套系统媒体桥 | `HTMLAudioElement` + Media Session，解码在 Chromium 内部 |
 | 界面渲染 | 自带 Skia / Impeller | 自带 Chromium，三平台同一渲染引擎 |
 | 安装体积 | deb 声明安装体积 100 MB | 实测安装后 284 MB、deb 95.4 MiB、AppImage 111.8 MiB —— 约 2.8 倍；内存仍是明显劣势 |
@@ -213,7 +240,7 @@ JS 插件（扩展）的安装 / 启停 / 卸载 / 排序 / 本地包上传 / �
 | [`docs/electron-migration-evaluation.md`](docs/electron-migration-evaluation.md) | 换栈评估报告：10 条技术路线的横向对比与结论 |
 | [`NOTICE`](NOTICE) | 随产物分发的第三方组件署名与编解码器许可说明 |
 | [`docs/screenshots/`](docs/screenshots/) | 主要界面的截图（由巡检产物生成，见 [`scripts/e2e/shots.sh`](scripts/e2e/shots.sh)） |
-| [`docs/e2e-walkthrough.png`](docs/e2e-walkthrough.png) | 端到端巡检覆盖的 **73 个界面状态**一览（一格一步，带步骤名） |
+| [`docs/e2e-walkthrough.png`](docs/e2e-walkthrough.png) | 端到端巡检覆盖的 **74 个界面状态**一览（一格一步，带步骤名） |
 
 ---
 
