@@ -62,6 +62,7 @@ import { Queue } from './Panel'
 import { MODE_LABEL, modeIcon } from './play-mode'
 import { PlayerProgress } from './PlayerProgress'
 import { Cover, Slider } from './primitives'
+import { useUnfocusable } from '@/hooks/useUnfocusable'
 import { displayArtist, formatDuration } from '@/lib/format'
 import { usePlayer } from '@/state/usePlayer'
 import { useMiniView } from '@/state/useMiniView'
@@ -88,6 +89,15 @@ export function MiniPlayer(): React.JSX.Element {
   /** 菜单那块卡片：量它要占多高（窗口按这个数加高，见下面那条 effect） */
   const menuRef = useRef<HTMLDivElement | null>(null)
   const setMenuHeight = useMiniView((s) => s.setMenuHeight)
+  /**
+   * 整棵迷你树**不接受焦点**（Tab、鼠标、程序化三条路都堵掉 —— 见 hooks/useUnfocusable）。
+   *
+   * ★ 迷你条是浮在别的应用旁边的挂件：在它上面点一下（静音 / 切歌 / 拖音量）是想操作播放，
+   *   不该把键盘焦点从主窗口抢走，也不该在挂件上出现一圈焦点环。
+   * ★ 挂在整个 .mini-player 上：条、面板、菜单都在它里面，一处覆盖全部（含共享组件里那些
+   *   按钮与滑条，它们不归这一层管，也就无从逐个改）。
+   */
+  const rootRef = useUnfocusable<HTMLDivElement>()
 
   /* Esc 收起菜单 */
   useEffect(() => {
@@ -133,7 +143,7 @@ export function MiniPlayer(): React.JSX.Element {
   const position = scrub ?? player.currentTime
 
   return (
-    <div className="mini-player">
+    <div className="mini-player" ref={rootRef}>
       <footer className="mini-bar">
         <PlayerProgress
           duration={duration}
