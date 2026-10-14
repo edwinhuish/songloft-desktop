@@ -36,7 +36,9 @@ pnpm run build            # 产出 out/（main + preload + renderer）
 pnpm run e2e              # 端到端 UI 巡检（起 mock 后端 + 截图 + 断言）
 pnpm run shots            # 把巡检截图整理成文档用图（docs/screenshots + 汇总图）
 pnpm run pack:linux       # 打 deb / AppImage / tar.gz 到 release/
-pnpm run verify:package   # 校验打包产物的桌面集成项
+pnpm run pack:win         # 打 NSIS 安装包（要在 Windows 上跑）
+pnpm run pack:mac         # 打 dmg / zip（要在 macOS 上跑）
+pnpm run verify:package   # 校验打包产物的桌面集成项（只覆盖 Linux 产物）
 pnpm run icons            # 由 build/icon.svg 生成全套图标 + 托盘图
 pnpm run audit            # 依赖安全公告（刻意不进 check 的必过路径）
 ```
@@ -150,7 +152,34 @@ src/
 
 ---
 
-## 6. 打包与 Linux 桌面集成
+## 6. 打包与桌面集成
+
+### 6.1 三平台的产物
+
+三端都出安装包，由 [`.github/workflows/release.yml`](../.github/workflows/release.yml) 在各自平台的
+runner 上**并行构建**，三份全绿才创建 Release（任何一个平台失败都不留半份已发布的 Release）：
+
+| 平台 | 产物 | 在哪构建 |
+|---|---|---|
+| Windows x64 | NSIS `.exe` | `windows-latest` —— `makensis` 与 .exe 的图标/版本资源只在 Windows 上可用 |
+| macOS arm64 / x64 | `.dmg` / `.zip` | `macos-latest` —— dmg 走系统的 `hdiutil` |
+| Linux x64 | `.deb` / `AppImage` / `.tar.gz` | `ubuntu-24.04` |
+
+**跨平台打包不可行**：`pack:win` / `pack:mac` 只能在对应系统上跑，Linux 上只有 `pack:linux` 那一条
+能验证。所以改了 `electron-builder.yml` 的 `win:` / `mac:` / `nsis:` 段之后，别只跑 `pnpm run check`
+就算完事 —— 要么推一个 tag，要么在 Actions 里手动触发 release 工作流（`workflow_dispatch`）。
+
+三平台**共用同一张位图母版** `build/icon-source.png`：`win.icon` 与 `mac.icon` 都直接指它，由
+electron-builder 自己转 `.ico` / `.icns`。`scripts/make-icons.sh` 因此只需产 PNG（Linux 那套
+hicolor 尺寸目录）与托盘图，**不必**额外产出 `.ico` / `.icns`。
+
+仍未落地的两件事：
+
+* **macOS 产物未签名、未公证**：CI 里没有证书，`release.yml` 用 `CSC_IDENTITY_AUTO_DISCOVERY=false`
+  关掉身份探测，用户首次打开会被 Gatekeeper 拦下（放行办法见 [`../README.md`](../README.md)）。
+* **macOS 的窗口形态**：窗口控制钮是渲染层自绘的，仍停在右上角，与系统惯例（左上角）不符。
+
+### 6.2 Linux 侧会静默失败的点
 
 Linux 侧有几个会**静默失败**（不报错，但产物在用户机器上是坏的）的点。完整因果推导见
 [`../AGENTS.md`](../AGENTS.md) 第 8 节，这里只列结论：
@@ -184,10 +213,6 @@ Linux 侧有几个会**静默失败**（不报错，但产物在用户机器上�
    （另有灰度图反向验证，确保断言本身有效）。
 5. **AppImage 的 FUSE2 依赖。** Ubuntu 24.04+ 起 `libfuse2` 改名 `libfuse2t64`，用
    `toolsets.appimage: '1.0.3'` 换成静态 runtime，彻底去掉这个依赖。
-
-> 当前只有 Linux x64 的打包目标（deb / AppImage / tar.gz）。Windows / macOS 的目标、签名与
-> 公证尚未落地 —— 新增时除了 `electron-builder.yml` 的 `win:` / `mac:` 段，还要一并处理
-> `.ico` / `.icns` 图标（`scripts/make-icons.sh` 目前只产 PNG）与 macOS 的窗口形态。
 
 ---
 
@@ -277,7 +302,8 @@ pnpm run e2e && pnpm run shots
 ## 8. 开发约定
 
 * 提交前至少跑 `pnpm run check`（类型 + lint + 格式 + 单测）；动了界面再加 `pnpm run e2e`，
-  动了打包配置再加 `pnpm run pack:linux` + `pnpm run verify:package`。
+  动了打包配置再加 `pnpm run pack:linux` + `pnpm run verify:package`（两者都只覆盖 Linux 产物；
+  `win:` / `mac:` 段的改法只能在对应平台或 CI 上验证，见 §6.1）。
 * 渲染层**不得**直接 `import electron` / `node:fs` / `node:child_process`，能力一律经 `preload`
   白名单（`window.songloft`）转出 —— ESLint 会拦，理由见上面「安全模型」。
 * 纯逻辑（歌词解析、URL 拼接等）放 `src/shared/`，两侧共用且可直接单测。
