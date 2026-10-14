@@ -4,13 +4,13 @@
   "description": "Songloft Desktop — 插件化、无广告的免费音乐播放器（Electron 桌面端）",
   "author": "Edwin <edwinhuish@gmail.com>",
   "license": "Apache-2.0",
-  "homepage": "https://github.com/edwinhuish/songloft-desktop",
+  "homepage": "https://github.com/songloft-org/songloft-desktop",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/edwinhuish/songloft-desktop.git"
+    "url": "git+https://github.com/songloft-org/songloft-desktop.git"
   },
   "bugs": {
-    "url": "https://github.com/edwinhuish/songloft-desktop/issues"
+    "url": "https://github.com/songloft-org/songloft-desktop/issues"
   },
   "main": "./out/main/index.js",
   "desktopName": "io.github.edwinhuish.songloft-desktop",

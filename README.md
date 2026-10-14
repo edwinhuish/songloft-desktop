@@ -1,6 +1,6 @@
 # Songloft Desktop
 
-> 本仓库：<https://github.com/edwinhuish/songloft-desktop>
+> 本仓库：<https://github.com/songloft-org/songloft-desktop>
 
 [Songloft](https://github.com/songloft-org/songloft-player) 的 **Electron 桌面客户端**。
 

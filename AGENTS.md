@@ -16,7 +16,7 @@ Songloft 音乐播放器的 **Electron 桌面客户端**。
   是 Flutter 客户端 + 自建 Go 后端。**本仓库只重写客户端，且只做 Windows / macOS / Linux 桌面**，
   不含移动端、Web 端，也**不含后端**。
 * 后端协议、接口语义、曲库模型**完全沿用上游**，不做私有扩展。
-* 本仓库地址：<https://github.com/edwinhuish/songloft-desktop>
+* 本仓库地址：<https://github.com/songloft-org/songloft-desktop>
 
 本地联调需要另外跑一个 Songloft 后端（默认 `http://localhost:58091`，默认管理员 `admin` / `admin`）。
 后端没起来时应用不会崩，会停在带可操作提示的登录页。

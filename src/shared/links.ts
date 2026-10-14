@@ -10,9 +10,9 @@
  */
 
 /** 本仓库的 owner/repo：拼 GitHub API 地址要用，地址本身也从它拼，免得两处各写一遍 */
-export const REPO_SLUG = 'edwinhuish/songloft-desktop'
+export const REPO_SLUG = 'songloft-org/songloft-desktop'
 
-/** 本仓库：github.com/edwinhuish/songloft-desktop */
+/** 本仓库：github.com/songloft-org/songloft-desktop */
 export const REPO_URL = `https://github.com/${REPO_SLUG}`
 
 /** 发布页：桌面端只从这里分发（应用不自己换自己的二进制） */
