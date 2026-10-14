@@ -65,6 +65,15 @@ const equals = (...want) =>
     { label: `=[${want.join(' > ')}]` }
   )
 /**
+ * 数组口径的「正好 n 项」。
+ *
+ * ★ 别拿 exactly 去比数组：那是 `v === 2`，而 miniInfo 这类探针返回的是**数组** ——
+ *   那样写出来的断言**恒假**，而红的原因长得像「界面上的行数不对」（本文件开头警告的那类
+ *   漂移，与 containsAll 上面那段是同一类事故：断言不是代码，写错了不会编译报错）。
+ */
+const countIs = (n) =>
+  Object.assign((v) => Array.isArray(v) && v.length === n, { label: `有${n}项` })
+/**
  * 控制栏已显示真实曲目（而不是「未在播放」这句占位文案）。
  *
  * 双击歌曲行那一步的判据只能看这儿：播放**不会**顺带打开面板，所以那时数不到队列条目、
@@ -522,6 +531,23 @@ window.__t = {
       )
     ],
     miniTime: (document.querySelector('.mini-time') || {}).textContent ?? '',
+    /*
+     * 中栏第一行（歌名）的**文本**。只数行数（miniInfo）挡不住「快照根本没送到」——
+     * 那种情况下那两行会显示占位文案（「未在播放」/ 空歌手），行数照样是 2，形状断言全绿。
+     * 所以这一条按**内容**断言（hasSong）。迷你窗的状态全靠主窗口推（见 state/mini-host.ts），
+     * 「推不过去」是本项目踩过的真缺陷（严格模式把接线拆掉之后没装回来）。
+     */
+    miniTitle: (
+      document.querySelector('.mini-info-text .mini-line-copy') || {}
+    ).textContent?.trim() ?? '',
+    /*
+     * 那颗主播放键此刻的文案（暂停 / 播放）。它与主窗口底栏那颗读的是**同一份播放状态**，
+     * 所以这一条就是「两个播放器在播放 / 暂停上一致」的直接断言 —— 迷你窗显示「暂停」而底下的
+     * 音频真的在放，两件事只有同一个事实源时才同时成立。
+     */
+    miniPlayLabel:
+      (document.querySelector('.mini-controls .play-btn') || {}).getAttribute?.('aria-label') ??
+      '',
     miniControls: document.querySelectorAll('.mini-controls button').length,
     miniWinButtons: [...document.querySelectorAll('.mini-window-actions button')].map(
       (e) => e.getAttribute('aria-label') || ''
@@ -1211,7 +1237,15 @@ const STEPS = [
     {
       miniPlayer: exactly(1),
       miniPanel: exactly(0),
-      miniInfo: exactly(2),
+      miniInfo: countIs(2),
+      /*
+       * ★ 内容是关键：上一段（第 50 步双击歌曲行）刚把这首歌放起来，所以迷你窗此刻必须显示
+       *   这一首的歌名、并显示「暂停」—— 主窗口在播、迷你窗却在「未在播放」/「播放」，
+       *   就是本仓库踩过的那个缺陷（接线被严格模式的卸下拆掉、没装回来）。
+       *   时间那一行同理：`--:--/--:--` 正是「快照没到」的样子，两个形状它都匹配不上。
+       */
+      miniTitle: hasSong,
+      miniPlayLabel: exactly('暂停'),
       miniTime: matches(/^\d{1,2}:\d{2}\/\d{1,2}:\d{2}$/),
       miniControls: exactly(5),
       miniWinButtons: equals('最小化', '关闭')
