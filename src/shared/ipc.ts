@@ -112,14 +112,13 @@ export interface WindowState {
  * ★ 宽度 380 这一档实测（拿一首长歌名 + 时长 1:02:05 的歌压中栏）：中栏 174px、悬浮那一层
  *   的音量条 84px，五颗控件与右上角那颗窗口钮的右边缘都正好落在 380 上 —— 一个不裁。
  *   再往下调就是中栏与音量条互相让位（两者都是可收缩的 flex 项），歌名那头先开始看不见字。
- * ★ MINI_MENU_HEIGHT 是为什么存在：右键菜单是页面里的 DOM，**画不出窗口** —— 而条自己只有
- *   64px 高，一份「两个不透明度滑块」的菜单实测 150px 上下，压进去只会剩一条带滚动条的缝
- *   （.context-menu 的 max-height 是 60vh，60% × 64 = 38px）。所以菜单一开就把窗口临时加高到
- *   这一档（面板已经展开时不必 —— 那档本来就够高）。
+ * ★ 这里曾经还有一个 MINI_MENU_HEIGHT（240）：右键菜单是页面里的 DOM，**画不出窗口**，所以
+ *   当年菜单一开就把窗口临时加高到那一档。现在迷你窗里那份菜单画在条**内部**（.mini-opacity
+ *   浮层，两根滑条），窗口高度于是只由面板决定 —— 那套加高机制连同常量一起拆掉了。
+ *   ★ 别把它加回来：迷你条是「一直摆在那儿」的挂件，尺寸随菜单一跳，视觉上就是在闪。
  */
 export const MINI_BAR_HEIGHT = 64
 export const MINI_WIDTH = 380
-export const MINI_MENU_HEIGHT = 240
 /** 面板能拖到的最小高度：再矮就只剩一行歌词的位置，那个高度没有意义 */
 export const MINI_PANEL_MIN_HEIGHT = 180
 /** 面板的默认高度（首次打开 / 没拖过时用） */
@@ -133,16 +132,14 @@ export const MINI_PANEL_DEFAULT_HEIGHT = 416
  *
  * ★ 面板里装的是歌词还是播放队列，主进程**不关心**（两者共用同一份高度）：所以这里只有一个
  *   布尔量，而不是 `panel: 'lyrics' | 'queue' | null`。
- * ★ `menu` 同理：菜单里有哪几项、滑块在调什么，主进程不关心；它只需要知道「页面上有个菜单
- *   开着，而 HTML 画的菜单出不了这个 64px 高的窗口」。
+ * ★ 曾经还有第三个量 `menu`（菜单开着就临时加高窗口），已拆掉：那份菜单现在画在条内部，
+ *   窗口高度与它无关（见上面 MINI_MENU_HEIGHT 那段）。
  */
 export interface MiniWindowLayout {
   /** 下方面板展开了没有 */
   expanded: boolean
   /** 面板希望的高度（px；展开时才有意义，下限见 MINI_PANEL_MIN_HEIGHT） */
   panelHeight: number
-  /** 窗口里正开着右键菜单 */
-  menu: boolean
 }
 
 /**

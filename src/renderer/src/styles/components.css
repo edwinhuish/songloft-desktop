@@ -1143,21 +1143,6 @@
   grid-template-rows: var(--mini-bar-h) minmax(0, 1fr);
 }
 
-/*
- * 菜单开着（且面板没开）：窗口此刻被主进程加高到 240（shared/ipc.ts 的 MINI_MENU_HEIGHT），
- * 多出来那一截是**留给右键菜单的**，条自己仍要钉在 --mini-bar-h 上。
- *
- * ★ 不钉的话：.mini-player 只有 `minmax(0, 1fr)` 一行 —— 条会被拉成 240px 高，贴左缘那 64px
- *   的封面于是缩在 240px 的中间，播放条看着像「糊了一大片」。
- * ★ 高度写死之后它留在窗口顶端，加高的部分长在下半截，用户眼睛盯着的那一条不会挪。
- * ★ 底色画在 .mini-bar 自己身上（见那一节），所以钉住高度就等于只给条铺底：多出来的地方
- *   是透明的，菜单浮在那片透明区域里，视觉上就是「菜单从条底下探出来」。
- * ★ 两个属性不会同时出现（见 MiniPlayer.tsx），所以不必跟 [data-expanded] 抢优先级。
- */
-.mini-player[data-menu='true'] {
-  height: var(--mini-bar-h);
-}
-
 /* 面板（歌词 / 播放队列）。展开时淡入上浮一下：窗口高度是主进程一步到位的（原生窗口尺寸
    做不了动画），内容这边补一点过渡，看着才不像「啪」地一下凭空多出一块。
    ★ 必须是 flex 列：里面的内容靠 `flex: 1` + `overflow-y: auto` 撑成一屏可滚的东西，
@@ -1405,6 +1390,8 @@
   position: absolute;
   top: 0;
   right: 0;
+  /* 压在 .mini-opacity 之上：浮层盖满整条，这两颗钮得留在外头才点得到 */
+  z-index: 3;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -1415,6 +1402,92 @@
   width: 22px;
   height: 100%;
   border-radius: 4px;
+}
+
+/* 浮层开着时那颗钮亮着（.win-btn 自己只有 hover 一档） */
+.mini-bar .win-btn[data-active='true'] {
+  background: var(--surface-3);
+  color: var(--text-1);
+}
+
+/*
+ * 「不透明度」浮层：两根滑条，**画在播放条自己这 64px 里** —— 窗口尺寸一动不动。
+ *
+ * ★★ 为什么不干脆做成真的下拉菜单：HTML 画不出窗口之外（这正是 shared/ipc.ts 里曾经有
+ *   `MINI_MENU_HEIGHT` 的原因 —— 当年为了让 DOM 菜单放得下，得把窗口临时加高到 240px）；
+ *   而「另开一个小弹窗来画」在 Wayland 上行不通：客户端不许定位，新窗口会被合成器摆到屏幕
+ *   中间（win.setPosition 是空操作，实测那一路上连 getPosition 都只是缓存值）。
+ *   于是「窗口尺寸不变」这条要求，只剩「画在条里」这一条路 —— 那套加高机制也就一并拆掉了。
+ * ★ 占位是绝对的（inset: 0）盖满整条，条上别的东西在它开着时让开（见下面那两条
+ *   visibility）：一来把 380px 全给两根滑条，二来避免半透明底下还透出歌名。
+ * ★ 它整块都在播放条那个拖拽区上，所以必须自己声明 no-drag（条上那份名单里也有它一份）：
+ *   否则这两根滑条会像中栏那根音量条一样「看得见、拖不动」。
+ * ★ 过渡只做 opacity 加一点点上浮：它是「同一块地方换了个内容」，不是从别处飞进来的。
+ */
+.mini-opacity {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 10px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-3px);
+  transition:
+    opacity var(--dur-1) var(--ease),
+    transform var(--dur-1) var(--ease);
+  -webkit-app-region: no-drag;
+}
+
+.mini-opacity[data-open='true'] {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+/* 浮层开着时条上这三块让开（封面 / 中栏 / 控件行）。
+   ★ 三块都要写：浮层自己是**透明**的（底就是条的底色），漏掉哪一块，哪一块的内容就会
+     透在滑条上 —— 上次就漏了控件行，那五颗键明晃晃地压在两根滑条上。
+   ★ 用 visibility 而不是 display：位置留着，两边都不重排，过渡也不会跳。 */
+.mini-player[data-opacity='true'] .mini-cover,
+.mini-player[data-opacity='true'] .mini-info,
+.mini-player[data-opacity='true'] .mini-controls {
+  visibility: hidden;
+}
+
+/* 一行 = 名字 + 轨道 + 百分数，高度取 --mini-ctl-h 两行加起来正好落在这 64px 里 */
+.mini-opacity-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--mini-ctl-h);
+}
+
+/* 名字与百分数都给固定宽度：两根滑条的轨道才会上下对齐 */
+.mini-opacity-label {
+  flex: none;
+  width: 96px;
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.mini-opacity-slider {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 18px;
+}
+
+.mini-opacity-value {
+  flex: none;
+  width: 34px;
+  text-align: right;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
 }
 
 /*

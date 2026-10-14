@@ -9,9 +9,9 @@
  *   永远在主窗口 —— 两个窗口各放一份音频就是同一首歌响两遍。
  *
  * ── 条上有什么（从左到右）────────────────────────────────────────────────
- *   · 封面：贴左缘的全高方块。**它的右键菜单就是迷你窗的窗口菜单**（播放器不透明度 /
- *     面板背景不透明度）—— 封面是这条上唯一「不点出动作」的地方，把窗口级的旋钮挂在它上面，
- *     点别处就都不会误触。
+ *   · 封面：贴左缘的全高方块，也是这一条上最好用的**拖窗口把手**（它在拖拽区里）。
+ *     它身上不挂任何鼠标动作：那一格的事件整片被窗口系统收走，挂了也是死代码 ——
+ *     窗口级的两个旋钮（播放器 / 面板背景不透明度）因此改挂右上角那颗钮，见下。
  *   · 中栏：两行 —— 第一行歌名，第二行「歌手（可滚动）+ 播放时间/时长」。时间**钉在右端**，
  *     歌手再长也挤不到它（见样式表 .mini-info-sub）。
  *     **鼠标停在中栏上时中栏换成控制**（音量 / 播放模式 / 收藏）：这三样都要占地方，
@@ -19,10 +19,13 @@
  *     这一格本身（不是整条、也不是整窗），见样式表 .mini-info-hover 那一段的理由。
  *   · 控件：上一首 / 播放 / 下一首 / 歌词 / 队列。比底栏那套小一档（见 .mini-bar 的
  *     --mini-ctl-h），因为这一条总共只有 64px 高。
- *   · 右上角：**只有关闭**。**没有「退出迷你模式」** —— 那颗钮的语义（把窗口换回原样）
- *     在独立窗口下不存在了：迷你窗关掉就是关掉，主窗口一直好好的。最小化那颗也已去掉：
+ *   · 右上角：**不透明度那颗 + 关闭**。**没有「退出迷你模式」** —— 那颗钮的语义（把窗口换回
+ *     原样）在独立窗口下不存在了：迷你窗关掉就是关掉，主窗口一直好好的。最小化那颗也已去掉：
  *     迷你窗的用处正是「一直摆在那儿」，缩进任务栏就等于看不见了（系统那一侧的最小化仍在，
  *     从底栏那颗按钮或托盘再点一下就唤回来，见 main/mini-window.ts 的 openMiniWindow）。
+ *     ★ 那颗钮开出来的是**条内的浮层**（两根滑条），不是真的下拉菜单：HTML 画不出窗口之外，
+ *       而 Wayland 下又没法给新建的弹窗定位 —— 想「开着菜单但窗口尺寸一动不动」，只有画在
+ *       这 64px 里这一条路（详见样式表 .mini-opacity 那一段）。
  *
  * ★ 无边框窗口没有系统标题栏：拖拽区得自己给（整条都是拖拽区，控件逐个放行，见样式表），
  *   关闭这一颗也得自己给 —— 少了它就是「这个窗关不掉」。
@@ -47,7 +50,6 @@ import {
   IconVolume,
   IconVolumeX
 } from './Icons'
-import { useContextMenu, type MenuItem } from './ContextMenu'
 import { LyricsView } from './LyricsView'
 import { Queue } from './Panel'
 import { MODE_LABEL, modeIcon } from './play-mode'
@@ -72,11 +74,18 @@ export function MiniPlayer(): React.JSX.Element {
   const miniOpacity = useSettings((s) => s.settings.miniWindowOpacity)
   const panelOpacity = useSettings((s) => s.settings.miniPanelOpacity)
   const patchSettings = useSettings((s) => s.patch)
-  /**
-   * 有没有菜单开着。**本组件之外**那件事（窗口临时加高到放得下菜单）由 MiniApp 报给主进程，
-   * 这里只用它决定条那 64px 怎么钉（见 .mini-player[data-menu]）。
-   */
-  const menuOpen = useContextMenu((s) => s.open)
+  /** 「不透明度」浮层开没开（见下面那一段 JSX 与样式表里的 .mini-opacity） */
+  const [opacityOpen, setOpacityOpen] = useState(false)
+
+  /* Esc 收起浮层：它盖在播放条上，鼠标在条里找不到「别处」可点 */
+  useEffect(() => {
+    if (!opacityOpen) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setOpacityOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [opacityOpen])
   /** 拖动进度条时手上的位置（null = 没在拖），与底栏同一套语义 */
   const [scrub, setScrub] = useState<number | null>(null)
 
@@ -91,52 +100,12 @@ export function MiniPlayer(): React.JSX.Element {
   const duration = player.duration || song?.duration || 0
   const position = scrub ?? player.currentTime
 
-  /**
-   * 右上角那颗下拉里的菜单：两个不透明度旋钮。
-   *
-   * ★ 这两项原来是**封面的右键菜单**，现在只挂在这颗钮上 —— 封面归了拖拽区之后，那一格上的
-   *   鼠标事件整片都被窗口系统收走（不分左右键，见 styles/components.css 里那份 no-drag 名单
-   *   的说明），右键根本到不了页面。挂在按钮上则不受影响：条上所有 button 都是 no-drag。
-   * ★ 做成**函数**而不是模块级常量：两个 value 与 onChange 要取「点开这一刻」的设置值，
-   *   常量数组会把它们钉死在首次渲染那一份上。
-   */
-  const opacityMenu = (): MenuItem[] => [
-    {
-      key: 'mini-opacity',
-      label: '播放器不透明度',
-      slider: {
-        min: 0,
-        max: 100,
-        value: miniOpacity,
-        onChange: (value) => void patchSettings({ miniWindowOpacity: value })
-      }
-    },
-    {
-      key: 'mini-panel-opacity',
-      /*
-        面板那层底色是**相对播放条**的浓度（100 = 与条一致），见 tokens.css ——
-        所以它在深浅两个主题下都说得通，不必分两套默认值。
-      */
-      label: '面板背景不透明度',
-      slider: {
-        min: 0,
-        max: 100,
-        value: panelOpacity,
-        onChange: (value) => void patchSettings({ miniPanelOpacity: value })
-      }
-    }
-  ]
-
   return (
     <div
       className="mini-player"
       data-expanded={panel !== null ? 'true' : undefined}
-      /*
-        菜单开着（且面板没开）：窗口此刻被主进程加高了（MINI_MENU_HEIGHT），条得钉在
-        --mini-bar-h 上、让多出来的地方空着 —— HTML 画的菜单出不了这 64px。
-        面板开着时不挂它：那一档窗口本来就是「条 + 面板」，不用钉。
-      */
-      data-menu={menuOpen && panel === null ? 'true' : undefined}
+      /* 不透明度浮层开着时，条上别的东西（封面 / 中栏）让开，浮层独占这 64px（见 .mini-opacity） */
+      data-opacity={opacityOpen ? 'true' : undefined}
     >
       <footer className="mini-bar">
         <PlayerProgress
@@ -295,9 +264,45 @@ export function MiniPlayer(): React.JSX.Element {
         </div>
 
         {/*
-          右上角那一组：下拉菜单 + 关闭（关闭那颗与主窗口标题栏右端同款 .win-btn，只是小一档）。
-          ★ 下拉那颗是不透明度那两个旋钮**唯一**的入口：封面归拖拽区之后右键到不了页面
-            （见 opacityMenu 与样式表里那份 no-drag 名单）。
+          不透明度浮层：**画在播放条自己这 64px 里**，窗口尺寸一点不动（这一条是硬要求，
+          也是它没有做成「真的下拉菜单」的唯一原因 —— 见下面那段说明）。
+          ★ 两根滑条各占一行（行高 26px，两行 + 2px 缝正好落在 64px 里）。左边的名字与右边的
+            百分数都给了固定宽度：两根滑条的轨道才会上下对齐。
+          ★ 面板那层底色是**相对播放条**的浓度（100 = 与条一致，见 tokens.css）—— 所以它在
+            深浅两个主题下都说得通，不必分两套默认值。
+          ★ 整块都在播放条这个拖拽区上，所以它自己必须是 no-drag（样式表里那份名单里也有一份），
+            否则这两根滑条拖不动 —— 中栏那根音量条踩过同一个坑。
+        */}
+        <div className="mini-opacity" data-open={opacityOpen ? 'true' : undefined}>
+          <div className="mini-opacity-row">
+            <span className="mini-opacity-label">播放器不透明度</span>
+            <Slider
+              ariaLabel="播放器不透明度"
+              className="mini-opacity-slider"
+              value={miniOpacity}
+              max={100}
+              onChange={(value) => void patchSettings({ miniWindowOpacity: value })}
+            />
+            <span className="mini-opacity-value">{miniOpacity}%</span>
+          </div>
+          <div className="mini-opacity-row">
+            <span className="mini-opacity-label">面板背景不透明度</span>
+            <Slider
+              ariaLabel="面板背景不透明度"
+              className="mini-opacity-slider"
+              value={panelOpacity}
+              max={100}
+              onChange={(value) => void patchSettings({ miniPanelOpacity: value })}
+            />
+            <span className="mini-opacity-value">{panelOpacity}%</span>
+          </div>
+        </div>
+
+        {/*
+          右上角那一组：不透明度那颗 + 关闭（关闭那颗与主窗口标题栏右端同款 .win-btn，只是小一档）。
+          ★ 那颗是那两个旋钮**唯一**的入口，也是浮层的开关（开着时 data-active 亮着，再点一次
+            或者按 Esc 收起）：封面归拖拽区之后右键到不了页面（见样式表里那份 no-drag 名单）。
+          ★ z-index 压在浮层之上（见样式表）：浮层盖满整条，这两颗得留在外头才点得到。
           ★ 原先这里还有一颗最小化，已去掉 —— 理由见文件头那一段（系统那一侧的最小化还在，
             从底栏那颗按钮或托盘再点一下就唤回来）。
           它们整个落在控件行上方那条缝里（高度由 CSS 按条高与控件高算出来），所以那一行
@@ -307,16 +312,10 @@ export function MiniPlayer(): React.JSX.Element {
           <button
             type="button"
             className="win-btn"
+            data-active={opacityOpen}
             aria-label="不透明度"
-            onClick={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect()
-              // 右对齐：触发器就贴着窗口右缘，左对齐会让面板整块探到窗外去
-              useContextMenu.getState().show(rect.left, rect.bottom + 6, opacityMenu(), {
-                anchor: event.currentTarget,
-                align: 'right',
-                anchorRect: rect
-              })
-            }}
+            aria-expanded={opacityOpen}
+            onClick={() => setOpacityOpen((open) => !open)}
           >
             <IconChevronDown size={11} />
           </button>

@@ -24,7 +24,6 @@ import { join } from 'node:path'
 import {
   IPC,
   MINI_BAR_HEIGHT,
-  MINI_MENU_HEIGHT,
   MINI_PANEL_MIN_HEIGHT,
   MINI_WIDTH,
   type MiniCommand,
@@ -75,10 +74,10 @@ export function isMiniWindowOpen(): boolean {
  * 摆一次窗口尺寸。
  *
  * 面板展开时的高度 = 播放条 + 面板高度（下限 MINI_PANEL_MIN_HEIGHT 兜住），未展开时就是
- * 播放条那一档；窗口里开着右键菜单而面板没开时，临时加高到 MINI_MENU_HEIGHT —— 菜单是页面里
- * 的 DOM，64px 的窗口画不下它（见 shared/ipc.ts 的常量说明）。
+ * 播放条那一档 —— 就这两档。曾经还有「菜单开着就临时加高」第三种，已拆掉：那份菜单现在画在
+ * 条内部（见 shared/ipc.ts 的常量说明），窗口尺寸与它无关。
  *
- * 不展开时也走同一条路（而不是「只在展开时才算」）：面板收起、菜单关掉都要缩回去。
+ * 不展开时也走同一条路（而不是「只在展开时才算」）：面板收起也要缩回去。
  * 位置不动 —— 窗只会**向下**长，用户把它拖到哪儿就一直在那儿。
  */
 function applyBounds(layout: MiniWindowLayout): void {
@@ -86,8 +85,7 @@ function applyBounds(layout: MiniWindowLayout): void {
   if (!win || win.isDestroyed()) return
 
   const panel = Math.max(MINI_PANEL_MIN_HEIGHT, Math.round(layout.panelHeight))
-  let height = layout.expanded ? MINI_BAR_HEIGHT + panel : MINI_BAR_HEIGHT
-  if (layout.menu) height = Math.max(height, MINI_MENU_HEIGHT)
+  const height = layout.expanded ? MINI_BAR_HEIGHT + panel : MINI_BAR_HEIGHT
 
   const [x, y] = win.getPosition()
   const { workArea } = screen.getDisplayNearestPoint({ x, y })
