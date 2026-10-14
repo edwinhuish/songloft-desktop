@@ -1127,7 +1127,8 @@
   position: relative;
   /*
    * ★★ 三段式弹性列：**播放条（固定 --mini-bar-h）/ 面板（固定，高度由渲染层写在行内）/
-   *   透明容器（吃掉剩下的一切）**，菜单开着时浮在条下方那一块地方。
+   *   透明容器（吃掉剩下的一切）**—— 菜单开着时窗口加高（见 shared/ipc.ts 的 MINI_MENU_HEIGHT），
+   *   多出来的那一段就落在透明容器里，菜单浮在那片空地方上。
    *
    * 为什么必须这么分（以前是「栅格两行，面板吃 1fr」）：窗口高度是主进程按「条 + 面板 + 菜单」
    * 算的，但**系统事件**（窗口管理器把窗口平铺成半屏 / 全屏，或它自作主张）会让实际高度比这个
@@ -1172,8 +1173,8 @@ html[data-mini='true'] :focus-visible {
    ★ 必须是 flex 列：里面的内容靠 `flex: 1` + `overflow-y: auto` 撑成一屏可滚的东西，
       不给它这个前提的话，那份 flex 规则无处生效，内容会按自身高度长出去被 overflow 剪掉
       —— 表现是「显示不全，也滚不动」。
-   ★ 它自己那层底色（--mini-panel-tint）就是封面右键菜单里那根「面板背景不透明度」的落点：
-      100% 与播放条一致，调低则这块面板**只在窗口内部**变淡（窗口是透明的，于是透出桌面）。
+   ★ 它自己那层底色（--mini-panel-tint）就是右上角那颗下拉里那根「面板背景不透明度」的落点：
+     100% 与播放条一致，调低则这块面板**只在窗口内部**变淡（窗口是透明的，于是透出桌面）。
       与整窗浓度（body 上那份 --mini-window-opacity）是两件事，别并成一个（见 shared/ipc.ts）。 */
 .mini-panel {
   /* 固定的 flex 项（高度由渲染层写在行内，见 MiniPlayer.tsx）：窗口变高时不让它长 */
@@ -1359,8 +1360,8 @@ html[data-mini='true'] :focus-visible {
    ★ 中栏（.mini-info）**不在**这份名单里 —— 它是拿来拖窗口的把手，与封面、以及传输控件那一组
      上下那两条空带一起，覆盖了条上大部分空白处。
    ★★ 拖拽区吞的是**按下**，不是全部：x11 上实测（真实 xdotool 事件）——
-      · 在拖拽区上右键，页面连 contextmenu 都收不到，no-drag 的播放键两条都收得到
-        （封面那张菜单当年就是这么失效的，现在它挂在右上角那颗钮上，见 .mini-opacity）；
+     · 在拖拽区上右键，页面连 contextmenu 都收不到，no-drag 的播放键两条都收得到
+       （封面那张菜单当年就是这么失效的，现在不透明度的菜单挂在右上角那颗钮上）；
       · 但**移动照样送得到**：鼠标停在歌名上，那个悬浮层（音量 / 播放模式 / 收藏）照旧会换上来。
      Wayland 那条路不一样：按实机观察，停在歌名上**不**换（只有指针落在那三颗按钮 / 音量滑条
      上才换），也就是说那边**移动也被吞了**。本机没有 Wayland 环境可复现，先按「平台有别」记着。
@@ -1372,7 +1373,7 @@ html[data-mini='true'] :focus-visible {
    ★★ 一条实测出来的硬规矩：**拖拽区不看可见性**。一个 no-drag 的矩形哪怕 opacity: 0、
      pointer-events: none、甚至整块被别的东西盖住，也照样从拖拽区里挖掉那一块。
      于是「给某块加 no-drag」等于「永久挖掉那一格」—— 加之前先看它平时是否压着别人。
-     （.mini-opacity 就是这么把整条挖空过的，现已改成只在开着时声明；另外要知道：中栏里那
+     （当年那块「画在条里」的不透明度浮层就是这么把整条挖空过的；另外要知道：中栏里那
      一层悬浮控件的三颗钮 + 音量滑条正好铺满中栏，所以中栏中央那一条带子已经是控制区，
      可拖的是它上下那两条空带 —— 与右侧控件组上下那两条同宽同源。） */
 .mini-bar button,
@@ -1400,11 +1401,12 @@ html[data-mini='true'] :focus-visible {
  * 封面那一格：贴窗口左缘的**全高**方块（封面自己的尺寸由 TSX 取 var(--mini-bar-h) 给，
  * 见 MiniPlayer.tsx —— 这里不重复那个数值）。
  *
- * ★ 为什么要多包一层，而不是把封面直接当 flex 项：**右键菜单挂在它上面**（封面是这条上唯一
- *   不点出动作的地方，窗口级的两个旋钮落在它身上，别处就不会误触），而 Cover 组件只认展示用
- *   的 props、不接事件。多这一层之后封面依旧是贴边的全高方块，视觉上什么都没变。
+ * ★ 为什么要多包一层，而不是把封面直接当 flex 项：Cover 组件只认展示用的 props、不接事件，
+ *   而这一格上什么都不该挂（见下）。多这一层之后封面依旧是贴边的全高方块，视觉上没变。
  * ★ 它在**拖拽区里**（.mini-bar 是 drag，上面那份 no-drag 名单刻意不含它）：按住封面拖动
- *   就是把窗口拖走 —— 与条上别处的手感一致。那张右键菜单不受影响：拖拽区只接管左键。
+ *   就是把窗口拖走 —— 与条上别处的手感一致。窗口级的两个旋钮（不透明度）**当年就挂在这儿的
+ *   右键菜单上**，正是这件事让它失效的：拖拽区连右键一起吞，页面收不到那个事件。它们现已改
+ *   挂右上角那颗下拉钮（见 MiniPlayer.tsx 的 opacityMenu），别再搬回来。
  * ★ flex: none 与那几颗钮同理：整条上**只有 .mini-info 许收缩**，其余每一件都按自己的尺寸
  *   站着。封面若是允许收缩的 flex item，条里一旦出现负的自由空间（改条宽、加控件时很容易），
  *   被压扁的会是它 —— 一个被拉成椭圆的封面比歌名少显示几个字更扎眼。
@@ -1467,8 +1469,6 @@ html[data-mini='true'] :focus-visible {
   position: absolute;
   top: 0;
   right: 0;
-  /* 压在 .mini-opacity 之上：浮层盖满整条，这两颗钮得留在外头才点得到 */
-  z-index: 3;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -1479,97 +1479,6 @@ html[data-mini='true'] :focus-visible {
   width: 22px;
   height: 100%;
   border-radius: 4px;
-}
-
-/* 浮层开着时那颗钮亮着（.win-btn 自己只有 hover 一档） */
-.mini-bar .win-btn[data-active='true'] {
-  background: var(--surface-3);
-  color: var(--text-1);
-}
-
-/*
- * 「不透明度」菜单：一块**浮在播放条下方**的小卡片（自己的底色 / 边框 / 阴影），
- * 右对齐挂在右上角那颗钮底下。
- *
- * ★★ 它为什么在条**外面**：条只有 64px 高，一份「名字 + 轨道 + 百分数」两行的菜单压不进去
- *   （当年为此把 MINI_MENU_HEIGHT 定成 240，菜单一开就把窗口加高）。现在条下面有一块**透明
- *   容器**（.mini-slack）—— 菜单开着时渲染层量出它要多高（MiniPlayer 那条 effect），窗口按
- *   那个数加高，这一块地方就是它的；关掉又缩回去。
- *   ⚠ 加高的是**窗口**，不是播放器：条永远 64px、面板永远是自己那个高度，多出来的全落在那块
- *     透明容器里（见 .mini-player 的三段式说明）。这也是它没做成「另开一个小弹窗」的原因：
- *     Wayland 下客户端不许定位新窗口，弹窗会被合成器摆到屏幕中间（win.setPosition 是空操作）。
- * ★★ 它**关着时根本不在 DOM 里**（条件渲染，见 MiniPlayer.tsx）。这是两次实测换来的一条：
- *   拖拽区只看矩形、不看可见性 —— 一块矩形声明 no-drag 会把那一片的拖拽区挖空、声明 drag 会把
- *   悬浮的移动事件吞掉（Wayland 上中栏再也换不出控件）。只在开着时存在，两种副作用就都只落在
- *   「开着」这一态里；而这一态里菜单也不盖住条 —— 封面 / 歌名 / 控件照旧可见、照旧能拖。
- * ★ 所以这里的 no-drag 可以无条件写：元素只在开着时存在，而那两根滑条是 div 而不是 button，
- *   不声明就是「看得见、拖不动」（中栏那根音量条踩过同一个坑）。
- * ★ 占位：贴着窗口右缘（与右上角那两颗钮同一条边），宽度给定值 —— 两行的「名字 / 轨道 /
- *   百分数」在这个宽度下都放得开（轨道实测 96px）。z-index 压在面板之上：面板开着时它盖在
- *   面板顶上一角，这是浮层该有的样子。
- * ★ 出现时只做一点点上浮 + 淡入：它是从右上角那颗钮底下「长出来」的一小块。
- */
-.mini-opacity {
-  position: absolute;
-  /* 条的下边缘再留 6px 缝，免得看着像粘在条上 */
-  top: calc(var(--mini-bar-h) + 6px);
-  right: 8px;
-  z-index: 4;
-  width: 236px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 6px 10px;
-  border: 1px solid var(--line-2);
-  border-radius: var(--r-sm);
-  background: var(--glass-base);
-  box-shadow: var(--shadow-2);
-  animation: mini-opacity-in var(--dur-2) var(--ease);
-  -webkit-app-region: no-drag;
-}
-
-@keyframes mini-opacity-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* 一行 = 名字 + 轨道 + 百分数（高度取 --mini-ctl-h）。菜单要占多高由渲染层按**实际渲染出来的
-   尺寸**量（见 MiniPlayer 那条 effect）：这里改字号 / 行高 / 内边距，窗口那边会自动跟上 */
-.mini-opacity-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: var(--mini-ctl-h);
-}
-
-/* 名字与百分数都给固定宽度：两根滑条的轨道才会上下对齐 */
-.mini-opacity-label {
-  flex: none;
-  width: 96px;
-  font-size: 11px;
-  color: var(--text-2);
-  white-space: nowrap;
-}
-
-.mini-opacity-slider {
-  flex: 1 1 0;
-  min-width: 0;
-  height: 18px;
-}
-
-.mini-opacity-value {
-  flex: none;
-  width: 34px;
-  text-align: right;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-3);
 }
 
 /*

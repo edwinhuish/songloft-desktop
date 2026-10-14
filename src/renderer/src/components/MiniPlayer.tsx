@@ -3,11 +3,12 @@
  *
  * ★ 它跑在**自己的窗口**里（不是主界面缩小出来的那一态，见 main/mini-window.ts）。
  *
- * ★★ 这棵树从上到下是三段（外加一块菜单）：**播放条（永远 64px）/ 面板（展开时，用户拖出来的
- *   高度）/ 透明容器（吃掉剩下的一切）**，菜单开着时浮在条下方那块地方。窗口高度 = 条 + 面板 +
- *   菜单（主进程算，见 main/mini-window.ts 的 applyBounds），而**多出来的余量**（系统事件把窗口
- *   拉成半屏 / 全屏、窗口管理器自作主张）全落在透明容器里 —— 条与面板的尺寸一个像素都不跟着变。
- *   这三段的尺寸各自钉死，所以那一格里的东西不会因为窗口变大而变形（见样式表 .mini-player）。
+ * ★★ 这棵树从上到下是三段：**播放条（永远 64px）/ 面板（展开时，用户拖出来的高度）/ 透明容器
+ *   （吃掉剩下的一切）**。窗口高度 = 条 + 面板（主进程算，见 main/mini-window.ts 的 applyBounds），
+ *   菜单开着时另有一档（MINI_MENU_HEIGHT，菜单是页面里的 DOM，画不出窗口）；而**多出来的余量**
+ *   （系统事件把窗口拉成半屏 / 全屏、窗口管理器自作主张）全落在透明容器里 —— 条与面板的尺寸
+ *   一个像素都不跟着变。这三段的尺寸各自钉死，所以那一格里的东西不会因为窗口变大而变形
+ *   （见样式表 .mini-player）。
  *
  * ★ 它读的 `usePlayer` 是**主窗口那份的镜像**（state/remotePlayer.ts）：数据由主窗口推来，
  *   动作（播放 / 切歌 / 跳转 / 音量 / 队列增删改）变成遥控命令发回去。播放的唯一事实源
@@ -31,9 +32,10 @@
  *     原样）在独立窗口下不存在了：迷你窗关掉就是关掉，主窗口一直好好的。最小化那颗也已去掉：
  *     迷你窗的用处正是「一直摆在那儿」，缩进任务栏就等于看不见了（系统那一侧的最小化仍在，
  *     从底栏那颗按钮或托盘再点一下就唤回来，见 main/mini-window.ts 的 openMiniWindow）。
- *     ★ 那颗钮开出来的是一块**浮在条下方的卡片**（两根滑条，见下面 .mini-opacity 那一段）：
- *       它长在窗口**内部**、条下面的透明容器里 —— HTML 画不出窗口之外，而 Wayland 下又没法给
- *       新建的弹窗定位，所以菜单要地方，只能是窗口自己让出一段（加高的是窗口，不是播放器）。
+ *     ★ 那颗钮开出来的就是**共享的那份菜单**（components/ContextMenu，两根滑块）：它长在窗口
+ *       **内部**、条下面那块透明容器让出来的地方 —— HTML 画不出窗口之外，而 Wayland 下又没法给
+ *       新建的弹窗定位，所以菜单要地方，只能是窗口自己让出一段（加高的是窗口，不是播放器，
+ *       见 shared/ipc.ts 的 MINI_MENU_HEIGHT）。
  *
  * ★ 无边框窗口没有系统标题栏：拖拽区得自己给（整条都是拖拽区，控件逐个放行，见样式表），
  *   关闭这一颗也得自己给 —— 少了它就是「这个窗关不掉」。
@@ -58,6 +60,7 @@ import {
   IconVolume,
   IconVolumeX
 } from './Icons'
+import { useContextMenu, type MenuItem } from './ContextMenu'
 import { LyricsView } from './LyricsView'
 import { Queue } from './Panel'
 import { MODE_LABEL, modeIcon } from './play-mode'
@@ -85,50 +88,21 @@ export function MiniPlayer(): React.JSX.Element {
   const miniOpacity = useSettings((s) => s.settings.miniWindowOpacity)
   const panelOpacity = useSettings((s) => s.settings.miniPanelOpacity)
   const patchSettings = useSettings((s) => s.patch)
-  /** 「不透明度」菜单开没开（见条下方那一段 JSX 与样式表里的 .mini-opacity） */
-  const [opacityOpen, setOpacityOpen] = useState(false)
-  /** 菜单那块卡片：量它要占多高（窗口按这个数加高，见下面那条 effect） */
-  const menuRef = useRef<HTMLDivElement | null>(null)
-  const setMenuHeight = useMiniView((s) => s.setMenuHeight)
+  /**
+   * 菜单开着没有。**本组件之外**那件事（窗口临时加高到放得下菜单）由 MiniApp 报给主进程，
+   * 这里只用它给那颗钮一个 aria-expanded。
+   */
+  const menuOpen = useContextMenu((s) => s.open)
   /**
    * 整棵迷你树**不接受焦点**（Tab、鼠标、程序化三条路都堵掉 —— 见 hooks/useUnfocusable）。
    *
    * ★ 迷你条是浮在别的应用旁边的挂件：在它上面点一下（静音 / 切歌 / 拖音量）是想操作播放，
    *   不该把键盘焦点从主窗口抢走，也不该在挂件上出现一圈焦点环。
-   * ★ 挂在整个 .mini-player 上：条、面板、菜单都在它里面，一处覆盖全部（含共享组件里那些
-   *   按钮与滑条，它们不归这一层管，也就无从逐个改）。
+   * ★ 挂在整个 .mini-player 上：条、面板都在它里面，一处覆盖全部（含共享组件里那些按钮与
+   *   滑条，它们不归这一层管，也就无从逐个改）。菜单不算 —— 它是共享的那份宿主，挂在
+   *   .mini-player **外面**（见 MiniApp）。
    */
   const rootRef = useUnfocusable<HTMLDivElement>()
-
-  /* Esc 收起菜单 */
-  useEffect(() => {
-    if (!opacityOpen) return
-    const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setOpacityOpen(false)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [opacityOpen])
-
-  /**
-   * 把菜单要占的高度报出去（关着时报 0）—— 窗口按它加高，条下方那段透明容器就是菜单的地方。
-   *
-   * ★ 量的是 **offsetTop + offsetHeight**（相对 .mini-player，它带 position: relative），
-   *   不用 getBoundingClientRect：卡片入场有一个 translateY 的动画，两者在动画期间差几个
-   *   像素，而这条 effect 只跑一次 —— 量早了菜单下边缘就会被窗口裁掉一条。
-   * ★ 也不用写死的常量：菜单多高由字号、行数、内边距一起定，写死就得跟着改（ipc.ts 里
-   *   那段常量说明记着这个教训）。
-   * ★ 末尾那 4px 是留给圆角与阴影的余量 —— 贴着窗口下边缘收尾会被切。
-   */
-  useEffect(() => {
-    if (!opacityOpen) {
-      setMenuHeight(0)
-      return
-    }
-    const el = menuRef.current
-    if (!el) return
-    setMenuHeight(Math.max(0, el.offsetTop + el.offsetHeight - MINI_BAR_HEIGHT) + 4)
-  }, [opacityOpen, setMenuHeight])
   /** 拖动进度条时手上的位置（null = 没在拖），与底栏同一套语义 */
   const [scrub, setScrub] = useState<number | null>(null)
 
@@ -142,6 +116,42 @@ export function MiniPlayer(): React.JSX.Element {
 
   const duration = player.duration || song?.duration || 0
   const position = scrub ?? player.currentTime
+
+  /**
+   * 右上角那颗下拉里的菜单：两个不透明度旋钮。
+   *
+   * ★ 这两项最早是**封面的右键菜单**，现在只挂在这颗钮上 —— 封面归了拖拽区之后，那一格上的
+   *   鼠标事件整片都被窗口系统收走（不分左右键，见 styles/components.css 里那份 no-drag 名单
+   *   的说明），右键根本到不了页面。挂在按钮上则不受影响：条上所有 button 都是 no-drag。
+   * ★ 做成**函数**而不是模块级常量：两个 value 与 onChange 要取「点开这一刻」的设置值，
+   *   常量数组会把它们钉死在首次渲染那一份上。
+   */
+  const opacityMenu = (): MenuItem[] => [
+    {
+      key: 'mini-opacity',
+      label: '播放器不透明度',
+      slider: {
+        min: 0,
+        max: 100,
+        value: miniOpacity,
+        onChange: (value) => void patchSettings({ miniWindowOpacity: value })
+      }
+    },
+    {
+      key: 'mini-panel-opacity',
+      /*
+        面板那层底色是**相对播放条**的浓度（100 = 与条一致），见 tokens.css ——
+        所以它在深浅两个主题下都说得通，不必分两套默认值。
+      */
+      label: '面板背景不透明度',
+      slider: {
+        min: 0,
+        max: 100,
+        value: panelOpacity,
+        onChange: (value) => void patchSettings({ miniPanelOpacity: value })
+      }
+    }
+  ]
 
   return (
     <div className="mini-player" ref={rootRef}>
@@ -302,9 +312,9 @@ export function MiniPlayer(): React.JSX.Element {
         </div>
 
         {/*
-          右上角那一组：不透明度那颗 + 关闭（关闭那颗与主窗口标题栏右端同款 .win-btn，只是小一档）。
-          ★ 那颗是那两个旋钮**唯一**的入口，也是菜单的开关（开着时 data-active 亮着，再点一次
-            或者按 Esc 收起）：封面归拖拽区之后右键到不了页面（见样式表里那份 no-drag 名单）。
+          右上角那一组：下拉菜单 + 关闭（关闭那颗与主窗口标题栏右端同款 .win-btn，只是小一档）。
+          ★ 下拉那颗是不透明度那两个旋钮**唯一**的入口：封面归拖拽区之后右键到不了页面
+            （见 opacityMenu 与样式表里那份 no-drag 名单）。
           ★ 原先这里还有一颗最小化，已去掉 —— 理由见文件头那一段（系统那一侧的最小化还在，
             从底栏那颗按钮或托盘再点一下就唤回来）。
           它们整个落在控件行上方那条缝里（高度由 CSS 按条高与控件高算出来），所以那一行
@@ -314,10 +324,17 @@ export function MiniPlayer(): React.JSX.Element {
           <button
             type="button"
             className="win-btn"
-            data-active={opacityOpen}
             aria-label="不透明度"
-            aria-expanded={opacityOpen}
-            onClick={() => setOpacityOpen((open) => !open)}
+            aria-expanded={menuOpen}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect()
+              // 右对齐：触发器就贴着窗口右缘，左对齐会让面板整块探到窗外去
+              useContextMenu.getState().show(rect.left, rect.bottom + 6, opacityMenu(), {
+                anchor: event.currentTarget,
+                align: 'right',
+                anchorRect: rect
+              })
+            }}
           >
             <IconChevronDown size={11} />
           </button>
@@ -373,48 +390,9 @@ export function MiniPlayer(): React.JSX.Element {
       ) : null}
 
       {/*
-        不透明度菜单：**浮在播放条下方**的一块小卡片，右对齐挂在右上角那颗钮底下。
-        ★★ 它为什么长在条外面（上一版画在条里）：条只有 64px，一份「名字 + 轨道 + 百分数」两行的
-          菜单压不进去（当年为此把 MINI_MENU_HEIGHT 定成 240）。现在条下面有一块**透明容器**
-          （.mini-slack）—— 菜单开着时窗口按它量出来的高度加高（见上面那条 effect），那块地方
-          就是它的；关掉又缩回去。加高的是**窗口**，不是播放器：条永远 64px、面板永远是自己
-          那个高度，多出来的全落在透明容器里。
-        ★ 关着时它**压根不在 DOM 里**（条件渲染，不是 opacity: 0）：一块矩形能挖掉拖拽区、也能
-          吞掉悬浮的移动事件（这两件都踩过），只在开着时存在，那两种副作用就只落在「开着」这一
-          态 —— 而这一态里条本身照旧可见、照旧能拖（它不再盖住条）。
-        ★ 自己声明 no-drag（样式表里那份名单也有它一份）：否则那两根滑条拖不动 ——
-          中栏那根音量条踩过同一个坑。
-      */}
-      {opacityOpen && (
-        <div className="mini-opacity" ref={menuRef}>
-          <div className="mini-opacity-row">
-            <span className="mini-opacity-label">播放器不透明度</span>
-            <Slider
-              ariaLabel="播放器不透明度"
-              className="mini-opacity-slider"
-              value={miniOpacity}
-              max={100}
-              onChange={(value) => void patchSettings({ miniWindowOpacity: value })}
-            />
-            <span className="mini-opacity-value">{miniOpacity}%</span>
-          </div>
-          <div className="mini-opacity-row">
-            <span className="mini-opacity-label">面板背景不透明度</span>
-            <Slider
-              ariaLabel="面板背景不透明度"
-              className="mini-opacity-slider"
-              value={panelOpacity}
-              max={100}
-              onChange={(value) => void patchSettings({ miniPanelOpacity: value })}
-            />
-            <span className="mini-opacity-value">{panelOpacity}%</span>
-          </div>
-        </div>
-      )}
-
-      {/*
-        透明容器：窗口比「条 + 面板 + 菜单」多出来的那一部分全归它（系统事件把窗口拉成半屏 /
-        全屏时就是它顶着），播放条与面板的尺寸一个像素都不跟着变。
+        透明容器：窗口比「条 + 面板」多出来的那一部分全归它（系统事件把窗口拉成半屏 / 全屏时
+        就是它顶着，菜单开着时它让出来的那一段就是菜单的地方），播放条与面板的尺寸一个像素都
+        不跟着变。
         ★ 它是透明的（不铺任何底色）。落在它上面的鼠标按「拖窗口的把手」算 —— 与封面、中栏
           同一种手感：一块空地方，按下去就是把挂件挪个位置。
         ★ aria-hidden：它没有任何内容，读屏不该在里面停。

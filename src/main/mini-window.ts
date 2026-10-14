@@ -24,6 +24,7 @@ import { join } from 'node:path'
 import {
   IPC,
   MINI_BAR_HEIGHT,
+  MINI_MENU_HEIGHT,
   MINI_PANEL_MIN_HEIGHT,
   MINI_SHADOW_EDGE,
   MINI_WINDOW_WIDTH,
@@ -74,12 +75,12 @@ export function isMiniWindowOpen(): boolean {
 /**
  * 摆一次窗口尺寸。
  *
- * 高度 = 播放条 + （展开时的）面板 + （开着时的）菜单：
+ * 高度 = 播放条 + （展开时的）面板，另有一档给菜单：
  *   · 播放条那一档是死的（MINI_BAR_HEIGHT）；
  *   · 面板高度由用户拖出来（下限 MINI_PANEL_MIN_HEIGHT 兜住）；
- *   · 菜单那一段由渲染层量出来（MiniWindowLayout.menuHeight）—— 它浮在条下方，窗口得正好
- *     让出那么高，菜单才画得进窗口里。
- * ★★ 这三样之外的**余量**不属于任何人：窗口若比这个和高（系统事件把窗口拉成半屏 / 全屏、
+ *   · 菜单开着而面板没展开时，临时加高到 MINI_MENU_HEIGHT —— 菜单是页面里的 DOM，64px 的
+ *     窗口画不下它（见 shared/ipc.ts 的常量说明）。面板展开的那一档本来就比它高，取大者即可。
+ * ★★ 这几样之外的**余量**不属于任何人：窗口若比这个和高（系统事件把窗口拉成半屏 / 全屏、
  *   或窗口管理器自作主张），多出来的部分全落在`.mini-slack` 那块透明容器里 —— 播放条与面板
  *   的尺寸一个像素都不跟着变（见 components.css 的 .mini-player）。以前没有那块容器时，
  *   窗口一变高，面板那一行就会被拉长。
@@ -104,10 +105,10 @@ function applyBounds(layout: MiniWindowLayout): void {
 
   const panel = Math.max(MINI_PANEL_MIN_HEIGHT, Math.round(layout.panelHeight))
   const bar = MINI_BAR_HEIGHT + (layout.expanded ? panel : 0)
-  /* 菜单那一段：关着时渲染层报 0。浮在条（与面板）下方，见 applyBounds 上面那段 */
   /* 上下各留一圈给窗口阴影（渲染层那边由 #root 的 padding 让出来，见 base.css） */
   const pad = MINI_SHADOW_EDGE * 2
-  const height = bar + Math.max(0, Math.round(layout.menuHeight)) + pad
+  /* 菜单那一档：菜单画在条下方那片（.mini-slack 让出来的）地方，见 applyBounds 上面那段 */
+  const height = layout.menu ? Math.max(bar + pad, MINI_MENU_HEIGHT) : bar + pad
 
   const [x, y] = win.getPosition()
   const { workArea } = screen.getDisplayNearestPoint({ x, y })

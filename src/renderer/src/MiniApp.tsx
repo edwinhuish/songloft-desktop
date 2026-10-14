@@ -10,9 +10,9 @@
  *        mirroredMedia —— 两个渲染层各持一个 ApiClient 会在刷新令牌轮换时互相踢下线。
  *        它需要的媒体地址与 token 由主窗口随快照喂进来。
  *   2. 订阅主窗口推来的播放状态（state/remotePlayer 的 installMiniBridge）；
- *   3. 报布局：面板开合与高度、菜单开合一变就告诉主进程，窗口高度由它算（见 main/mini-window.ts）；
- *      ★ 菜单那一段也要报：它是浮在条下方的一块卡片，窗口得为它让出高度，否则菜单会被窗口
- *        下边缘裁掉（见 components.css 的 .mini-opacity 与 .mini-slack 两段）；
+ *   3. 报布局：条 / 面板 / 菜单三样一变就告诉主进程，窗口高度由它算（见 main/mini-window.ts）；
+ *      ★ 菜单那一段也要报：它是页面里的 DOM，出不了窗口 —— 窗口得为它让出高度（MINI_MENU_HEIGHT），
+ *        否则菜单会被窗口下边缘裁掉（见 shared/ipc.ts 那段常量说明）；
  *   4. 设置被主窗口改了要跟着变（主进程推 settings:changed，见 shared/ipc.ts）。
  *
  * ★ 顺序上唯一要紧的是**先报尺寸、再 ready**：窗口在收到 ready 之前一直是隐藏的
@@ -23,6 +23,7 @@
 import { useEffect } from 'react'
 
 import type { MiniWindowLayout } from '@shared/ipc'
+import { ContextMenuHost, useContextMenu } from './components/ContextMenu'
 import { MiniPlayer } from './components/MiniPlayer'
 import { installMiniBridge } from './state/remotePlayer'
 import { useMiniView } from './state/useMiniView'
@@ -31,7 +32,7 @@ import { useSettings } from './state/useSettings'
 export function MiniApp(): React.JSX.Element {
   const panel = useMiniView((s) => s.panel)
   const panelHeight = useMiniView((s) => s.panelHeight)
-  const menuHeight = useMiniView((s) => s.menuHeight)
+  const menuOpen = useContextMenu((s) => s.open)
 
   /**
    * 接线（订阅设置推送、订阅播放状态、报尺寸、要状态）。
@@ -72,16 +73,18 @@ export function MiniApp(): React.JSX.Element {
   }, [])
 
   /*
-   * 布局一变就报：面板开合、拖动面板、菜单开合（菜单那一段高度由 MiniPlayer 量好写进 store）。
+   * 布局一变就报：面板开合、拖动面板、菜单开合都会改窗口高度。
    * 三个量必须**一起**报 —— 分两次的话主进程会在中间先摆出一个尺寸，那一下看得见。
    */
   useEffect(() => {
-    void window.songloft.mini.resize({ expanded: panel !== null, panelHeight, menuHeight })
-  }, [panel, panelHeight, menuHeight])
+    void window.songloft.mini.resize({ expanded: panel !== null, panelHeight, menu: menuOpen })
+  }, [panel, panelHeight, menuOpen])
 
   return (
     <>
       <MiniPlayer />
+      {/* 菜单（不透明度那两个旋钮）就挂在这里：它是**共享的**那一份下拉，见 components/ContextMenu */}
+      <ContextMenuHost />
       {/*
         ★ 这里**不挂** TooltipHost：迷你窗整窗只有 64px 高的条（展开也只多一块面板），
           提示框一弹就盖住它自己那几颗钮，而这几颗钮本来就是「一看就懂 + aria-label 齐备」
@@ -98,6 +101,6 @@ function layout(): MiniWindowLayout {
   return {
     expanded: view.panel !== null,
     panelHeight: view.panelHeight,
-    menuHeight: view.menuHeight
+    menu: useContextMenu.getState().open
   }
 }

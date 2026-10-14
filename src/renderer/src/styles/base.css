@@ -520,9 +520,10 @@ html[data-mini='true'] .mini-player {
      * 标题栏的拖拽区：那一下被浏览器拿去拖窗口（Windows 上更彻底 —— 整条非客户区
        交给系统处理），页面收不到 pointerdown，于是点标题栏关不掉菜单；
      * 迷你条的拖拽区（.mini-bar，迷你模式下它就是那唯一一条能拖窗口的地方）：
-       同上，而且迷你窗只有 64px 高、菜单是**画在这条之上**的 —— 菜单顶部那一截
-       （约 20px，正好是「置顶」那一项的上半）落在条的矩形里，不让开的话连那一项
-       都点不动；
+       同上，而且迷你窗的菜单就**从这条的下缘探出来**（它挂在右上角那颗钮上），
+       菜单顶部那一截落在条的矩形里，不让开的话那两根滑块都拖不动；
+     * 迷你窗下方那块透明容器（.mini-slack，也是拖窗口的把手）：菜单占了它的上半截，
+       点它空着的那半截本该是「点别处 → 关菜单」，不让开就点什么都没发生；
      * 扩展页的 webview：guest 是独立进程，点在它上面的那一下也不会冒上来。
 
    所以菜单开着期间先把这几处让开：拖拽区暂时不是拖拽区、webview 暂时不收点击，
@@ -531,7 +532,8 @@ html[data-mini='true'] .mini-player {
 
    标记由 ContextMenuHost 打在 documentElement 上（见那里为什么不走 React 渲染）。 */
 html[data-menu='open'] .titlebar,
-html[data-menu='open'] .mini-bar {
+html[data-menu='open'] .mini-bar,
+html[data-menu='open'] .mini-slack {
   -webkit-app-region: no-drag;
 }
 
