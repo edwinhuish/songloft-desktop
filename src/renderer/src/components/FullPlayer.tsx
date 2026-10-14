@@ -191,10 +191,10 @@ export function FullPlayer(): React.JSX.Element {
         </span>
 
         <div className="fullplayer-controls">
+          {/* 与底栏那颗同口径：模式由图标示意，不靠变色（见 PlayerBar.tsx 的说明） */}
           <button
             type="button"
             className="icon-btn"
-            data-active={player.playMode === 'random'}
             data-tip={MODE_LABEL[player.playMode]}
             aria-label={MODE_LABEL[player.playMode]}
             onClick={() => player.cyclePlayMode()}

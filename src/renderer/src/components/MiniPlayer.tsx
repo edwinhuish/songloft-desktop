@@ -301,10 +301,10 @@ export function MiniPlayer(): React.JSX.Element {
                   player.flushVolume()
                 }}
               />
+              {/* 与底栏那颗同口径：模式由图标示意，不靠变色（见 PlayerBar.tsx 的说明） */}
               <button
                 type="button"
                 className="icon-btn"
-                data-active={player.playMode === 'random'}
                 aria-label={MODE_LABEL[player.playMode]}
                 onClick={() => player.cyclePlayMode()}
               >

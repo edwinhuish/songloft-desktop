@@ -116,10 +116,14 @@ export function PlayerBar(): React.JSX.Element {
 
       {/* 中间：传输控制 */}
       <div className="playerbar-controls">
+        {/*
+          播放模式钮刻意**不带 data-active**：当前是哪一档由图标本身示意
+          （每档一颗不同的图标，见 play-mode.tsx），再点一层 accent 色没有多说明任何事，
+          却让它在传输控制这一排里单独亮着 —— 与相邻几颗钮不是一个观感。
+        */}
         <button
           type="button"
           className="icon-btn"
-          data-active={player.playMode === 'random'}
           data-tip={MODE_LABEL[player.playMode]}
           aria-label={MODE_LABEL[player.playMode]}
           onClick={() => player.cyclePlayMode()}
