@@ -79,6 +79,17 @@ export function isMiniWindowOpen(): boolean {
  *
  * 不展开时也走同一条路（而不是「只在展开时才算」）：面板收起也要缩回去。
  * 位置不动 —— 窗只会**向下**长，用户把它拖到哪儿就一直在那儿。
+ *
+ * ★★ 摆完之后窗口是**固定尺寸**的（min = max = 当前这一档），这是刻意的：窗口管理器只会去
+ *   改「可调整尺寸」的窗口 —— GNOME 的 Super+←/→ 平铺、拖到屏幕边缘的贴边 / 最大化都要求
+ *   这一点。迷你条是挂在屏幕角上的挂件，被平铺或贴边拉伸都不成立。于是每摆一次尺寸就把
+ *   这两个提示重设一遍，而那三步的**顺序不能换**：
+ *     1. 先把**下限**松开（收缩时 min 若还卡在旧高度上，第 3 步的 setBounds 会被按回去）；
+ *     2. 再把**上限**放到目标值（长大时同理，max 还卡在旧高度上就长不动）；
+ *     3. 摆尺寸，最后把 min 收到目标值 —— 这一步才让窗口重新变成「不可调整尺寸」。
+ *   ⚠ 所以**不能**改回构造时一句 `resizable: false`：那是把 min = max 一次性写死，
+ *     之后从主进程改尺寸会被窗口管理器按那对提示挡回去（症状是「点了歌词，窗口不长」）。
+ *     我们这套是每次现调，于是「我们自己能改」与「别人不能改」同时成立。
  */
 function applyBounds(layout: MiniWindowLayout): void {
   const win = miniWindow
@@ -91,7 +102,12 @@ function applyBounds(layout: MiniWindowLayout): void {
   const { workArea } = screen.getDisplayNearestPoint({ x, y })
   // 工作区兜底：面板拖到比屏幕还高时窗口不该比屏幕还高
   const maxHeight = Math.max(MINI_BAR_HEIGHT, workArea.height - MARGIN)
-  win.setBounds({ x, y, width: MINI_WIDTH, height: Math.min(height, maxHeight) })
+  const target = Math.min(height, maxHeight)
+
+  win.setMinimumSize(MINI_WIDTH, MINI_BAR_HEIGHT)
+  win.setMaximumSize(MINI_WIDTH, target)
+  win.setBounds({ x, y, width: MINI_WIDTH, height: target })
+  win.setMinimumSize(MINI_WIDTH, target)
 }
 
 /**
@@ -140,6 +156,9 @@ export function openMiniWindow(): void {
     height: MINI_BAR_HEIGHT,
     minWidth: MINI_WIDTH,
     minHeight: MINI_BAR_HEIGHT,
+    /* 宽度是死的（迷你条只有一个宽度），顺手也钉住上限；高度那一头由 applyBounds 每次现调 */
+    maxWidth: MINI_WIDTH,
+    maxHeight: MINI_BAR_HEIGHT,
     icon: loadAppIcon() ?? undefined,
     frame: false,
     // 与主窗口同一套：透明窗口 + 自绘界面（条/面板的底色由渲染层画，桌面能透过来）
@@ -151,8 +170,11 @@ export function openMiniWindow(): void {
      * ★ `resizable: true` 是**必要的**，不是顺手开的：窗口高度由 applyBounds 反复改（展开面板、
      *   拖那根把手），而 Linux 上 `resizable: false` 会把窗口的尺寸提示设成 min = max ——
      *   之后从主进程改尺寸会被窗口管理器按那对提示挡回去，表现是「点了歌词，窗口不长」。
-     *   代价是用户也能拖窗口自己的边缘改尺寸：那种情况下面板只是被拉长拉短（它会自己适应），
-     *   而设置里记住的高度没变 —— 下次开面板又会回到那个值，不是坏账。
+     * ★ 那「用户拖边缘 / 被平铺 / 被贴边拉伸」这几条怎么办：**不靠这一句**，靠 applyBounds
+     *   每次摆完把 min = max = 当前档钉回去（见那里的三步）。窗口管理器只肯改「可调整尺寸」
+     *   的窗口，于是 GNOME 的 Super+←/→ 与拖到屏幕边缘的贴边都不会再改它的尺寸。
+     *   平铺预览 / 快捷键那一侧的具体表现（被拒绝还是只移动不缩放）得在真机上确认 ——
+     *   这套环境（xvfb，没有窗口管理器）量不到。
      * ★ maximizable 关掉：它是屏幕角上的挂件，没有「最大化」这个语义。
      * ★ 最小化那一侧照旧留着（虽然条上那颗按钮已撤掉）：窗口管理器 / 托盘那一侧还能收它，
      *   而 openMiniWindow 里「已经开着就 show()」那句正是为这个准备的 —— 收起来之后，
