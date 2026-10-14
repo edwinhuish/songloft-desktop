@@ -9,7 +9,9 @@
  * 切歌、切页面、抽屉开关都不该重建音频元素（重建 = 断流 + 丢失缓冲）。
  *
  * 与 Flutter 端的对应关系：
- *   playMode           ↔ AppConstants.playModeOrder/Loop/Single/Random
+ *   playMode           ↔ AppConstants.playModeLoop/Single/Random（那边的 playModeOrder —— 「顺序
+ *                        播放，播完就停」—— 这里没有：本应用只有列表循环 / 单曲循环 / 随机三档，
+ *                        老配置里存着 order 的话在 main/store.ts 那一层就被换成合法值了）
  *   order/cursor       ↔ 随机模式下的洗牌序列（原实现是 play_queue）
  *   reportedPlayed     ↔ POST /api/v1/songs/{id}/played
  *   mediaSession       ↔ audio_service / MPRIS（桌面端由 Chromium 直接接 MPRIS）
@@ -288,20 +290,8 @@ export const localPlayer = create<PlayerState>((set, get) => {
     }
 
     let nextCursor = cursor + direction
-    if (nextCursor >= order.length) {
-      if (playMode === 'order' && auto) {
-        set({ playing: false })
-        audio.pause()
-        void window.songloft.tray.update({
-          title: get().currentSong()?.title ?? null,
-          artist: get().currentSong()?.artist ?? null,
-          playing: false,
-          favorite: false
-        })
-        return
-      }
-      nextCursor = 0
-    }
+    /* 放完队尾接回队首：三档模式都接着放（曾经还有一档「顺序播放」是播完就停，那一档已去掉） */
+    if (nextCursor >= order.length) nextCursor = 0
     if (nextCursor < 0) nextCursor = order.length - 1
 
     set({ cursor: nextCursor })
@@ -477,7 +467,8 @@ export const localPlayer = create<PlayerState>((set, get) => {
     },
 
     cyclePlayMode: () => {
-      const modes: PlayMode[] = ['order', 'loop', 'single', 'random']
+      /* 三档一圈：列表循环 → 单曲循环 → 随机 → 回到列表循环（曾经第一档是「顺序播放」，已去掉） */
+      const modes: PlayMode[] = ['loop', 'single', 'random']
       const current = get().playMode
       get().setPlayMode(modes[(modes.indexOf(current) + 1) % modes.length])
     },

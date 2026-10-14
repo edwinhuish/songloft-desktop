@@ -12,7 +12,7 @@
     "lyricShowRoman": false,
     "closeToTray": false,
     "volume": 0.8,
-    "playMode": "order",
+    "playMode": "loop",
     "volumeNormalize": false,
     "quality": "original",
     "allowInsecureTls": false,

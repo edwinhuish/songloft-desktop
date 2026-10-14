@@ -482,7 +482,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // 迷你条默认置顶：见 AppSettings.miniAlwaysOnTop 的说明
   miniAlwaysOnTop: true,
   volume: 0.8,
-  playMode: 'order',
+  playMode: 'loop',
   volumeNormalize: false,
   quality: 'original',
   allowInsecureTls: false,

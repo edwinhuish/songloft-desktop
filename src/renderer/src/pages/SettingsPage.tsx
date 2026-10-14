@@ -555,7 +555,6 @@ function PlaybackSettings(): React.JSX.Element {
               void patch({ playMode: event.target.value as typeof settings.playMode })
             }
           >
-            <option value="order">顺序播放</option>
             <option value="loop">列表循环</option>
             <option value="single">单曲循环</option>
             <option value="random">随机播放</option>

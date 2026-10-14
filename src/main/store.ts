@@ -14,6 +14,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, join } from 'node:path'
 
 import { DEFAULT_SETTINGS, type AppSettings, type ServerEntry } from '@shared/ipc'
+import { PLAY_MODES } from '@shared/types'
 import type { StoredCredentials } from '@shared/bridge-types'
 
 export type { StoredCredentials }
@@ -70,9 +71,16 @@ export class ConfigStore {
       if (!existsSync(this.file)) return emptyConfig()
       const raw = JSON.parse(readFileSync(this.file, 'utf8')) as Partial<ConfigFile>
       // 逐段回退：任何一段坏掉都不该让整个配置失效。
+      const settings = { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}) }
+      /*
+       * 播放模式少了一档（「顺序播放」，见 shared/types.ts 的 PLAY_MODES）：老配置里存着 'order'
+       * 的话得当场换成合法值 —— 否则那一档的图标与文案都取不到（模式键会变成空白按钮），
+       * 而用户要一直点到它才会被纠回来。归一放在这一层，而不是让每个消费者各自兜底。
+       */
+      if (!PLAY_MODES.includes(settings.playMode)) settings.playMode = DEFAULT_SETTINGS.playMode
       return {
         schema: 1,
-        settings: { ...DEFAULT_SETTINGS, ...(raw.settings ?? {}) },
+        settings,
         servers: Array.isArray(raw.servers)
           ? raw.servers.filter((s) => s && typeof s.url === 'string')
           : [],

@@ -222,8 +222,19 @@ export interface BackendVersion {
   [key: string]: unknown
 }
 
-/** 播放模式：与 Flutter 端 AppConstants 同名同义 */
-export type PlayMode = 'order' | 'loop' | 'single' | 'random'
+/**
+ * 播放模式的**取值清单**：列表循环 / 单曲循环 / 随机播放。
+ *
+ * ★ 类型从这张表**推出来**，而不是各写一遍：运行时需要用它做校验（老配置里存着已经被去掉的
+ *   档位时要当场换成合法值，见 main/store.ts），而类型只需要它的成员 —— 两处各写一份，迟早
+ *   只改一处。
+ * ★ 曾经还有一档「顺序播放」（order，放完队列就停）：已按要求去掉 —— 播完不再停，队列尾接回
+ *   队首（随机模式也接着放）。老配置里若还存着 'order'，见 store.ts 那条归一。
+ */
+export const PLAY_MODES = ['loop', 'single', 'random'] as const
+
+/** 播放模式 */
+export type PlayMode = (typeof PLAY_MODES)[number]
 
 /** 播放上下文：标识「当前队列是从哪儿播起来的」，用于 `/api/v1/play-history` */
 export interface PlaybackContext {
