@@ -67,17 +67,21 @@ export interface WindowState {
 }
 
 /**
- * 迷你模式的两个开关：是否迷你 + 迷你里下方那块面板是否展开。
+ * 迷你模式的三个开关：是否迷你 + 下方面板是否展开 + 窗口里正开着右键菜单。
  *
- * 两个一起传，是因为它们共同决定窗口高度。分两次传的话，主进程会在两次调用之间先摆出
+ * 一并传，是因为它们共同决定窗口高度。分两次传的话，主进程会在两次调用之间先摆出
  * 一个中间尺寸 —— 那一下是看得见的。
  *
  * ★ 面板里装的是歌词还是播放队列，主进程**不关心**（两者共用同一份高度）：所以这里只有
  *   一个布尔量，而不是 `panel: 'lyrics' | 'queue' | null`。
+ * ★ `menu` 也是同一个道理：菜单里有哪几项、滑块是在调什么，主进程不关心；它只需要知道
+ *   「页面上有个菜单开着，而 HTML 画的菜单出不了这个 64px 高的窗口」，据此临时把窗口加高
+ *   （见 main/windows.ts 的 MINI_MENU_SIZE）。面板已经展开时这一项不起作用（那档本来就够高）。
  */
 export interface MiniModeState {
   mini: boolean
   expanded: boolean
+  menu: boolean
 }
 
 export type MediaCommand =

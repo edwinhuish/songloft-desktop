@@ -66,16 +66,11 @@ export type PanelTab = 'now-playing' | 'queue'
 /**
  * 迷你模式里下方那块可展开的面板装什么。
  *
- * ★ 三样**共用同一块地方、同一份高度**（见 main/windows.ts 的 MINI_PANEL_SIZE）：
- *   主进程只关心「开没开」，装的是歌词、队列还是不透明度那张卡片由渲染层自己决定
- *   （送回主进程的是 MiniModeState.expanded 这个布尔量）—— 于是换内容不会动窗口尺寸，
- *   切过去切回来不会跳。
- * ★ 为什么「不透明度」也塞进这块地方：那条播放条自己只有 64px 高，而窗口是不可调整大小的，
- *   右键菜单在这么矮的窗口里根本铺不开（.context-menu 的 max-height: 60vh 在这里只剩 38px，
- *   连两行都装不下）。要一个「有地方拖的」控件，迷你窗里唯一的出路就是这块会撑高的面板 ——
- *   于是它成了第三个房客，而不是另造一个浮层。
+ * ★ 两样**共用同一块地方、同一份高度**（见 main/windows.ts 的 MINI_PANEL_SIZE）：
+ *   主进程只关心「开没开」，装的是歌词还是队列由渲染层自己决定（送回主进程的是
+ *   MiniModeState.expanded 这个布尔量）—— 于是换内容不会动窗口尺寸，切过去切回来不会跳。
  */
-export type MiniPanel = 'lyrics' | 'queue' | 'opacity'
+export type MiniPanel = 'lyrics' | 'queue'
 
 interface UiState {
   surface: Surface

@@ -14,13 +14,21 @@ const MIN_WIDTH = 1080
 const MIN_HEIGHT = 660
 
 /**
- * 迷你模式的两种窗口尺寸：只有播放条 / 播放条 + 下方那块面板。
+ * 迷你模式的三档窗口尺寸：只有播放条 / 播放条 + 下方面板 / 播放条 + 一张右键菜单。
  *
- * 与渲染层是对着定的：那条播放条在 CSS 里是 64px 高（`.mini-player` 的 --mini-bar-h），
+ * 与渲染层是对着定的：那条播放条在 CSS 里是 64px 高（`.shell[data-mini]` 的 --mini-bar-h），
  * 展开那档 480 减掉它，剩下的 416px 就是面板那一屏。改一边就要看一眼另一边。
  *
  * ★ 面板里装的是**歌词还是播放队列，主进程不管**（两者共用这一份高度，见 MiniModeState）：
  *   于是「换内容」不动窗口尺寸，切来切去不会跳。
+ *
+ * ★ 菜单那档（240）是为什么存在：右键菜单是页面里的 DOM，**画不出窗口** —— 而条自己只有
+ *   64px 高，一份「置顶 + 不透明度滑块」的菜单实测 104px，压进去只会剩一条带滚动条的缝。
+ *   所以菜单一开就把窗口临时加高到容得下它，关掉再缩回去。240 是 64 + 176：176px 给菜单
+ *   留出富余（滑块的菜单约 104px，将来多一两项也还放得下；菜单自己还有 max-height: 60vh，
+ *   这里 60% × 240 = 144px，不会反过来夹住它）。
+ *   渲染层那边配一条 `.mini-player[data-menu]`：条仍然钉在 64px 上，多出来的地方是透明的。
+ *   ★ 与面板那档的优先级：面板开着就用 480（那档本来就够高），不再另加。
  *
  * ★ 宽度取 400（约一屏正常窗口的三分之一）仍是**刻意的窄**：它就是个挂在屏幕角上的小挂件，
  *   左边那 64px 是贴左缘的全高封面（见 components.css 的 .mini-bar .cover），其余放**三行**
@@ -31,6 +39,7 @@ const MIN_HEIGHT = 660
  */
 const MINI_SIZE = { width: 400, height: 64 }
 const MINI_PANEL_SIZE = { width: 400, height: 480 }
+const MINI_MENU_SIZE = { width: 400, height: 240 }
 
 export interface MiniModeController {
   setState: (state: MiniModeState) => void
@@ -205,16 +214,24 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
   let miniActive = false
   /** 下方那块面板（歌词或队列）是否展开 —— 只影响高度，装什么由渲染层定 */
   let miniPanelOpen = false
+  /** 窗口里正开着右键菜单 —— 同上，只是为了让那份菜单在 64px 的窗口里画得下（见 MINI_MENU_SIZE） */
+  let miniMenuOpen = false
   /**
    * 进迷你之前的窗口形态。
    * 用 getNormalBounds() 取：最大化/全屏下 getBounds() 给的是屏幕那么大，照着还原等于没还原。
    */
   let restore: { bounds: Rectangle; maximized: boolean; fullscreen: boolean } | null = null
 
-  /** 按当前「面板有没有展开」把窗口摆到迷你尺寸上（位置不动：它就在用户刚才停下的地方） */
+  /**
+   * 按当前「面板有没有展开 / 菜单有没有开着」把窗口摆到迷你尺寸上
+   * （位置不动：它就在用户刚才停下的地方，加高长的只是下半截）。
+   *
+   * ★ 面板那档优先：它本来就够高，菜单在那 416px 里放得下，不必再加（见 MINI_MENU_SIZE）。
+   */
   const applyMiniSize = (): void => {
     const [x, y] = window.getPosition()
-    window.setBounds({ x, y, ...(miniPanelOpen ? MINI_PANEL_SIZE : MINI_SIZE) })
+    const size = miniPanelOpen ? MINI_PANEL_SIZE : miniMenuOpen ? MINI_MENU_SIZE : MINI_SIZE
+    window.setBounds({ x, y, ...size })
   }
 
   /**
@@ -290,9 +307,10 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
       if (window.isDestroyed()) return
 
       if (state.mini === miniActive) {
-        // 已经在迷你里：唯一还可能变的是「下方那块面板开没开」
-        if (miniActive && state.expanded !== miniPanelOpen) {
+        // 已经在迷你里：还可能变的就是那两件影响高度的事（面板开没开、菜单开没开）
+        if (miniActive && (state.expanded !== miniPanelOpen || state.menu !== miniMenuOpen)) {
           miniPanelOpen = state.expanded
+          miniMenuOpen = state.menu
           applyMiniSize()
         }
         return
@@ -300,6 +318,7 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
 
       miniActive = state.mini
       miniPanelOpen = state.expanded
+      miniMenuOpen = state.menu
 
       if (miniActive) {
         const maximized = window.isMaximized()

@@ -1104,10 +1104,6 @@
    （歌词或播放队列，两者共用同一个位置与高度，见 MiniPanel）。 */
 
 .mini-player {
-  /* 播放条的高度 = 条里最高那件东西（贴左缘的全高封面 64px）。主进程算迷你窗总高
-     （main/windows.ts 的 MINI_SIZE / MINI_PANEL_SIZE）时就是按它留位的 —— 改这里要连那边
-     一起看，两处差一档就是「条里空出一截」或「控件被裁掉」。 */
-  --mini-bar-h: 64px;
   display: grid;
   /*
    * ★ 行数必须显式给。用「0 minmax(0,1fr) + 歌词行占位」那种写法时，收起歌词后只剩播放条
@@ -1134,8 +1130,25 @@
   grid-template-rows: var(--mini-bar-h) minmax(0, 1fr);
 }
 
-/* 面板（歌词 / 播放队列 / 不透明度卡片，三样共用）。展开时淡入上浮一下：窗口高度是主进程
-   一步到位的（原生窗口尺寸做不了动画），内容这边补一点过渡，看着才不像「啪」地一下凭空多出一块。
+/*
+ * 菜单开着（且面板没开）：窗口此刻被主进程加高到 240（main/windows.ts 的 MINI_MENU_SIZE），
+ * 多出来那 176px 是**留给右键菜单的**，条自己仍要钉在 --mini-bar-h 上。
+ *
+ * ★ 不钉的话：.shell[data-mini] 那一行是 1fr（= 整窗高），而 .mini-player 只有
+ *   `minmax(0, 1fr)` 一行 —— 条会被拉成 240px 高，贴左缘那 64px 的封面于是缩在 240px 的
+ *   中间，播放条看着像「糊了一大片」。
+ * ★ 高度写死之后 `align-self: stretch` 自动退化成「贴着行首」，也就是条留在窗口顶端 ——
+ *   加高的部分长在下半截，用户眼睛盯着的那一条不会挪。
+ * ★ 底色画在 .mini-player 自己身上（见上），所以钉住高度就等于只给条铺底：多出来的地方
+ *   是透明的，菜单浮在那片透明区域里，视觉上就是「菜单从条底下探出来」。
+ * ★ 两个属性不会同时出现（见 MiniPlayer.tsx），所以不必跟 [data-expanded] 抢优先级。
+ */
+.mini-player[data-menu='true'] {
+  height: var(--mini-bar-h);
+}
+
+/* 面板（歌词 / 播放队列）。展开时淡入上浮一下：窗口高度是主进程一步到位的（原生窗口尺寸
+   做不了动画），内容这边补一点过渡，看着才不像「啪」地一下凭空多出一块。
    ★ 必须是 flex 列：里面的内容靠 `flex: 1` + `overflow-y: auto` 撑成一屏可滚的东西，
       不给它这个前提的话，那份 flex 规则无处生效，内容会按自身高度长出去被 overflow 剪掉
       —— 表现是「显示不全，也滚不动」。 */
@@ -1165,56 +1178,6 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-}
-
-/*
- * 面板里那张「迷你播放器不透明度」卡片（见 MiniPlayer.tsx 的 MiniOpacity）。
- *
- * ★ 撑满整块面板（flex: 1）而不是自己缩成一个小方块：面板那 416px 是主进程按
- *   MINI_PANEL_SIZE 定的，卡片只占一小截的话下面会留一大片空底 —— 看着像没加载完。
- * ★ 内容垂直居中、两侧留 28px：这一栏在迷你窗里宽 400px，滑块横跨整窗太长，
- *   拖一下动好几个百分点，两端各留一点才好点。
- */
-.mini-setting {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 10px;
-  padding: 0 28px;
-}
-
-.mini-setting-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  font-size: 13px;
-  color: var(--text-2);
-}
-
-.mini-setting-value {
-  margin-left: auto;
-  color: var(--text-1);
-  font-size: 15px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.mini-setting input[type='range'] {
-  width: 100%;
-}
-
-.mini-setting-hint {
-  margin: 0;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: var(--text-4);
-}
-
-.mini-setting .btn {
-  align-self: flex-start;
-  margin-top: 6px;
 }
 
 /*

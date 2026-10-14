@@ -28,7 +28,7 @@ import { isNewerVersion } from '@shared/version'
 import { checkServerUpgrade, getGithubProxy } from './api/endpoints'
 import { AddToPlaylistDialog } from './components/AddToPlaylistDialog'
 import { CommandPalette } from './components/CommandPalette'
-import { ContextMenuHost } from './components/ContextMenu'
+import { ContextMenuHost, useContextMenu } from './components/ContextMenu'
 import { ExtensionFrame } from './components/ExtensionFrame'
 import { FullPlayer } from './components/FullPlayer'
 import { IconClose, IconLoader, IconSearch } from './components/Icons'
@@ -138,8 +138,19 @@ export function App(): React.JSX.Element {
       提示原本那 58px 的落点会被直接顶出窗外（见 components.css 里那条 html[data-mini]）。
     */
     document.documentElement.dataset.mini = mini ? 'true' : 'false'
-    // 主进程只要知道「下方那块面板开没开」（装歌词还是队列由 MiniPlayer 自己定）
-    void window.songloft.window.setMini({ mini, expanded: miniPanel !== null })
+    /*
+      主进程只要知道「要不要给块地方」：下方那块面板开没开、窗口里这会儿有没有菜单开着
+      （装歌词还是队列、菜单里是哪几项，都由渲染层自己定，见 MiniModeState）。
+      菜单开着时要多要一截高度：HTML 画的菜单出不了迷你窗那 64px。
+      ★ 菜单这一路走 subscribe 而不是 hook 订阅：本组件是整棵界面的根，它一重渲染就是一整页
+        （列表可能几千行），而这里要的只是「开 / 关」这一个布尔量 —— 与 ContextMenuHost 里
+        那条 dataset 的说明是同一个理由。窗口一长高，菜单自己会重摆一次（见 ContextMenu）。
+    */
+    const push = (menuOpen: boolean): void => {
+      void window.songloft.window.setMini({ mini, expanded: miniPanel !== null, menu: menuOpen })
+    }
+    push(useContextMenu.getState().open)
+    return useContextMenu.subscribe((state) => push(state.open))
   }, [mini, miniPanel])
 
   /* ── 启动编排（一次）───────────────────────────────────────────── */

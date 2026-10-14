@@ -223,6 +223,12 @@ interface MenuPanelProps {
   onEnter?: () => void
   /** 指针离开本层：父层据此起算「慢半拍」 */
   onLeave?: () => void
+  /**
+   * 窗口尺寸变化的计数（见宿主里那条 resize 说明）。一变就重摆一次本层，并收掉子菜单 ——
+   * 子菜单的位置来自「父项那一刻的 rect」，父项重摆之后那份 rect 就过时了。
+   * 只有根菜单拿得到它（子菜单不传，默认 0）。
+   */
+  resizeTick?: number
 }
 
 /**
@@ -239,7 +245,8 @@ function MenuPanel({
   align,
   onClose,
   onEnter,
-  onLeave
+  onLeave,
+  resizeTick = 0
 }: MenuPanelProps): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState({ left: x, top: y })
@@ -252,8 +259,10 @@ function MenuPanel({
   useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
+    // 尺寸变了就得重新量：面板自己的高宽也会跟着变（.context-menu 的 max-height 是 60vh）
     setPosition(placePanel(el.getBoundingClientRect(), { x, y }, anchorRect, align))
-  }, [x, y, anchorRect, align, items.length])
+    setSub(null)
+  }, [x, y, anchorRect, align, items.length, resizeTick])
 
   useEffect(
     () => () => {
@@ -378,6 +387,8 @@ function MenuPanel({
 
 export function ContextMenuHost(): React.JSX.Element | null {
   const { open, x, y, items, anchor, align, anchorRect, hide } = useContextMenu()
+  /** 窗口尺寸变化的计数：见下面 resize 那一段（只有根面板关心它） */
+  const [resizeTick, setResizeTick] = useState(0)
 
   /**
    * 把「有菜单开着」这件事发布给 CSS。
@@ -409,6 +420,18 @@ export function ContextMenuHost(): React.JSX.Element | null {
     if (!open) return
     const close = (): void => hide()
     /**
+     * 窗口尺寸变了：**重摆一次**，而不是关掉整份菜单。
+     *
+     * ★ 原来这里是 resize → 关闭，理由同样成立：菜单是按鼠标坐标摆的，窗口一变那份坐标
+     *   就旧了。但「旧」的是**可见范围**，不是鼠标位置本身 —— 拿同一对 x/y 重跑一次
+     *   placePanel（它本来就会把面板夹回窗口内）恰好就是要的结果。
+     * ★ 这条现在是必需的：迷你窗为了放下右键菜单要临时长高（main/windows.ts 的
+     *   MINI_MENU_SIZE），而窗口一长高就会派发 resize —— 若还按老规矩关菜单，用户刚点开
+     *   的菜单会被窗口自己关掉，等于这个功能根本用不了。重摆一次则正好从「被夹成一条缝」
+     *   回到正常尺寸，而且仍贴着刚才点击的地方。
+     */
+    const onResize = (): void => setResizeTick((tick) => tick + 1)
+    /**
      * 「点别处就关」。用捕获阶段是为了抢在被点元素的 onClick 之前收掉菜单。
      *
      * ★ 但**菜单自己**与**触发器**上的按下不能算「别处」：
@@ -431,12 +454,12 @@ export function ContextMenuHost(): React.JSX.Element | null {
       if (event.key === 'Escape') hide()
     }
     window.addEventListener('pointerdown', onPointerDown, true)
-    window.addEventListener('resize', close)
+    window.addEventListener('resize', onResize)
     window.addEventListener('blur', close)
     window.addEventListener('keydown', onKey)
     return () => {
       window.removeEventListener('pointerdown', onPointerDown, true)
-      window.removeEventListener('resize', close)
+      window.removeEventListener('resize', onResize)
       window.removeEventListener('blur', close)
       window.removeEventListener('keydown', onKey)
     }
@@ -445,6 +468,14 @@ export function ContextMenuHost(): React.JSX.Element | null {
   if (!open) return null
 
   return (
-    <MenuPanel items={items} x={x} y={y} anchorRect={anchorRect} align={align} onClose={hide} />
+    <MenuPanel
+      items={items}
+      x={x}
+      y={y}
+      anchorRect={anchorRect}
+      align={align}
+      onClose={hide}
+      resizeTick={resizeTick}
+    />
   )
 }
