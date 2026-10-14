@@ -388,6 +388,11 @@ function registerIpcHandlers(): void {
     if (senderWindow(event) !== mainWindow) return
     setMiniWindowOpen(open)
   })
+  /*
+   * 「迷你窗此刻开着没有」：窗口是主进程开的，这个事实只有它知道（见 IPC.miniIsOpen 的说明）。
+   * 不限定来源 —— 主窗口与迷你窗问到的都是同一个答案，为一个查询分来源没有意义。
+   */
+  ipcMain.handle(IPC.miniIsOpen, () => isMiniWindowOpen())
   ipcMain.handle(IPC.miniResize, (_event, layout: MiniWindowLayout) => handleMiniResize(layout))
   ipcMain.handle(IPC.miniReady, () => handleMiniReady())
   ipcMain.handle(IPC.miniPush, (_event, snapshot: MiniPlayerSnapshot) => sendMiniSnapshot(snapshot))

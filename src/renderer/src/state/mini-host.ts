@@ -195,6 +195,23 @@ function applyCommand(command: MiniCommand): void {
  * 整棵界面树都要跟着算一遍 —— 与 ContextMenu 那条 dataset 的说明是同一个理由。
  */
 export function installMiniHost(): () => void {
+  let disposed = false
+
+  /*
+   * ★ 装的时候先**主动问一句**「迷你窗此刻开着没有」（IPC.miniIsOpen）。
+   *
+   * onOpen 只在开合的那一刻响一次，而这段接线可能比那个窗口晚到：dev 里的 HMR 重新挂载、
+   * 渲染层刷新（Ctrl+R）或崩溃重载都会把它整份重装一遍 —— 那时迷你窗还开着，却再没有任何
+   * 事件会告诉新装上的这一份。不问的话它会一直以为「没开」，而那个布尔量正是推送的闸门，
+   * 于是迷你窗冻在重载前的那一帧上（还显示着，就是不动了）。
+   * ★ disposed 那道判断是必要的：问回来的路上这份接线可能已经被拆掉了，那时不该再写模块状态。
+   */
+  void window.songloft.mini.isOpen().then((open) => {
+    if (disposed) return
+    miniOpen = open
+    if (open) push(true)
+  })
+
   const disposers = [
     window.songloft.mini.onOpen((open) => {
       miniOpen = open
@@ -214,6 +231,7 @@ export function installMiniHost(): () => void {
   ]
 
   return () => {
+    disposed = true
     for (const dispose of disposers) dispose()
     miniOpen = false
     lastHeavy = null

@@ -59,6 +59,7 @@ const bridge: SongloftBridge = {
   },
   mini: {
     setOpen: (open) => ipcRenderer.invoke(IPC.miniSetOpen, open) as Promise<void>,
+    isOpen: () => ipcRenderer.invoke(IPC.miniIsOpen) as Promise<boolean>,
     resize: (layout: MiniWindowLayout) =>
       ipcRenderer.invoke(IPC.miniResize, layout) as Promise<void>,
     ready: () => ipcRenderer.invoke(IPC.miniReady) as Promise<void>,

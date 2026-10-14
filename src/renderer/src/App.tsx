@@ -18,7 +18,11 @@
  *   1. 全局快捷键（空格/方向键/Ctrl+K…）
  *   2. 主进程推送（托盘与媒体键发来的命令、菜单发来的导航）
  *   3. 启动编排（读设置 → 校验会话 → 预载歌单/收藏/上次队列）
- * 用模块级的 started 标志兜住，避免 HMR 或多次挂载把它们接两遍。
+ * 用 started ref 兜住，避免 HMR 或多次挂载把它们接两遍。
+ *
+ * ★ 有一样**不能**这么兜：迷你窗那两条接线（开关状态的回声 + 状态推送）。它单独一个 effect
+ *   装卸，理由写在那一节 —— 一次性守卫会把「卸下之后的重装」一并挡掉，而严格模式恰好每次都
+ *   卸下再重装，于是那条线在 dev 里是断的。
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -121,24 +125,39 @@ export function App(): React.JSX.Element {
   const status = useAuth((s) => s.status)
   const started = useRef(false)
 
+  /* ── 迷你窗那两条接线（可以、也必须反复装卸）────────────────────── */
+  /*
+   * 一条是 installMiniHost()：把播放状态推给迷你窗、把它发来的遥控命令落到真播放器上
+   * （见 state/mini-host.ts）。装在这里而不是某个组件里，因为全应用只有**这一个**真播放器
+   * （就在这个窗口里）；也不能等下面那段启动编排（读设置 → 校验会话）走完 —— 底栏那颗按钮
+   * 随时可能被点，而它点什么都要靠这两条。
+   * 另一条是「迷你窗此刻开着没有」：底栏那颗按钮的高亮要看它（窗口是主进程开的，渲染层没有
+   * 别的渠道知道这件事）。两条都走模块级订阅而不是 React —— 它们只影响一个布尔量与几份快照，
+   * 让整棵界面树为它重渲染一次不划算（理由同 ContextMenuHost 那条 dataset）。
+   *
+   * ★★ 这一段**刻意不放进下面那个带一次性守卫的 effect**里，这坑已经踩过：
+   *   严格模式（dev）会「挂上 → 卸下 → 再挂上」，而守卫让第二次挂载直接 return ——
+   *   于是第一次挂上、又被那次卸下拆掉的订阅**再也装不回来**：迷你窗从此收不到任何状态
+   *   （表现是它一直停在「未在播放」，底栏那颗按钮也不会变成按下态），dev 里 100% 复现。
+   *   同样的写法在 MiniApp.tsx 里已经踩过一次（见那里的注释），这里是同一个理由。
+   * ★ 重装是安全的：installMiniHost 自己会在装上时问一句「迷你窗现在开着没有」，
+   *   所以 HMR 重新挂载、渲染层刷新之后推送能自己接上（见 IPC.miniIsOpen）。
+   */
+  useEffect(() => {
+    const disposeHost = installMiniHost()
+    const disposeOpen = window.songloft.mini.onOpen((open) => useUi.getState().setMiniOpen(open))
+    return () => {
+      disposeHost()
+      disposeOpen()
+    }
+  }, [])
+
   /* ── 启动编排（一次）───────────────────────────────────────────── */
   useEffect(() => {
     if (started.current) return
     started.current = true
 
     const disposers: (() => void)[] = []
-
-    /*
-     * 迷你窗那一侧的接线**同步装上**，压在下面那段启动编排之前。
-     *
-     * ★ 不能等启动编排（读设置 → 校验会话）走完：底栏那颗按钮随时可能被点，而它点什么都要
-     *   靠这两条 —— 一条是「迷你窗开没开」（也是继续推送状态的闸门），一条是遥控命令的落点。
-     *   晚装的话，用户手快一点就会点开一个永远空着的迷你窗（它要的状态没人推）。
-     * ★ 装在这里而不是某个组件里：全应用只有**这一个**真播放器（就在这个窗口里）。
-     * ★ 同步装还有一件好处：StrictMode 那次「卸下」能真的把它们拆掉，第二次挂载再装回来。
-     */
-    disposers.push(installMiniHost())
-    disposers.push(window.songloft.mini.onOpen((open) => useUi.getState().setMiniOpen(open)))
 
     void (async () => {
       // 先读设置：主题/强调色要在第一帧就正确，否则会闪一下默认配色

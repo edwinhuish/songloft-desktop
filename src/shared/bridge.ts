@@ -68,6 +68,14 @@ export interface SongloftBridge {
   mini: {
     /** 主窗口：开 / 关迷你窗 */
     setOpen(open: boolean): Promise<void>
+    /**
+     * 主窗口：迷你窗**此刻**开着没有。
+     *
+     * ★ 与下面的 onOpen 不是一回事：那条只在开合的那一刻响一次，而这段接线可能比窗口晚到
+     *   （HMR 重新挂载、渲染层刷新都会重装它）——重装时没有事件可听，只能主动问一句
+     *   （见 IPC.miniIsOpen）。
+     */
+    isOpen(): Promise<boolean>
     /** 迷你窗：报一下此刻的布局（条 / 面板 / 菜单），主进程据此算窗口高度 */
     resize(layout: MiniWindowLayout): Promise<void>
     /** 迷你窗：界面与设置都就绪了 —— 主进程据此显示窗口，并请主窗口推一份状态过来 */
