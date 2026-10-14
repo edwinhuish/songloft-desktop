@@ -68,6 +68,8 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   const surface = useUi((s) => s.surface)
   /** 普通窗口那份置顶设置（与迷你窗口那份分开存，见 AppSettings 的说明） */
   const alwaysOnTop = useSettings((s) => s.settings.alwaysOnTop)
+  /** 整窗不透明度（0–100）：菜单里那根滑块的初值，也是「窗口菜单」里唯一能就地调的量 */
+  const windowOpacity = useSettings((s) => s.settings.windowOpacity)
   const patchSettings = useSettings((s) => s.patch)
   const playlists = usePlaylists((s) => s.playlists)
   // 与侧栏「我的歌单」用同一个过滤器，两处名单不会各自漂移
@@ -255,7 +257,9 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
       onDoubleClick={handleDoubleClick}
       /*
        * 右键标题栏 = 它的「窗口菜单」。这里只放**窗口级**的开关，与标题栏上那排按钮不重复：
-       * 置顶（普通窗口那份，与迷你窗口那份各存各的，见 shared/ipc 的 AppSettings）。
+       * 置顶（普通窗口那份，与迷你窗口那份各存各的，见 shared/ipc 的 AppSettings），
+       * 外加一根**不透明度滑块** —— 整窗浓度是那种「要一边拖一边看」的量，就地调比
+       * 「去设置页 → 找到「窗口透明度」那一栏 → 再拖」少绕一大圈。
        * 拖拽区里右键仍然能收到 contextmenu（左键才被拿去拖窗口），与按钮的 no-drag 无关。
        */
       onContextMenu={(event) =>
@@ -265,6 +269,19 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
             label: alwaysOnTop ? '取消窗口置顶' : '窗口置顶',
             icon: <IconPin size={15} />,
             onClick: () => void patchSettings({ alwaysOnTop: !alwaysOnTop })
+          },
+          // 开关与「连续量」不是一类：分割线划开（与导航菜单里那条同样的用法）
+          { key: 'sep-window-menu', label: '', separator: true },
+          {
+            key: 'window-opacity',
+            // 与设置页那一栏同一个量（windowOpacity），只是换了个更近的地方调
+            label: '窗口不透明度',
+            slider: {
+              min: 0,
+              max: 100,
+              value: windowOpacity,
+              onChange: (value) => void patchSettings({ windowOpacity: value })
+            }
           }
         ])
       }

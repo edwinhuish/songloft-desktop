@@ -68,6 +68,16 @@ textarea {
   color: inherit;
 }
 
+/*
+ * 滑块（`input[type=range]`）统一跟着主题的强调色走。
+ * ★ 不给的话 Chromium 拿它自己那个默认蓝，在「强调色随封面色」的界面里是唯一一件
+ *   不听主题的控件 —— 设置页那两个、右键菜单里那个、迷你窗卡片里那个本是同一个东西，
+ *   三处一个颜色才对得上。
+ */
+input[type='range'] {
+  accent-color: var(--accent);
+}
+
 a {
   color: var(--accent);
   text-decoration: none;

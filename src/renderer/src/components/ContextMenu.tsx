@@ -10,6 +10,20 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { IconCheck, IconChevronRight } from './Icons'
 
+/**
+ * 菜单里的滑块行。用于**就地**调一个连续量（如窗口不透明度）：拖着看效果，
+ * 不必先跳去设置页。
+ */
+export interface MenuSlider {
+  min: number
+  max: number
+  value: number
+  /** 拖动过程中每次变化都回调（要不要节流/什么时候落盘由调用方定） */
+  onChange: (value: number) => void
+  /** 数值后面那个单位，默认 `%` */
+  suffix?: string
+}
+
 export interface MenuItem {
   key: string
   label: string
@@ -21,6 +35,13 @@ export interface MenuItem {
   header?: boolean
   /** 渲染成分隔线 */
   separator?: boolean
+  /**
+   * 渲染成一条「标签 + 滑块」（不是按钮）。`label` 就是这一行的标题。
+   *
+   * ★ 值由这一行**自己**管（见 MenuSliderRow）：菜单是一份**快照**（开菜单那一刻存下来的
+   *   数组），受控于快照里那个 value 的话，滑块一松手就弹回原位 —— 等于拖不动。
+   */
+  slider?: MenuSlider
   /**
    * 二级菜单：悬浮即展开。
    *
@@ -144,6 +165,50 @@ function placePanel(
   }
 }
 
+/**
+ * 菜单里的滑块行：上面一行是「标题 + 当前值」，下面一条 range。
+ *
+ * ★ 这个值**只存在这一行里**，不回读设置，也不由外层受控。两个理由：
+ *   ① 菜单是一份快照（`show(…)` 时存下的数组），它不会跟着设置变 —— 受控于快照的话
+ *      滑块松手就弹回打开菜单那一刻的位置；
+ *   ② 拖动时也不必惊动菜单的其余部分（重渲染整份菜单意味着子菜单位置等一串 effect 跟着跑）。
+ *   「真的改了没有」由 onChange 落到 store 上，与设置页那两个滑块是同一条路径。
+ * ★ 用 div 而不是 button：range 放进 button 里既非法也不可点（button 会吞掉指针事件）。
+ */
+function MenuSliderRow({
+  item,
+  slider
+}: {
+  item: MenuItem
+  slider: MenuSlider
+}): React.JSX.Element {
+  const [value, setValue] = useState(slider.value)
+  const id = `menu-slider-${item.key}`
+  return (
+    <div className="menu-slider" role="none">
+      <label className="menu-slider-head" htmlFor={id}>
+        <span className="truncate">{item.label}</span>
+        <span className="menu-slider-value">
+          {value}
+          {slider.suffix ?? '%'}
+        </span>
+      </label>
+      <input
+        id={id}
+        type="range"
+        min={slider.min}
+        max={slider.max}
+        value={value}
+        onChange={(event) => {
+          const next = Number(event.target.value)
+          setValue(next)
+          slider.onChange(next)
+        }}
+      />
+    </div>
+  )
+}
+
 interface MenuPanelProps {
   items: MenuItem[]
   /** 期望位置（视口坐标）：根菜单给鼠标坐标，子菜单给触发项的右缘 / 顶边 */
@@ -239,6 +304,7 @@ function MenuPanel({
                 {item.label}
               </div>
             )
+          if (item.slider) return <MenuSliderRow key={item.key} item={item} slider={item.slider} />
 
           const subItems = item.children ?? []
           const expanded = Boolean(sub && sub.item.key === item.key)

@@ -19,8 +19,10 @@
  *   这一栏的宽度是被条宽定死的（栅格列定死 + flex: 1 1 0 + min-width: 0 + overflow: hidden），
  *   歌名再长也撑不开它 —— 右边那几颗钮因此永远钉在各自的位置上。
  *   哪一行放不下，**那一行自己**循环滚（不是来回蹭），另外两行不动。
- * ★ 歌词与队列**共用下方那一块面板**（见 MiniPanel）：两颗钮互斥，尺寸只跟「开没开」有关，
- *   所以换内容不闪不跳。
+ * ★ 歌词 / 队列 / **不透明度卡片**共用下方那一块面板（见 MiniPanel）：三样互斥，尺寸只跟
+ *   「开没开」有关，所以换内容不闪不跳。★ 为什么透明度也在这块面板里、而不是像主窗那样
+ *   做成菜单里的一根滑块：这条条只有 64px 高、窗口又不可调整大小，右键菜单在这么矮的窗口里
+ *   连两行都铺不开（`.context-menu` 的 max-height: 60vh 在这里只剩 38px）。
  * ★ 栅格的顺序是「播放条在**上**、面板在下」（DOM 顺序同此），不是反过来：窗口加高时长的是
  *   下半截（main/windows.ts 的 applyMiniSize 不动位置），面板摆下面才等于「原地展开」——
  *   摆上面的话一展开这一整排控件就要往下跳 400 px。进度线贴在播放条的下边缘，
@@ -39,7 +41,8 @@ import {
   IconQueue,
   IconRestore,
   IconSkipBack,
-  IconSkipForward
+  IconSkipForward,
+  IconSliders
 } from './Icons'
 import { openMenuFromEvent } from './ContextMenu'
 import { LyricsView } from './LyricsView'
@@ -90,6 +93,19 @@ export function MiniPlayer(): React.JSX.Element {
               label: miniOnTop ? '取消迷你窗口置顶' : '迷你窗口置顶',
               icon: <IconPin size={14} />,
               onClick: () => void patchSettings({ miniAlwaysOnTop: !miniOnTop })
+            },
+            { key: 'sep-mini-menu', label: '', separator: true },
+            {
+              key: 'mini-opacity',
+              /*
+               * ★ 这一项**不是滑块，而是去面板里开那张卡片** —— 迷你窗装不下菜单里的滑块：
+               *   它只有 64px 高，而 .context-menu 自带 `max-height: 60vh`（这里只剩 38px）
+               *   且窗口不可调整大小，两行（74px）连画都画不下，滑块会落在可见区之外。
+               *   面板是迷你窗里唯一「要地方就撑高」的去处（见 useUi 的 MiniPanel）。
+               */
+              label: '播放器不透明度',
+              icon: <IconSliders size={14} />,
+              onClick: () => togglePanel('opacity')
             }
           ])
         }
@@ -240,20 +256,23 @@ export function MiniPlayer(): React.JSX.Element {
         展开时才挂面板，且挂在播放条**之后**（它在进度线下方）。窗口高度是主进程一步到位的
         （原生窗口的尺寸做不了动画），内容这边补一点淡入，看着才不像「啪」地一下多出一块。
 
-        ★ 歌词与队列共用这一块地方：主进程那边只有「开没开」一个布尔量，换内容不动窗口尺寸，
-          所以两颗钮之间来回点不会闪也不会跳。队列那一份要自己给滚动容器（见 .mini-queue）——
-          歌词那边是 LyricsView 里的 .lyrics 自带 flex: 1 + overflow-y: auto。
+        ★ 歌词 / 队列 / 不透明度卡片共用这一块地方：主进程那边只有「开没开」一个布尔量，
+          换内容不动窗口尺寸，所以来回点不会闪也不会跳。队列那一份要自己给滚动容器
+          （见 .mini-queue）—— 歌词那边是 LyricsView 里的 .lyrics 自带 flex: 1 + overflow-y: auto，
+          卡片自己撑一屏（.mini-setting）。
       */}
       {panel ? (
         <div className="mini-panel">
           {panel === 'lyrics' ? (
             <LyricsView compact />
-          ) : (
+          ) : panel === 'queue' ? (
             <div className="mini-queue">
               {/* currentSlot = 2：当前曲固定落在**从上往下第 3 格**（上面留两行）。
                   面板只有 416px 高，只保证「看得见」的话它会贴着下边缘、或干脆在视野之外。 */}
               <Queue currentSlot={2} />
             </div>
+          ) : (
+            <MiniOpacity />
           )}
         </div>
       ) : null}
@@ -354,6 +373,48 @@ function ScrollingLine({
           </span>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+/**
+ * 面板里的那张「迷你播放器不透明度」卡片（右键播放条 → 播放器不透明度）。
+ *
+ * ★ 拧的是 **miniWindowOpacity** 那一份（与主窗那份各存各的，设置页里就是两个滑块）：
+ *   这里只有迷你窗，调的自然是它自己那一份。
+ * ★ 为什么是卡片而不是菜单里的一根滑块：迷你窗只有 64px 高、且不可调整大小，右键菜单在
+ *   这么矮的窗口里铺不开（见 useUi 的 MiniPanel）。而这块面板是迷你窗里唯一「要地方就撑高」
+ *   的去处 —— 面板一开窗口就从 64 撑到 480（主进程按 MINI_PANEL_SIZE 一步到位）。
+ * ★ 拖动**即时生效**：每一下都落到 useSettings.patch 上，与设置页那两个滑块同一条路径
+ *   （CSS 变量在 store 里那层 effect 里统一写，见 state/useSettings）。
+ * ★ 「完成」= **收起面板**，不是关窗口：与歌词/队列两颗钮同一套语义（toggleMiniPanel 传
+ *   当前值就是收起），收起后窗口也就缩回 64px。
+ */
+function MiniOpacity(): React.JSX.Element {
+  const value = useSettings((s) => s.settings.miniWindowOpacity)
+  const patch = useSettings((s) => s.patch)
+  const togglePanel = useUi((s) => s.toggleMiniPanel)
+
+  return (
+    <div className="mini-setting">
+      <div className="mini-setting-row">
+        <span>迷你播放器不透明度</span>
+        <span className="mini-setting-value">{value}%</span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={value}
+        aria-label="迷你播放器不透明度"
+        onChange={(event) => void patch({ miniWindowOpacity: Number(event.target.value) })}
+      />
+      <p className="mini-setting-hint">
+        100% 为不透明；调低后整个迷你窗（含文字）一起透出后面的桌面。
+      </p>
+      <button type="button" className="btn" onClick={() => togglePanel('opacity')}>
+        完成
+      </button>
     </div>
   )
 }

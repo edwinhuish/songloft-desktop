@@ -1134,8 +1134,8 @@
   grid-template-rows: var(--mini-bar-h) minmax(0, 1fr);
 }
 
-/* 面板（歌词 / 播放队列）。展开时淡入上浮一下：窗口高度是主进程一步到位的（原生窗口尺寸
-   做不了动画），内容这边补一点过渡，看着才不像「啪」地一下凭空多出一块。
+/* 面板（歌词 / 播放队列 / 不透明度卡片，三样共用）。展开时淡入上浮一下：窗口高度是主进程
+   一步到位的（原生窗口尺寸做不了动画），内容这边补一点过渡，看着才不像「啪」地一下凭空多出一块。
    ★ 必须是 flex 列：里面的内容靠 `flex: 1` + `overflow-y: auto` 撑成一屏可滚的东西，
       不给它这个前提的话，那份 flex 规则无处生效，内容会按自身高度长出去被 overflow 剪掉
       —— 表现是「显示不全，也滚不动」。 */
@@ -1165,6 +1165,56 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+/*
+ * 面板里那张「迷你播放器不透明度」卡片（见 MiniPlayer.tsx 的 MiniOpacity）。
+ *
+ * ★ 撑满整块面板（flex: 1）而不是自己缩成一个小方块：面板那 416px 是主进程按
+ *   MINI_PANEL_SIZE 定的，卡片只占一小截的话下面会留一大片空底 —— 看着像没加载完。
+ * ★ 内容垂直居中、两侧留 28px：这一栏在迷你窗里宽 400px，滑块横跨整窗太长，
+ *   拖一下动好几个百分点，两端各留一点才好点。
+ */
+.mini-setting {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 28px;
+}
+
+.mini-setting-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.mini-setting-value {
+  margin-left: auto;
+  color: var(--text-1);
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.mini-setting input[type='range'] {
+  width: 100%;
+}
+
+.mini-setting-hint {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-4);
+}
+
+.mini-setting .btn {
+  align-self: flex-start;
+  margin-top: 6px;
 }
 
 /*
@@ -2153,6 +2203,46 @@ select.input option {
   margin: 5px 8px;
   border: none;
   border-top: 1px solid var(--line-1);
+}
+
+/*
+ * 菜单里的滑块行（MenuItem.slider，见 ContextMenu.tsx 的 MenuSliderRow）。
+ *
+ * ★ 它**不是 button**：range 塞进 button 里既非法也点不动，所以这一行是
+ *   div + label + input —— 上面 `.context-menu button` 那一整套（32px 高、悬浮底色）
+ *   盖不到它，尺寸与留白得在这里自己给。左右各 10px 是刻意对齐那些条目，看着才是一份菜单。
+ * ★ 行高不写死：标题 18px + 滑块 20px 本来就比 32px 高，压成 32px 会让滑块贴住上下边框。
+ *   菜单是 flex 列，让它自己长。
+ * ★ 滑块要 `accent-color`：不加的话它跟着 Chromium 的默认蓝走，而这一层是主题色（见 base.css
+ *   里那条统一规则）。
+ */
+.context-menu .menu-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px 4px;
+}
+
+.context-menu .menu-slider-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-2);
+  /* 这一行是 label，别让它跟着菜单里那些条目一起变成手型 */
+  cursor: default;
+}
+
+/* 数值顶到右缘：与二级菜单的箭头共用同一条右缘线 */
+.context-menu .menu-slider-value {
+  margin-left: auto;
+  color: var(--text-1);
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+}
+
+.context-menu .menu-slider input[type='range'] {
+  width: 100%;
 }
 
 .context-menu .menu-sub {
