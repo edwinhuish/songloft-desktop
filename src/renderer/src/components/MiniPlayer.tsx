@@ -35,6 +35,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { MINI_BAR_HEIGHT, MINI_PANEL_MIN_HEIGHT } from '@shared/ipc'
 import {
+  IconChevronDown,
   IconClose,
   IconHeart,
   IconLyrics,
@@ -46,7 +47,7 @@ import {
   IconVolume,
   IconVolumeX
 } from './Icons'
-import { openMenuFromEvent, useContextMenu } from './ContextMenu'
+import { useContextMenu, type MenuItem } from './ContextMenu'
 import { LyricsView } from './LyricsView'
 import { Queue } from './Panel'
 import { MODE_LABEL, modeIcon } from './play-mode'
@@ -90,6 +91,42 @@ export function MiniPlayer(): React.JSX.Element {
   const duration = player.duration || song?.duration || 0
   const position = scrub ?? player.currentTime
 
+  /**
+   * 右上角那颗下拉里的菜单：两个不透明度旋钮。
+   *
+   * ★ 这两项原来是**封面的右键菜单**，现在只挂在这颗钮上 —— 封面归了拖拽区之后，那一格上的
+   *   鼠标事件整片都被窗口系统收走（不分左右键，见 styles/components.css 里那份 no-drag 名单
+   *   的说明），右键根本到不了页面。挂在按钮上则不受影响：条上所有 button 都是 no-drag。
+   * ★ 做成**函数**而不是模块级常量：两个 value 与 onChange 要取「点开这一刻」的设置值，
+   *   常量数组会把它们钉死在首次渲染那一份上。
+   */
+  const opacityMenu = (): MenuItem[] => [
+    {
+      key: 'mini-opacity',
+      label: '播放器不透明度',
+      slider: {
+        min: 0,
+        max: 100,
+        value: miniOpacity,
+        onChange: (value) => void patchSettings({ miniWindowOpacity: value })
+      }
+    },
+    {
+      key: 'mini-panel-opacity',
+      /*
+        面板那层底色是**相对播放条**的浓度（100 = 与条一致），见 tokens.css ——
+        所以它在深浅两个主题下都说得通，不必分两套默认值。
+      */
+      label: '面板背景不透明度',
+      slider: {
+        min: 0,
+        max: 100,
+        value: panelOpacity,
+        onChange: (value) => void patchSettings({ miniPanelOpacity: value })
+      }
+    }
+  ]
+
   return (
     <div
       className="mini-player"
@@ -112,41 +149,14 @@ export function MiniPlayer(): React.JSX.Element {
         />
 
         {/*
-          封面：包一层是为了挂右键菜单 —— Cover 自己只认展示用的 props，不接事件。
+          封面：包一层是为了给它一个「不接事件的容器」—— Cover 自己只认展示用的 props。
+          ★ 这一层**在拖拽区里**（左键按住即拖窗口，样式表里那份 no-drag 名单不含它），所以
+            它上面**不再挂任何鼠标动作**：那一格的事件整片被窗口系统收走，挂了也是死代码。
+            原先挂在这儿的两个不透明度旋钮，现在在右上角那颗下拉钮上（见 opacityMenu）。
           尺寸直接取 CSS 那条 --mini-bar-h（不在这儿另写一份数值），圆角给 0：贴着窗口
           边缘的圆角块看着像没对齐。width 是向后端要的缩略宽度（?w=），按显示尺寸的两倍给。
         */}
-        <div
-          className="mini-cover"
-          onContextMenu={(event) =>
-            openMenuFromEvent(event, [
-              {
-                key: 'mini-opacity',
-                label: '播放器不透明度',
-                slider: {
-                  min: 0,
-                  max: 100,
-                  value: miniOpacity,
-                  onChange: (value) => void patchSettings({ miniWindowOpacity: value })
-                }
-              },
-              {
-                key: 'mini-panel-opacity',
-                /*
-                  面板那层底色是**相对播放条**的浓度（100 = 与条一致），见 tokens.css ——
-                  所以它在深浅两个主题下都说得通，不必分两套默认值。
-                */
-                label: '面板背景不透明度',
-                slider: {
-                  min: 0,
-                  max: 100,
-                  value: panelOpacity,
-                  onChange: (value) => void patchSettings({ miniPanelOpacity: value })
-                }
-              }
-            ])
-          }
-        >
+        <div className="mini-cover">
           <Cover
             coverUrl={song?.cover_url}
             width={128}
@@ -293,13 +303,32 @@ export function MiniPlayer(): React.JSX.Element {
         </div>
 
         {/*
-          右上角那一颗：关闭（与主窗口标题栏右端那颗同款 .win-btn，只是小一档）。
+          右上角那一组：下拉菜单 + 关闭（关闭那颗与主窗口标题栏右端同款 .win-btn，只是小一档）。
+          ★ 下拉那颗是不透明度那两个旋钮**唯一**的入口：封面归拖拽区之后右键到不了页面
+            （见 opacityMenu 与样式表里那份 no-drag 名单）。
           ★ 原先这里还有一颗最小化，已去掉 —— 理由见文件头那一段（系统那一侧的最小化还在，
             从底栏那颗按钮或托盘再点一下就唤回来）。
-          它整个落在控件行上方那条缝里（高度由 CSS 按条高与控件高算出来），所以那一行
+          它们整个落在控件行上方那条缝里（高度由 CSS 按条高与控件高算出来），所以那一行
           的空隙有多高，这里的图标就只能是多大 —— 11px 是这条缝能舒服放下的上限。
         */}
         <div className="mini-window-actions">
+          <button
+            type="button"
+            className="win-btn"
+            data-tip="不透明度"
+            aria-label="不透明度"
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect()
+              // 右对齐：触发器就贴着窗口右缘，左对齐会让面板整块探到窗外去
+              useContextMenu.getState().show(rect.left, rect.bottom + 6, opacityMenu(), {
+                anchor: event.currentTarget,
+                align: 'right',
+                anchorRect: rect
+              })
+            }}
+          >
+            <IconChevronDown size={11} />
+          </button>
           <button
             type="button"
             className="win-btn"

@@ -1248,8 +1248,11 @@ const STEPS = [
       miniPlayLabel: exactly('暂停'),
       miniTime: matches(/^\d{1,2}:\d{2}\/\d{1,2}:\d{2}$/),
       miniControls: exactly(5),
-      /* 右上角那颗最小化已撤掉，只剩关闭 —— 这类「少一颗钮」正是截图看不出来的 */
-      miniWinButtons: equals('关闭')
+      /*
+       * 右上角两组：下拉（不透明度那两个旋钮的唯一入口）+ 关闭。这类「少一颗 / 多一颗钮」
+       * 正是截图看不出来的，而那颗下拉还兼着「封面右键收不到」之后的全部入口。
+       */
+      miniWinButtons: equals('不透明度', '关闭')
     },
     'mini'
   ],
