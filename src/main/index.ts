@@ -99,6 +99,26 @@ if (process.platform === 'linux' && process.env.SONGLOFT_OZONE === 'x11') {
   app.commandLine.appendSwitch('disable-gpu')
 }
 
+/**
+ * 当前这份会话是**原生 Wayland** 吗。
+ *
+ * ★ 只有一处用它（collapseWindow），但那一处不这么判就会错：Wayland 下把窗口 hide() 掉再
+ *   show()，合成器会把它当成**新窗口**重新摆放（GNOME 直接放到屏幕中间），而 Wayland
+ *   **禁止客户端自己定位** —— `win.setPosition()` 是空操作（Electron 官方口径），实测那一路上
+ *   `getPosition()` 从头到尾只是最后一次 SetBounds 的缓存值，跟真位置无关。所以「原位回来」
+ *   在那条路上做不到「show 之前先摆回去」，只能**不拆掉这次映射**（用 minimize）。
+ * ★ 判据以**命令行上的 ozone 开关优先**：`--ozone-platform=x11` 意味着「这次跑的是 XWayland」，
+ *   窗口语义按 X11 算（hide→show 原位回来）。本应用自己的 SONGLOFT_OZONE=x11 走的正是上面那两行
+ *   appendSwitch，所以也落在这一条上；e2e 是直接在命令行上给的这个开关。
+ * ★ 其余靠会话变量：XDG_SESSION_TYPE 是桌面给的，WAYLAND_DISPLAY 兜底。
+ */
+function usesNativeWayland(): boolean {
+  if (process.platform !== 'linux') return false
+  const forced = app.commandLine.getSwitchValue('ozone-platform')
+  if (forced) return forced === 'wayland'
+  return process.env.XDG_SESSION_TYPE === 'wayland' || Boolean(process.env.WAYLAND_DISPLAY)
+}
+
 // 只允许一个实例：第二次启动就把已有窗口顶到前面，而不是再开一个播放器。
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
@@ -233,10 +253,28 @@ function broadcastMediaCommand(command: MediaCommand): void {
   sendToRenderer(IPC.onMediaCommand, command)
 }
 
+/**
+ * 把主窗口「收起来」—— 托盘那颗图标、托盘菜单里那一项、closeToTray 拦下的关闭，都走这一句。
+ *
+ * ★ Wayland 下用 minimize() 而不是 hide()：hide 会**拆掉窗口的映射**，再显示时合成器把它当新
+ *   窗口摆（GNOME 直接居中）——「双击托盘回来」于是变成「窗口跳到屏幕中间」。minimize 只把窗口
+ *   挂起来，映射不动，几何留在合成器手里，唤回时自然落在原处。
+ *   （为什么不能「show 之前再 setPosition 摆回去」：见 usesNativeWayland 那段。）
+ * ★ 代价写在明处：Wayland 下它会出现在任务栏 / Alt-Tab 里 —— skipTaskbar 在 Wayland 没有对应
+ *   协议（Electron 20 的说明）。两害相权，把「原样回来」放在前面。
+ * ★ 其余平台照旧 hide()：Windows / macOS / X11 上 hide→show 本来就会原位回来。
+ *   另外实测（本机 GNOME/Wayland）：minimize() 之后 isVisible()=false、isMinimized()=true，
+ *   restore() 与 show() 都能叫回来 —— 所以上面那份「看得见吗」的判据一个字都不用改。
+ */
+function collapseWindow(window: BrowserWindow): void {
+  if (usesNativeWayland()) window.minimize()
+  else window.hide()
+}
+
 function toggleWindowVisibility(): void {
   if (!mainWindow) return
   if (mainWindow.isVisible() && !mainWindow.isMinimized()) {
-    mainWindow.hide()
+    collapseWindow(mainWindow)
   } else {
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.show()
@@ -263,12 +301,12 @@ function attachWindowHandlers(window: BrowserWindow): void {
     if (isMiniWindowOpen()) closeMiniWindow()
   })
 
-  // 关闭即最小化到托盘（默认关）：拦下 close，改成 hide
+  // 关闭即最小化到托盘（默认关）：拦下 close，改成收起（hide / Wayland 下 minimize，见 collapseWindow）
   window.on('close', (event) => {
     if (isQuitting) return
     if (!store.getSettings().closeToTray) return
     event.preventDefault()
-    window.hide()
+    collapseWindow(window)
   })
 
   // ── 进程级异常：不能让用户对着一个白窗口，也不能陷入重载死循环 ──────────

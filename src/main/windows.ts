@@ -216,7 +216,8 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
   window.on('unmaximize', reassertWindowState)
   /* 从最小化回来（托盘 / 任务栏唤回）同样是「状态被摆回」的时机之一，一并补。 */
   window.on('restore', reassertWindowState)
-  /* 从托盘重新显示（closeToTray 那条路是 hide→show，不经过 minimize）。
+  /* 从托盘重新显示。closeToTray 那条路在 X11 / Windows / macOS 上是 hide→show，在 Wayland 上
+     是 minimize→restore（理由见 index.ts 的 collapseWindow），两个时机都会经过这里。
      macOS 上 setVisibleOnAllWorkspaces 也会在隐藏/显示之间被平台摆回，同样要补。 */
   window.on('show', reassertWindowState)
 
