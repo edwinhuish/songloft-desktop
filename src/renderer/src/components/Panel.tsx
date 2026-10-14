@@ -130,13 +130,24 @@ function findScrollParent(el: HTMLElement | null): HTMLElement | null {
 /**
  * 播放队列。
  *
- * ★ 导出是为了给**迷你模式那块面板**复用（见 MiniPlayer.tsx）：同一个队列在两处出现，
- *   两套实现迟早分叉（拖拽排序、右键菜单、跟随当前曲滚动…都得各写一遍）。
- *   注意它自己不带滚动容器 —— 谁挂它谁负责给（抽屉那边是 .panel-body，迷你那边是 .mini-queue）。
+ * ★ 导出是为了给**迷你窗那块面板**复用（见 MiniPlayer.tsx）：同一个队列在两处出现，
+ *   两套实现迟早分叉（拖拽排序、跟随当前曲滚动…都得各写一遍）。
+ *   它自己不带滚动容器 —— 谁挂它谁负责给（抽屉那边是 .panel-body，迷你那边是 .mini-queue）。
  * ★ currentSlot：定位当前曲时，要它落在容器**从上往下第 currentSlot+1 格**（0 = 只保证看得见）。
  *   迷你面板给 2（第 3 格），抽屉给默认的 0 —— 理由见下面那段 effect 的说明。
+ * ★ menu：右键菜单开不开。**迷你窗里要关掉**——那份菜单的动作（加入歌单 / 从曲库删除 /
+ *   查看歌手…）全都要主窗口的曲库与会话，而迷你窗是另一棵界面树、同一份组件：
+ *   菜单画得出来（它读的也是 usePlayer 的镜像），点下去却落在没有那些 store 的一侧，
+ *   表现是「点了没反应」—— 那比没有这个菜单更糟。跳转/移除/拖动排序这些小窗里做得成的事
+ *   照旧可用（它们都只是播放器上的动作，能过桥）。
  */
-export function Queue({ currentSlot = 0 }: { currentSlot?: number }): React.JSX.Element {
+export function Queue({
+  currentSlot = 0,
+  menu = true
+}: {
+  currentSlot?: number
+  menu?: boolean
+}): React.JSX.Element {
   const queue = usePlayer((s) => s.queue)
   const order = usePlayer((s) => s.order)
   const cursor = usePlayer((s) => s.cursor)
@@ -245,7 +256,9 @@ export function Queue({ currentSlot = 0 }: { currentSlot?: number }): React.JSX.
           data-current={index === currentIndex}
           data-dragging={dragIndex === index}
           onDoubleClick={() => void jumpTo(index)}
-          onContextMenu={(event) => openMenuFromEvent(event, buildSongMenuItems([song]))}
+          onContextMenu={
+            menu ? (event) => openMenuFromEvent(event, buildSongMenuItems([song])) : undefined
+          }
           draggable
           onDragStart={() => setDragIndex(index)}
           onDragOver={(event) => {

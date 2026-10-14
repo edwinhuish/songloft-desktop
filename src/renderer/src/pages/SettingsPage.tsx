@@ -448,6 +448,44 @@ function AppearanceSettings(): React.JSX.Element {
             style={{ width: 180 }}
           />
         </Row>
+
+        {/*
+          迷你窗里那块面板（歌词 / 队列）**自己**的底色浓度。与上面那两条不是一回事：那两条调
+          的是整窗（桌面会透进来），这一条只在窗口内部透 —— 面板淡下去露出的是同一个窗口里
+          它下面那层。右键封面也能调（那是常用姿势），这里再放一份是为了「找得到、说得清」。
+        */}
+        <Row
+          title="迷你面板背景不透明度"
+          desc={`${settings.miniPanelOpacity}%：迷你窗下方那块面板的底色，100 与播放条一致`}
+        >
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={settings.miniPanelOpacity}
+            aria-label="迷你面板背景不透明度"
+            onChange={(event) => void patch({ miniPanelOpacity: Number(event.target.value) })}
+            style={{ width: 180 }}
+          />
+        </Row>
+      </Card>
+
+      {/*
+        迷你窗自己的几项。★ 置顶那一项必须在这里有个落点：迷你窗的右键菜单从前有它，
+        现在只有那两个不透明度滑块（见 MiniPlayer.tsx 封面菜单）—— 没有这一条的话，
+        「迷你条浮不浮在别的窗口之上」就只剩下手改配置文件一个办法了。
+      */}
+      <Card title="迷你播放器">
+        <Row
+          title="窗口置顶"
+          desc="让迷你条浮在别的窗口之上（默认开；它是挂在屏幕角上的挂件，关掉后会被别的窗口盖住）"
+        >
+          <Switch
+            ariaLabel="迷你播放器置顶"
+            checked={settings.miniAlwaysOnTop}
+            onChange={(checked) => void patch({ miniAlwaysOnTop: checked })}
+          />
+        </Row>
       </Card>
 
       <Card title="重置">

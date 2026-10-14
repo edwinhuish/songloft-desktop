@@ -18,7 +18,9 @@ import type {
   FileSaveResult,
   LocalCacheStats,
   MediaCommand,
-  MiniModeState,
+  MiniCommand,
+  MiniPlayerSnapshot,
+  MiniWindowLayout,
   ServerEntry,
   TraySnapshot,
   WindowState
@@ -53,8 +55,21 @@ const bridge: SongloftBridge = {
     minimize: () => ipcRenderer.invoke(IPC.windowMinimize) as Promise<void>,
     toggleMaximize: () => ipcRenderer.invoke(IPC.windowToggleMaximize) as Promise<boolean>,
     close: () => ipcRenderer.invoke(IPC.windowClose) as Promise<void>,
-    getState: () => ipcRenderer.invoke(IPC.windowGetState) as Promise<WindowState>,
-    setMini: (state: MiniModeState) => ipcRenderer.invoke(IPC.windowSetMini, state) as Promise<void>
+    getState: () => ipcRenderer.invoke(IPC.windowGetState) as Promise<WindowState>
+  },
+  mini: {
+    setOpen: (open) => ipcRenderer.invoke(IPC.miniSetOpen, open) as Promise<void>,
+    resize: (layout: MiniWindowLayout) =>
+      ipcRenderer.invoke(IPC.miniResize, layout) as Promise<void>,
+    ready: () => ipcRenderer.invoke(IPC.miniReady) as Promise<void>,
+    push: (snapshot: MiniPlayerSnapshot) =>
+      ipcRenderer.invoke(IPC.miniPush, snapshot) as Promise<void>,
+    command: (command: MiniCommand) =>
+      ipcRenderer.invoke(IPC.miniCommand, command) as Promise<void>,
+    onOpen: (handler) => subscribe<boolean>(IPC.onMiniOpen, handler),
+    onState: (handler) => subscribe<MiniPlayerSnapshot>(IPC.onMiniState, handler),
+    onRequest: (handler) => subscribe<void>(IPC.onMiniRequest, () => handler()),
+    onCommand: (handler) => subscribe<MiniCommand>(IPC.onMiniCommand, handler)
   },
   tray: {
     update: (snapshot: TraySnapshot) =>
@@ -83,7 +98,8 @@ const bridge: SongloftBridge = {
   on: {
     mediaCommand: (handler) => subscribe<MediaCommand>(IPC.onMediaCommand, handler),
     windowState: (handler) => subscribe<WindowState>(IPC.onWindowState, handler),
-    navigate: (handler) => subscribe<string>(IPC.onNavigate, handler)
+    navigate: (handler) => subscribe<string>(IPC.onNavigate, handler),
+    settingsChanged: (handler) => subscribe<AppSettings>(IPC.onSettingsChanged, handler)
   }
 }
 

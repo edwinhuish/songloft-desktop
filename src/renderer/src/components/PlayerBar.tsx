@@ -46,17 +46,35 @@ const ICON_MD = 26 // 原 17：歌词 / 队列 / 迷你 / 音量
 const ICON_LG = 28 // 原 19：上一首 / 下一首
 
 /**
- * 播放模式 → 图标 / 文案。
+ * 播放模式 → 图标。
  *
- * ★ 导出是给**满窗播放**用的（见 components/FullPlayer.tsx 那条控制条）：它也要一颗模式键，
- *   而这一张表是「哪种模式配哪颗图标、报什么名」的唯一事实源 —— 复制一份出去，
- *   迟早只有一处还记得 `random` 该换成 IconShuffle。
+ * ★ 做成**收尺寸的函数**而不是一张固定尺寸的表：模式键出现在三处，三处的图标尺寸都不一样
+ *   （底栏 24、满窗播放 28、迷你条 16，见各自的调用点），而「哪种模式配哪颗图标」只有这一份
+ *   事实源 —— 复制成三张表出去，迟早只有一处还记得 `random` 该换成 IconShuffle。
+ */
+export function modeIcon(mode: PlayMode, size: number): React.ReactNode {
+  switch (mode) {
+    case 'single':
+      return <IconRepeatOne size={size} />
+    case 'random':
+      return <IconShuffle size={size} />
+    default:
+      // order 与 loop 是同一颗图标（有区别的只是行为与文案，见 MODE_LABEL）
+      return <IconRepeat size={size} />
+  }
+}
+
+/**
+ * 底栏那一档的模式图标（满窗播放也直接用它）。
+ *
+ * 保留这张表而不是让调用方各写 `modeIcon(playMode, 24)`：底栏与满窗播放的尺寸本来就不同
+ * （见它们各自的 ICON_* 常量），把尺寸写死在调用点，改一处就得连着改两处。
  */
 export const MODE_ICON: Record<PlayMode, React.ReactNode> = {
-  order: <IconRepeat size={ICON_SM} />,
-  loop: <IconRepeat size={ICON_SM} />,
-  single: <IconRepeatOne size={ICON_SM} />,
-  random: <IconShuffle size={ICON_SM} />
+  order: modeIcon('order', ICON_SM),
+  loop: modeIcon('loop', ICON_SM),
+  single: modeIcon('single', ICON_SM),
+  random: modeIcon('random', ICON_SM)
 }
 
 export const MODE_LABEL: Record<PlayMode, string> = {
@@ -68,7 +86,7 @@ export const MODE_LABEL: Record<PlayMode, string> = {
 
 export function PlayerBar(): React.JSX.Element {
   const player = usePlayer()
-  const { panelOpen, panelTab, togglePanel, mini, setMini, setFullPlayer } = useUi()
+  const { panelOpen, panelTab, togglePanel, miniOpen, setFullPlayer } = useUi()
   const favoriteIds = usePlaylists((s) => s.favoriteIds)
   const toggleFavorite = usePlaylists((s) => s.toggleFavorite)
   /** 拖动进度条时手上的位置；null = 没在拖（见 PlayerProgress 的说明） */
@@ -228,17 +246,22 @@ export function PlayerBar(): React.JSX.Element {
         </button>
 
         {/*
-          迷你模式。它与上面两颗「面板」按钮是同一类（换一个看播放器的姿势），所以并排放在这里；
-          点一下整个界面收成一条小播放条（窗口也跟着变小，见 main/windows.ts），
-          再点一下回来 —— data-active 就是当前状态。
+          迷你播放器。它与上面两颗「面板」按钮是同一类（换一个看播放器的姿势），所以并排放在
+          这里；点一下**开一个独立的迷你窗口**，再点一下关掉它 —— data-active 就是它此刻开着
+          没有（那是主进程的回声，见 useUi.miniOpen）。
+
+          ★ 主窗口本身**一点都不动**：不缩、不重排、不换界面，也不丢焦点之外的任何状态。
+            这颗按钮要的就只是「那条挂件开着没有」这一个布尔量 —— 从前那种「点一下整个窗口
+            缩成 400×64」的做法，会把主界面里的一切都按 400px 重排一次（扩展的 webview 尤其
+            经不起），也正是它被拆成独立窗口的原因。
         */}
         <button
           type="button"
           className="icon-btn"
-          data-active={mini}
-          data-tip={mini ? '退出迷你模式' : '迷你模式'}
-          aria-label={mini ? '退出迷你模式' : '迷你模式'}
-          onClick={() => setMini(!mini)}
+          data-active={miniOpen}
+          data-tip={miniOpen ? '关闭迷你播放器' : '迷你播放器'}
+          aria-label={miniOpen ? '关闭迷你播放器' : '迷你播放器'}
+          onClick={() => void window.songloft.mini.setOpen(!miniOpen)}
         >
           <IconMini size={ICON_MD} />
         </button>

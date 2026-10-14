@@ -28,11 +28,10 @@ import { isNewerVersion } from '@shared/version'
 import { checkServerUpgrade, getGithubProxy } from './api/endpoints'
 import { AddToPlaylistDialog } from './components/AddToPlaylistDialog'
 import { CommandPalette } from './components/CommandPalette'
-import { ContextMenuHost, useContextMenu } from './components/ContextMenu'
+import { ContextMenuHost } from './components/ContextMenu'
 import { ExtensionFrame } from './components/ExtensionFrame'
 import { FullPlayer } from './components/FullPlayer'
 import { IconClose, IconLoader, IconSearch } from './components/Icons'
-import { MiniPlayer } from './components/MiniPlayer'
 import { Panel } from './components/Panel'
 import { PlayerBar } from './components/PlayerBar'
 import { Sidebar } from './components/Sidebar'
@@ -51,6 +50,7 @@ import { PlaylistsPage } from './pages/PlaylistsPage'
 import { RecentPage } from './pages/RecentPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { installMiniHost } from './state/mini-host'
 import {
   installMediaSessionHandlers,
   installNowPlayingSync,
@@ -119,39 +119,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 export function App(): React.JSX.Element {
   const status = useAuth((s) => s.status)
-  const mini = useUi((s) => s.mini)
-  const miniPanel = useUi((s) => s.miniPanel)
   const started = useRef(false)
-
-  /**
-   * 迷你模式：界面状态在 useUi，**窗口几何在主进程** —— 这里把两边接上。
-   *
-   * 放在 App（而不是切迷你那颗按钮的 onClick 里）有两个理由：
-   *   · 将来托盘、快捷键也能切它，状态一变就该同步，而不是「只有从底栏点的那一次才同步」；
-   *   · 登出时要把窗口尺寸还回去（见下面那段），而那一刻 Shell 已经不在了 ——
-   *     这条 effect 挂在 App 上才始终有效。
-   */
-  useEffect(() => {
-    /*
-      顺带挂到 <html> 上：toast、上下文菜单、提示这些是**挂在 body 上的另一棵子树**
-      （不在 .shell 里面），只给 .shell 打标记够不着它们 —— 而迷你窗只有 64px 高，
-      提示原本那 58px 的落点会被直接顶出窗外（见 components.css 里那条 html[data-mini]）。
-    */
-    document.documentElement.dataset.mini = mini ? 'true' : 'false'
-    /*
-      主进程只要知道「要不要给块地方」：下方那块面板开没开、窗口里这会儿有没有菜单开着
-      （装歌词还是队列、菜单里是哪几项，都由渲染层自己定，见 MiniModeState）。
-      菜单开着时要多要一截高度：HTML 画的菜单出不了迷你窗那 64px。
-      ★ 菜单这一路走 subscribe 而不是 hook 订阅：本组件是整棵界面的根，它一重渲染就是一整页
-        （列表可能几千行），而这里要的只是「开 / 关」这一个布尔量 —— 与 ContextMenuHost 里
-        那条 dataset 的说明是同一个理由。窗口一长高，菜单自己会重摆一次（见 ContextMenu）。
-    */
-    const push = (menuOpen: boolean): void => {
-      void window.songloft.window.setMini({ mini, expanded: miniPanel !== null, menu: menuOpen })
-    }
-    push(useContextMenu.getState().open)
-    return useContextMenu.subscribe((state) => push(state.open))
-  }, [mini, miniPanel])
 
   /* ── 启动编排（一次）───────────────────────────────────────────── */
   useEffect(() => {
@@ -174,6 +142,18 @@ export function App(): React.JSX.Element {
         bootstrapped = true
         disposers.push(installMediaSessionHandlers())
         disposers.push(installNowPlayingSync())
+        /*
+         * 迷你窗那一侧的接线：把播放状态推给它、把它发来的遥控命令落到真播放器上
+         * （见 state/mini-host.ts）。装在这里而不是某个组件里，是因为全应用只有**这一个**
+         * 真播放器（就在这个窗口里）—— 迷你窗的一切都要靠它。
+         */
+        disposers.push(installMiniHost())
+        /*
+         * 迷你窗此刻开着没有：那颗按钮的高亮要看它（窗口是主进程开的，渲染层没有别的渠道
+         * 知道这件事）。同样走模块级订阅而不是 React —— 它影响的只是那一颗按钮的 data-active，
+         * 让整棵界面树为它重渲染一次不划算（理由同 ContextMenuHost 那条 dataset）。
+         */
+        disposers.push(window.songloft.mini.onOpen((open) => useUi.getState().setMiniOpen(open)))
       }
 
       await useAuth.getState().bootstrap()
@@ -290,8 +270,11 @@ export function App(): React.JSX.Element {
     if (status !== 'authenticated') {
       // 退出登录 / 切服务器都要清干净：留着的话标题栏会继续挂着**上一台服务器**的扩展
       usePlugins.getState().reset()
-      // 迷你模式也得退出：登录页要摆在一个 400×64 的窗里是没法用的
-      useUi.getState().setMini(false)
+      /*
+       * 迷你窗也得关掉：登录页在那边没有对应界面（那一窗只有一条播放条 + 一块面板），
+       * 而它显示的播放状态正是这里刚清空的东西 —— 留着就是一个点不动的空条。
+       */
+      void window.songloft.mini.setOpen(false)
       // 满窗播放同样复位：它挂在原生面上，而登录页整块是另一套外壳。
       // 不复位的话，「开着满窗登出、再登录」会一进门就顶着一张播放器。
       useUi.getState().setFullPlayer(false)
@@ -346,8 +329,6 @@ function Shell(): React.JSX.Element {
   const route = useUi((s) => s.nativeRoute)
   const panelOpen = useUi((s) => s.panelOpen)
   const sidebarCollapsed = useUi((s) => s.sidebarCollapsed)
-  const mini = useUi((s) => s.mini)
-  const miniRestore = useUi((s) => s.miniRestore)
   const fullPlayer = useUi((s) => s.fullPlayer)
 
   /**
@@ -373,21 +354,8 @@ function Shell(): React.JSX.Element {
     <div
       className="shell"
       data-surface={surface}
-      data-mini={mini ? 'true' : undefined}
       /* 满窗播放：标题栏那一层的底色也跟着换（见 components.css 里 .shell[data-fullplayer]） */
       data-fullplayer={fullPlayer ? 'true' : undefined}
-      /*
-        藏起来的正常界面按进迷你之前的尺寸钉住（见 base.css 里 .shell[data-mini] 那段）：
-        取的是 useUi 记下的那一份，而不是当前的 window.innerWidth —— 后者已经是 400px 了。
-      */
-      style={
-        mini && miniRestore
-          ? ({
-              '--mini-restore-w': `${miniRestore.width}px`,
-              '--mini-restore-h': `${miniRestore.height}px`
-            } as React.CSSProperties)
-          : undefined
-      }
     >
       <TitleBar />
 
@@ -433,8 +401,8 @@ function Shell(): React.JSX.Element {
 
         {/*
           满窗播放：盖在原生面**之上**（底栏那颗封面点出来，见 components/FullPlayer.tsx）。
-          放在这一面里面而不是像 MiniPlayer 那样挂在 Shell 上：它跟着原生面一起被藏
-          （切去扩展面、进迷你都不会孤零零留在屏幕上），切回来时又原样还在。
+          放在这一面里面而不是挂在 Shell 上：它跟着原生面一起被藏（切去扩展面时不会孤零零
+          留在屏幕上），切回来时又原样还在。
         */}
         {fullPlayer ? <FullPlayer /> : null}
       </div>
@@ -447,11 +415,11 @@ function Shell(): React.JSX.Element {
       ) : null}
 
       {/*
-        迷你模式：上面那一整块（标题栏 + 两面）只是**藏起来**，不是卸载 —— 扩展面里可能
-        正有插件在出声（音频不挂在布局上，藏起来也不断），而两面的滚动位置/已加载列表
-        正是「切回来还是离开时的样子」的全部内容。真正显示的是这一条小播放条。
+        ★ 这里**不再有**迷你播放器：它是另一个窗口里的一棵独立界面树（components/MiniPlayer.tsx
+          + MiniApp.tsx），底栏那颗按钮只是开 / 关那个窗（见 PlayerBar 的 mini 按钮）。
+          以前那套「把这一整块藏起来、钉住尺寸、让 <html> 带 data-mini」的机制（连同
+          --mini-restore-w/h）都随之去掉了：主窗口从此不必为迷你条改尺寸或重排任何东西。
       */}
-      {mini ? <MiniPlayer /> : null}
 
       <CommandPalette />
       <AddToPlaylistDialog />

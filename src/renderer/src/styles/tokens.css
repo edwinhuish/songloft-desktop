@@ -109,8 +109,8 @@
    * （main/windows.ts 的 transparent），整个客户端一起透出后面的桌面 / 别的窗口。
    * 1 = 实心（两个默认都是），也就是改动前的观感。
    * ★ 值域 0–1 而不是百分比：它直接作为 body 的 opacity 用（见 base.css）。
-   * ★ 两条都写在这里、由 base.css 按 <html> 的 data-mini 标记挑一条生效 ——
-   *   迷你窗与主窗是同一个 BrowserWindow、同一棵树，分不到变量这一层。
+   * ★ 两条都写在这里、由 base.css 按 <html> 的 data-mini 标记挑一条生效 —— 两个窗口各有各的
+   *   界面树，但同一份样式表与同一套变量名，所以「挑哪一条」这件事仍然只能靠那个标记。
    * ★ 与下面那几处「某个面自己的底色」各管各的，别把它们并成一个旋钮（见 shared/ipc.ts）。
    */
   --window-opacity: 1;
@@ -129,6 +129,17 @@
   --bar-tint-opacity: 57%;
   --player-tint: color-mix(in srgb, var(--glass-base) var(--bar-tint-opacity), transparent);
   --mini-tint: color-mix(in srgb, var(--glass-base) var(--bar-tint-opacity), transparent);
+  /*
+   * 迷你窗**面板**（歌词 / 队列那块，见 components.css 的 .mini-panel）自己的底色浓度。
+   * 它是相对**上面那条播放条**的浓度，不是绝对的不透明度：
+   *   100% = 与播放条完全一致（默认），调低则只在窗口内部变淡（露出的是同一个窗口里它下面那层）。
+   * ★ 为什么不写成一个绝对值：深浅两个主题下「与播放条一致」对应的绝对值不一样（浅色是纯白实底、
+   *   深色是 57% 的深色玻璃，见 --mini-tint 与浅色那段覆盖），而用户手里只有一根滑块。
+   *   相对浓度让它一个默认值就够，也让「跟着条走」这件事在换主题后依然成立。
+   * 值由 useSettings 写到 <html> 上（settings.miniPanelOpacity，单位是百分比）。
+   */
+  --mini-panel-opacity: 100%;
+  --mini-panel-tint: color-mix(in srgb, var(--mini-tint) var(--mini-panel-opacity), transparent);
 
   /* 歌词区域叠在宿主之上的那层额外底色：0% 是默认，也就是完全透出所在面板 */
   --lyric-panel-opacity: 0%;
@@ -246,6 +257,17 @@
    */
   --glass-base: #ffffff;
   --glass-tint: color-mix(in srgb, #ffffff calc(100% - var(--glass) * 0.35%), transparent);
+
+  /*
+   * 迷你条在浅色下是**纯白实底**，不跟着上面那层玻璃走。
+   *
+   * ★ 为什么单独拎出来：迷你条是浮在桌面上的一个挂件，浅色主题下它要的是「一块干净的白」——
+   *   而 57% 的白（上面那条 --bar-tint-opacity 的算法）压在壁纸上会随壁纸变色，看着发灰、
+   *   一会儿像白的一会儿像灰的。深色主题那边倒是正好相反：57% 的深色玻璃才透得好看。
+   * ★ 「整窗通透」仍然由 body 的 opacity 管（--mini-window-opacity），那是另一个旋钮 ——
+   *   想让它透出桌面的人把那个调低即可，不必回头动这一条。
+   */
+  --mini-tint: #ffffff;
 
   --shadow-1: 0 1px 2px rgba(15, 18, 32, 0.08);
   --shadow-2: 0 8px 24px -10px rgba(15, 18, 32, 0.18);

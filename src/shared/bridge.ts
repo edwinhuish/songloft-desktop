@@ -13,7 +13,9 @@ import type {
   FileSaveResult,
   LocalCacheStats,
   MediaCommand,
-  MiniModeState,
+  MiniCommand,
+  MiniPlayerSnapshot,
+  MiniWindowLayout,
   ServerEntry,
   ServerProbeResult,
   TraySnapshot,
@@ -48,15 +50,40 @@ export interface SongloftBridge {
     accounts(): Promise<Record<string, string>>
   }
   window: {
+    /**
+     * 这三颗窗口钮一律**作用于调用它自己所在的那个窗口**（主进程按 event.sender 认窗口），
+     * 不是「主窗口」：迷你窗那颗最小化不该把主窗口收掉，那颗关闭也只该关掉迷你条。
+     */
     minimize(): Promise<void>
     toggleMaximize(): Promise<boolean>
     close(): Promise<void>
     getState(): Promise<WindowState>
-    /**
-     * 进出迷你模式。窗口的尺寸、最小尺寸、置顶与可缩放由主进程一并接管 ——
-     * 主进程还会顺便把「正常窗口的位置尺寸」记下来，退出时原样还回去。
-     */
-    setMini(state: MiniModeState): Promise<void>
+  }
+  /**
+   * 迷你窗口（独立 BrowserWindow，见 main/mini-window.ts）。
+   *
+   * 两边各用一半：主窗口用它开关 + 推状态，迷你窗用它报尺寸 + 收状态 + 发遥控命令。
+   * 为什么全要经主进程中转：两个渲染层之间没有直接通道，而播放的唯一事实源在主窗口那边。
+   */
+  mini: {
+    /** 主窗口：开 / 关迷你窗 */
+    setOpen(open: boolean): Promise<void>
+    /** 迷你窗：报一下此刻的布局（条 / 面板 / 菜单），主进程据此算窗口高度 */
+    resize(layout: MiniWindowLayout): Promise<void>
+    /** 迷你窗：界面与设置都就绪了 —— 主进程据此显示窗口，并请主窗口推一份状态过来 */
+    ready(): Promise<void>
+    /** 主窗口：推一份播放状态（主进程转给迷你窗） */
+    push(snapshot: MiniPlayerSnapshot): Promise<void>
+    /** 迷你窗：发一条遥控命令（主进程转给主窗口执行） */
+    command(command: MiniCommand): Promise<void>
+    /** 主窗口：迷你窗开没开（按钮高亮、要不要继续推送都看它） */
+    onOpen(handler: (open: boolean) => void): () => void
+    /** 迷你窗：收到播放状态快照 */
+    onState(handler: (snapshot: MiniPlayerSnapshot) => void): () => void
+    /** 主窗口：迷你窗在要状态，请立刻推一份完整快照 */
+    onRequest(handler: () => void): () => void
+    /** 主窗口：收到一条遥控命令 */
+    onCommand(handler: (command: MiniCommand) => void): () => void
   }
   tray: {
     update(snapshot: TraySnapshot): Promise<void>
@@ -95,5 +122,7 @@ export interface SongloftBridge {
     mediaCommand(handler: (command: MediaCommand) => void): () => void
     windowState(handler: (state: WindowState) => void): () => void
     navigate(handler: (path: string) => void): () => void
+    /** 设置被**别的窗口**改了（两个窗口各有一份 settings，见 shared/ipc.ts 那条说明） */
+    settingsChanged(handler: (settings: AppSettings) => void): () => void
   }
 }

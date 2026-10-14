@@ -13,6 +13,7 @@
 import { create } from 'zustand'
 import { ApiError, ApiClient, type TokenPair } from '@/api/client'
 import { getSongs, login as loginRequest, logout as logoutRequest } from '@/api/endpoints'
+import type { ResourceContext } from '@/lib/url'
 import type { ServerEntry, ServerProbeResult } from '@shared/ipc'
 import { useSettings } from './useSettings'
 
@@ -43,6 +44,15 @@ interface AuthState {
    * 只在内存里，不落任何持久化存储。
    */
   accessToken: string
+  /**
+   * 迷你窗里那一份**资源上下文**（服务器地址 + token），由播放状态快照喂进来。
+   *
+   * ★ 为什么是喂而不是自己算：迷你窗刻意**不建会话**（不 bootstrap、不刷新令牌）——
+   *   两个渲染层各持一个 ApiClient 的话，刷新令牌轮换时它们会互相把对方踢下线，
+   *   而「莫名其妙要求重新登录」是最难查的一类故障。会话只有一个主人，就是主窗口。
+   * ★ 主窗口里它一直是 null（那边有 client，resourceContext() 走真实路径）。
+   */
+  mirroredMedia: ResourceContext | null
 
   bootstrap: () => Promise<void>
   refreshServers: () => Promise<void>
@@ -51,6 +61,8 @@ interface AuthState {
   logout: () => Promise<void>
   /** 只把界面交还给登录页，不动凭据（「切换账号」用） */
   openLogin: () => void
+  /** 迷你窗专用：接收主窗口喂来的资源上下文（见 mirroredMedia 的说明） */
+  setMirroredMedia: (media: ResourceContext | null) => void
   switchServer: (url: string) => Promise<void>
   forgetServer: (url: string) => Promise<void>
 }
@@ -109,6 +121,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   error: null,
   busy: false,
   accessToken: '',
+  mirroredMedia: null,
 
   bootstrap: async () => {
     const servers = await window.songloft.servers.list()
@@ -240,6 +253,8 @@ export const useAuth = create<AuthState>((set, get) => ({
     set({ status: 'unauthenticated', error: null })
   },
 
+  setMirroredMedia: (mirroredMedia) => set({ mirroredMedia }),
+
   switchServer: async (url) => {
     set({ status: 'booting', error: null })
     const servers = get().servers
@@ -303,11 +318,20 @@ export const useAuth = create<AuthState>((set, get) => ({
   }
 }))
 
-/** 给 lib/url.ts 用的资源上下文（服务器地址 + token） */
-export function resourceContext(): { baseUrl: string; accessToken: string } {
-  const { client, baseUrl } = useAuth.getState()
-  if (!client || !baseUrl) return { baseUrl: '', accessToken: '' }
-  return { baseUrl: client.getMediaBaseUrl(), accessToken: client.getAccessToken() }
+/**
+ * 给 lib/url.ts 用的资源上下文（服务器地址 + token）。
+ *
+ * ★ 有 client 就用 client 的（它是 token 刷新的唯一落点，读它拿到的永远是最新那一份）；
+ *   没有 client 的窗口 —— 只有迷你窗 —— 用主窗口喂进来的那一份（见 mirroredMedia）。
+ *   两条路都取不到时返回空，`buildResourceUrl` 会把地址拼成不带的 token 的样子
+ *   （拿不到封面总好过抛错：迷你窗没有会话，这是它的正常状态之一）。
+ */
+export function resourceContext(): ResourceContext {
+  const { client, baseUrl, mirroredMedia } = useAuth.getState()
+  if (client && baseUrl) {
+    return { baseUrl: client.getMediaBaseUrl(), accessToken: client.getAccessToken() }
+  }
+  return mirroredMedia ?? { baseUrl: '', accessToken: '' }
 }
 
 /** 必须在已登录时调用；拿不到 client 直接抛，避免一堆 `?.` 把真 bug 藏起来 */

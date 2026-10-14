@@ -50,11 +50,13 @@ body {
 }
 
 /*
- * 迷你态换成它自己那一份浓度（设置里的「迷你播放器不透明度」）。
+ * 迷你窗换成它自己那一份浓度（设置里的「迷你播放器不透明度」）。
  *
- * ★ 为什么是「换一条」而不是另一份样式：迷你窗与主窗是**同一个 BrowserWindow**
- *   （主进程只把它缩成 400×64），渲染层里也是同一棵树 —— 唯一的区分就是 <html> 上那个
- *   data-mini 标记（App.tsx 打的，见那里为什么挂在 documentElement 上）。
+ * ★ 两个窗口各有各的界面树（迷你窗是独立的 BrowserWindow），但**共用这一份样式表**，
+ *   所以「挑哪一条」仍然只能靠 <html> 上那个 data-mini 标记 —— 由 main.tsx 在挂载前打上
+ *   （见那里为什么不在 React 里打）。
+ * ★ 剩下的唯一一条前缀规则就是这个：迷你窗里 .shell 那一整套（标题栏、内容面、播放条）
+ *   根本不存在，它整窗只有 .mini-player（见 components.css 那段）。
  */
 html[data-mini='true'] body {
   opacity: var(--mini-window-opacity);
@@ -146,66 +148,19 @@ a {
 }
 
 /*
- * 迷你模式：整个界面换成一条小播放条（见 components/MiniPlayer.tsx），窗口本身也被主进程
- * 缩到 400×64（见 main/windows.ts）。
+ * 迷你窗的根：整窗就只有 .mini-player 这一块（见 components/MiniPlayer.tsx）。
  *
- * ★ 正常的那两块**不卸载、也不重排**，只是不画：
- *   · 卸载会把两面的滚动位置与扩展的 webview 一起丢掉（理由见下面 .surface 那段）；
- *   · 不钉住尺寸（让它们按 400px 重排一次）也不行 —— 滚动位置会被重新夹一遍、
- *     webview 的视口会被缩成一个针眼再弹回来。所以按进迷你之前的尺寸钉住，
- *     那两个值由 App 在进迷你那一刻记下（--mini-restore-w/h）。
- *   visibility 而不是 display：后者会让它们彻底失去布局，「记住离开时的样子」就无从谈起。
+ * ★ 这里**不再需要**任何「把主界面藏起来」的规则 —— 迷你窗里压根没有 .shell（没有标题栏、
+ *   没有内容面、没有底栏播放条）。以前那些 `.shell[data-mini] > .titlebar { visibility: hidden }`
+ *   之所以存在，是因为那时迷你态就是主窗口缩小后的样子：整个界面还在，只是被藏起来钉住尺寸。
+ *   现在两个窗口各是一棵树，那一整段（连同 --mini-restore-w/h）一并去掉了。
+ * ★ 内容区高度交给 flex：条那一档由 .mini-bar 的 --mini-bar-h 定死，多出来的全给面板
+ *   （那一块在 components.css 里）。#root 是 100% 高（见文件开头），所以 .mini-player 拉满
+ *   整个窗口高度即可 —— 窗口高度由主进程按「条 + 面板」算出来（main/mini-window.ts）。
  */
-.shell[data-mini='true'] {
-  /*
-   * 播放条的高度 = 条里最高那件东西（贴左缘的全高封面 64px）。主进程算迷你窗总高
-   * （main/windows.ts 的 MINI_SIZE / MINI_PANEL_SIZE / MINI_MENU_SIZE）时就是按它留位的 ——
-   * 改这里要连那边一起看，两处差一档就是「条里空出一截」或「控件被裁掉」。
-   * ★ 定义在这一层（而不是 .mini-player 上）是因为**下面那条 `:has()` 规则也要用它**，
-   *   而那条规则选中的是 .shell：变量得在共同的祖先上，两处才不必各写一份 64。
-   *   定义在祖先上不影响原来那些读取方 —— 自定义属性本来就是继承下来的。
-   */
-  --mini-bar-h: 64px;
-  position: relative;
-  /* 标题栏与内容面都脱离了常规流，这一行整行留给迷你播放条 */
-  grid-template-rows: minmax(0, 1fr);
-  /*
-   * ★ overflow: hidden 是**必须的**，不是顺手写的。
-   *   下面那两块藏起来的界面按进迷你之前的尺寸钉住（如 1080×660），而迷你窗只有 400×480 ——
-   *   它们虽是绝对定位、不参与布局，却照样算进「可滚动溢出」：整页于是变成 660px 高，
-   *   而窗口只有 480px。页面一旦有可滚动溢出，任何一句 scrollIntoView（队列跟随当前曲就
-   *   用着它）都会顺手把视口也滚一下 —— 表现就是「迷你播放器被顶上去，右上角那三颗窗口钮
-   *   不见了」。在这里剪掉，页面在迷你态下**没有任何可滚动溢出**，谁也顶不动它。
-   *   （只剪这一态：正常界面里那两块的浮层/抽屉各有各的滚动，不能一起剪。）
-   */
-  overflow: hidden;
-}
-
-/*
- * 菜单开着、面板没开：这一窗此刻被主进程加高到 240（MINI_MENU_SIZE），多出来那 176px 是
- * **留给右键菜单的** —— 而 .shell 自己铺着整窗的底色（上面那条主题光晕渐变），任它长高的话
- * 会胀成一大块实底，菜单浮在上面像是「播放条鼓成了一个大方框」。
- *
- * 把这一层的高度收回到播放条上：底色只铺 64px，下面那截**整个交还给桌面**（html/body 本来
- * 就是透明的，窗口也是透明窗口），菜单就那么浮着 —— 与系统弹出的那种菜单观感一致。
- * ★ 用 :has() 而不是在 <html> 上另打一个标记：判据本来就写在 DOM 里（谁挂着 data-menu），
- *   换个地方再写一遍就等于同一个条件维护两处，迟早对不上。
- * ★ 菜单是 position: fixed、按视口定位的，不指望 .shell 有多高 —— 所以缩它不影响菜单。
- * ★ 藏起来的那两块（标题栏 / 内容面）不会被这一缩重排：它们的尺寸钉在
- *   --mini-restore-w/h 上（进迷你那一刻记下的正常窗口尺寸），与 .shell 的高度无关。
- */
-.shell:has(> .mini-player[data-menu='true']) {
-  height: var(--mini-bar-h);
-}
-
-.shell[data-mini='true'] > .titlebar,
-.shell[data-mini='true'] > .surface {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: var(--mini-restore-w, 100%);
-  height: var(--mini-restore-h, 100%);
-  visibility: hidden;
+html[data-mini='true'] #root,
+html[data-mini='true'] .mini-player {
+  height: 100%;
 }
 
 .shell-body {
@@ -267,7 +222,7 @@ a {
 /* 原生面：上半是「侧栏 + 主区 + 抽屉」，下半是播放条。
    ★ position: relative 是**满窗播放**那一层的定位基准（见 components.css 的 .fullplayer）：
      它要 inset: 0 盖住这一整面（含播放条），而浮层的定位只会找最近的定位祖先 ——
-     这一条不在，它就会一路找到 .shell[data-mini] 那个相对定位上去（那一档下窗口只有 64px 高）。 */
+     这一条不在，它就会一路找到 .shell 上去（那一层是整窗，浮层的边界也就不对了）。 */
 .surface-native {
   position: relative;
   display: grid;

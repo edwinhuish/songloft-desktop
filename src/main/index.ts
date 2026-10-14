@@ -15,7 +15,9 @@ import {
   type AppInfo,
   type AppSettings,
   type MediaCommand,
-  type MiniModeState,
+  type MiniCommand,
+  type MiniPlayerSnapshot,
+  type MiniWindowLayout,
   type ServerEntry,
   type TraySnapshot
 } from '@shared/ipc'
@@ -24,11 +26,22 @@ import { applyLocalCacheLimit, clearLocalCache, readLocalCache } from './cache'
 import { checkClientUpdate } from './release'
 import { openTextFile, saveTextFile } from './files'
 import { registerMediaKeys } from './media-keys'
+import {
+  applyMiniWindowOnTop,
+  closeMiniWindow,
+  disposeMiniWindow,
+  handleMiniReady,
+  handleMiniResize,
+  installMiniWindow,
+  isMiniWindowOpen,
+  sendMiniSnapshot,
+  setMiniWindowOpen
+} from './mini-window'
 import { fetchCoverBytes, probeServer } from './probe'
 import { PLUGIN_PARTITION } from '@shared/plugin'
 import { ConfigStore } from './store'
 import { createTray, destroyTray, render as renderTray } from './tray'
-import { applyWindowOnTop, createMainWindow, setMiniMode } from './windows'
+import { applyWindowOnTop, createMainWindow } from './windows'
 
 /**
  * ★ Linux 桌面集成身份（Wayland 的 app_id / X11 的 WM_CLASS）。
@@ -191,6 +204,30 @@ function sendToRenderer(channel: string, payload: unknown): void {
   }
 }
 
+/**
+ * 这条 IPC 是哪个窗口发来的。
+ *
+ * ★ 三颗窗口钮（最小化 / 最大化 / 关闭）一律作用于**它自己**：迷你窗那颗关闭只该关掉迷你条，
+ *   不该把主界面一起收掉；那颗最小化同理。原先一律打到 mainWindow 上，是因为当时只有一个窗。
+ */
+function senderWindow(event: Electron.IpcMainInvokeEvent): BrowserWindow | null {
+  return BrowserWindow.fromWebContents(event.sender)
+}
+
+/**
+ * 设置被改了：把新的一份推给**其余**窗口。
+ *
+ * 两个窗口各有一份 useSettings（迷你窗是另一个渲染进程），而主题 / 强调色 / 两份整窗浓度
+ * 都是「一改就该两处同时变」的东西 —— 只靠调用方自己刷新的话，主窗口改主题、迷你条还停在
+ * 旧主题上。不改调用的那个窗口是因为它拿到的返回值就是新的一份，再推一遍只是白跑。
+ */
+function broadcastSettings(settings: AppSettings, from: Electron.WebContents): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed() || win.webContents === from) continue
+    win.webContents.send(IPC.onSettingsChanged, settings)
+  }
+}
+
 function broadcastMediaCommand(command: MediaCommand): void {
   sendToRenderer(IPC.onMediaCommand, command)
 }
@@ -216,7 +253,13 @@ function toggleWindowVisibility(): void {
 function attachWindowHandlers(window: BrowserWindow): void {
   window.on('closed', () => {
     // 只清理「当前这一个」：旧窗口延迟到达的 closed 不该抹掉新窗口的引用
-    if (mainWindow === window) mainWindow = null
+    if (mainWindow !== window) return
+    mainWindow = null
+    /*
+     * 主界面没了，迷你条也就失去了宿主：播放由它驱动、遥控命令要它执行、连它上那份状态
+     * 也是它推的。留着一个既放不出声、点也点不动的条没有意义，一并关掉。
+     */
+    if (isMiniWindowOpen()) closeMiniWindow()
   })
 
   // 关闭即最小化到托盘（默认关）：拦下 close，改成 hide
@@ -276,25 +319,28 @@ function has(obj: object, key: string): boolean {
 function registerIpcHandlers(): void {
   // 设置
   ipcMain.handle(IPC.settingsGet, () => store.getSettings())
-  ipcMain.handle(IPC.settingsPatch, (_event, patch: Partial<AppSettings>) => {
+  ipcMain.handle(IPC.settingsPatch, (event, patch: Partial<AppSettings>) => {
     const next = store.patchSettings(patch)
     if (has(patch, 'allowInsecureTls')) {
       applyTlsPolicy(next.allowInsecureTls)
     }
     /*
-     * 置顶是**窗口状态**而不是界面状态：写入配置只是记住了偏好，还得当场落到真窗口上
-     * （两份设置各管自己那种形态，见 windows.ts 的 applyWindowOnTop）。
+     * 置顶是**窗口状态**而不是界面状态：写入配置只是记住了偏好，还得当场落到真窗口上。
+     * 两个窗口各有一份（主窗 / 迷你窗），所以两项都要看一眼 —— 只落其中一份的话，
+     * 用户勾了「迷你窗置顶」要等下次开迷你窗才生效。
      */
-    if (has(patch, 'alwaysOnTop') || has(patch, 'miniAlwaysOnTop')) {
-      applyWindowOnTop()
-    }
+    if (has(patch, 'alwaysOnTop')) applyWindowOnTop()
+    if (has(patch, 'miniAlwaysOnTop')) applyMiniWindowOnTop()
+    broadcastSettings(next, event.sender)
     return next
   })
-  ipcMain.handle(IPC.settingsReset, () => {
+  ipcMain.handle(IPC.settingsReset, (event) => {
     const next = store.resetSettings()
     applyTlsPolicy(next.allowInsecureTls)
-    // 复位会把两份置顶设置一起打回默认（大窗口关、迷你开），窗口也得跟着回去
+    // 复位会把两份置顶设置一起打回默认（大窗口关、迷你开），两个窗口都得跟着回去
     applyWindowOnTop()
+    applyMiniWindowOnTop()
+    broadcastSettings(next, event.sender)
     return next
   })
 
@@ -317,22 +363,37 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.serversProbe, (_event, url: string) => probeServer(url))
   ipcMain.handle(IPC.serversAccounts, () => store.listAccounts())
 
-  // 窗口
-  ipcMain.handle(IPC.windowMinimize, () => mainWindow?.minimize())
-  ipcMain.handle(IPC.windowToggleMaximize, () => {
-    if (!mainWindow) return false
-    if (mainWindow.isMaximized()) mainWindow.unmaximize()
-    else mainWindow.maximize()
-    return mainWindow.isMaximized()
+  // 窗口（一律作用于**发来这条 IPC 的那个窗口**，见 senderWindow 的说明）
+  ipcMain.handle(IPC.windowMinimize, (event) => senderWindow(event)?.minimize())
+  ipcMain.handle(IPC.windowToggleMaximize, (event) => {
+    const win = senderWindow(event)
+    if (!win) return false
+    if (win.isMaximized()) win.unmaximize()
+    else win.maximize()
+    return win.isMaximized()
   })
-  ipcMain.handle(IPC.windowClose, () => mainWindow?.close())
-  ipcMain.handle(IPC.windowGetState, () => ({
-    maximized: mainWindow?.isMaximized() ?? false,
-    fullscreen: mainWindow?.isFullScreen() ?? false,
-    focused: mainWindow?.isFocused() ?? false
-  }))
-  // 迷你模式的窗口几何在 windows.ts 里（它拿着那个窗口，也知道什么时候不该写 bounds）
-  ipcMain.handle(IPC.windowSetMini, (_event, state: MiniModeState) => setMiniMode(state))
+  ipcMain.handle(IPC.windowClose, (event) => senderWindow(event)?.close())
+  ipcMain.handle(IPC.windowGetState, (event) => {
+    const win = senderWindow(event)
+    return {
+      maximized: win?.isMaximized() ?? false,
+      fullscreen: win?.isFullScreen() ?? false,
+      focused: win?.isFocused() ?? false
+    }
+  })
+
+  // ── 迷你窗口（几何与转发都在 mini-window.ts 里，见那里的说明）───────────────
+  ipcMain.handle(IPC.miniSetOpen, (event, open: boolean) => {
+    // 只认主窗口这一个来源：本应用只有主界面能开迷你窗，迷你窗自己不该再开一个
+    if (senderWindow(event) !== mainWindow) return
+    setMiniWindowOpen(open)
+  })
+  ipcMain.handle(IPC.miniResize, (_event, layout: MiniWindowLayout) => handleMiniResize(layout))
+  ipcMain.handle(IPC.miniReady, () => handleMiniReady())
+  ipcMain.handle(IPC.miniPush, (_event, snapshot: MiniPlayerSnapshot) => sendMiniSnapshot(snapshot))
+  ipcMain.handle(IPC.miniCommand, (_event, command: MiniCommand) => {
+    sendToRenderer(IPC.onMiniCommand, command)
+  })
 
   // 托盘 / 系统
   ipcMain.handle(IPC.trayUpdate, (_event, snapshot: TraySnapshot) => {
@@ -396,6 +457,16 @@ if (gotTheLock) {
     mainWindow = createMainWindow(store)
     attachWindowHandlers(mainWindow)
 
+    /*
+     * 迷你窗的接线：它要的三样东西分别是「通知主窗口开/关」「问主窗口要一份状态」
+     * 「把遥控命令交给主窗口执行」—— 全是转发，主进程自己一个播放状态都不持有。
+     */
+    installMiniWindow(store, {
+      onOpenChanged: (open) => sendToRenderer(IPC.onMiniOpen, open),
+      onRequestSnapshot: () => sendToRenderer(IPC.onMiniRequest, null),
+      onCommand: (command) => sendToRenderer(IPC.onMiniCommand, command)
+    })
+
     createTray(trayDeps)
     disposeMediaKeys = registerMediaKeys(broadcastMediaCommand)
 
@@ -418,6 +489,7 @@ if (gotTheLock) {
     disposeMediaKeys?.()
     disposeMediaKeys = null
     destroyTray()
+    disposeMiniWindow()
   })
 
   app.on('window-all-closed', () => {

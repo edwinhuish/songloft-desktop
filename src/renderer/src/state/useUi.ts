@@ -63,15 +63,6 @@ export function isExtensionRoute(route: Route): route is ExtensionRoute {
 
 export type PanelTab = 'now-playing' | 'queue'
 
-/**
- * 迷你模式里下方那块可展开的面板装什么。
- *
- * ★ 两样**共用同一块地方、同一份高度**（见 main/windows.ts 的 MINI_PANEL_SIZE）：
- *   主进程只关心「开没开」，装的是歌词还是队列由渲染层自己决定（送回主进程的是
- *   MiniModeState.expanded 这个布尔量）—— 于是换内容不会动窗口尺寸，切过去切回来不会跳。
- */
-export type MiniPanel = 'lyrics' | 'queue'
-
 interface UiState {
   surface: Surface
   /** 原生那一面停在哪儿。切去扩展面时**不动它** —— 切回来就是离开时的样子 */
@@ -93,22 +84,16 @@ interface UiState {
   sidebarAutoCollapsed: boolean
   paletteOpen: boolean
   /**
-   * 迷你模式：整个界面换成一条小播放条（窗口也跟着缩，见 main/windows.ts）。
+   * 迷你窗开着没有。
    *
-   * ★ 界面状态在这儿，**窗口几何在主进程** —— 两边由 App 里一个 effect 对齐。
-   *   不把尺寸也塞进这个 store：那是窗口的事，渲染层拍脑袋定一个尺寸只会和真正
-   *   生效的那份（MINI_SIZE / MINI_PANEL_SIZE）漂开。
+   * ★ 它只是**主进程那一份的回声**（那个窗口是主进程开的，见 main/mini-window.ts），
+   *   渲染层没有任何渠道能自己知道 —— 由 App 里一条模块级订阅从主进程推来。
+   *   底栏那颗按钮靠它决定高亮，别处不依赖它。
+   * ★ 相关的那些状态都不在这儿：面板开合与高度、是否置顶、两个窗口各自的浓度，
+   *   全在迷你窗自己那棵树里（state/useMiniView）或设置里。这个 store 管的是**主窗口**的
+   *   界面路由，迷你窗只是「另一个窗口开着没有」这一件事。
    */
-  mini: boolean
-  /** 迷你模式里下方那块面板：null = 收起，装歌词还是播放队列见 MiniPanel */
-  miniPanel: MiniPanel | null
-  /**
-   * 进迷你之前记下的正常窗口尺寸。
-   *
-   * 藏起来的正常界面按这个尺寸钉住，而不是按迷你窗那 400px 重排一次 ——
-   * 否则滚动位置会被重新夹一遍、扩展的 webview 也会被缩成一个针眼再弹回来。
-   */
-  miniRestore: { width: number; height: number } | null
+  miniOpen: boolean
   /**
    * 满窗播放：底栏那颗封面点出来的那一层（大封面 + 歌词 + 控制条，见 components/FullPlayer.tsx）。
    *
@@ -146,9 +131,8 @@ interface UiState {
   setPaletteOpen: (open: boolean) => void
   /** 进 / 出满窗播放。只有这一条（没有 toggle）——「点封面就是进去」不该被一个开关语义盖住 */
   setFullPlayer: (open: boolean) => void
-  setMini: (mini: boolean) => void
-  /** 与底栏的 togglePanel 同一套语义：点同一颗就是收起，点另一颗是换内容（不闪、不跳） */
-  toggleMiniPanel: (panel: MiniPanel) => void
+  /** 只由主进程那条推送调用（见 miniOpen 的说明），界面自己不设它 */
+  setMiniOpen: (open: boolean) => void
   setAddToPlaylistTarget: (songIds: number[] | null) => void
   setSelection: (selection: number[], anchor?: number | null) => void
   clearSelection: () => void
@@ -168,9 +152,7 @@ export const useUi = create<UiState>((set, get) => ({
   sidebarCollapsed: false,
   sidebarAutoCollapsed: false,
   paletteOpen: false,
-  mini: false,
-  miniPanel: null,
-  miniRestore: null,
+  miniOpen: false,
   fullPlayer: false,
   addToPlaylistTarget: null,
   selection: [],
@@ -240,19 +222,7 @@ export const useUi = create<UiState>((set, get) => ({
     set({ sidebarCollapsed: collapsed, sidebarAutoCollapsed: collapsed }),
   setPaletteOpen: (open) => set({ paletteOpen: open }),
   setFullPlayer: (open) => set({ fullPlayer: open }),
-  setMini: (mini) =>
-    set((state) => ({
-      mini,
-      /**
-       * 进的时候把当前窗口尺寸记下来。此刻主进程还没收到通知（那边是 effect 里发的），
-       * 所以读到的就是正常尺寸 —— 迟一步的话读到的就是迷你窗那 400×64 了。
-       */
-      miniRestore: mini
-        ? { width: window.innerWidth, height: window.innerHeight }
-        : state.miniRestore
-    })),
-  toggleMiniPanel: (panel) =>
-    set((state) => ({ miniPanel: state.miniPanel === panel ? null : panel })),
+  setMiniOpen: (miniOpen) => set({ miniOpen }),
   setAddToPlaylistTarget: (songIds) => set({ addToPlaylistTarget: songIds }),
   setSelection: (selection, anchor) =>
     set({ selection, selectionAnchor: anchor === undefined ? null : anchor }),

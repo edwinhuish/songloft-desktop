@@ -24,6 +24,13 @@ interface SettingsState {
   load: () => Promise<void>
   patch: (patch: Partial<AppSettings>) => Promise<void>
   reset: () => Promise<void>
+  /**
+   * 收下**别的窗口**改出来的设置（主进程推来的 settings:changed）。
+   *
+   * 两个窗口各有一份 settings，而主题 / 强调色 / 两份整窗浓度都是「一改就该两处同时变」
+   * 的东西 —— 少了这一条，主窗口换主题时迷你条还停在旧主题上。
+   */
+  apply: (settings: AppSettings) => void
   setCoverAccent: (hex: string | null) => void
 }
 
@@ -54,6 +61,13 @@ function applyToDocument(settings: AppSettings, coverAccent: string | null): voi
    */
   root.style.setProperty('--window-opacity', String(settings.windowOpacity / 100))
   root.style.setProperty('--mini-window-opacity', String(settings.miniWindowOpacity / 100))
+
+  /*
+   * 迷你窗面板那层底色：传**百分比**（样式表里用 color-mix 的占比，见 tokens.css）。
+   * 它是相对播放条那层底色的浓度，100 = 与播放条完全一致 —— 深浅两个主题下都成立，
+   * 所以不必（也不能）按主题给两套默认值。
+   */
+  root.style.setProperty('--mini-panel-opacity', `${settings.miniPanelOpacity}%`)
 
   /* 歌词区域自己那层底色：与上面两项互不相干，也不参与整窗浓度（见 shared/ipc.ts） */
   root.style.setProperty('--lyric-panel-opacity', `${settings.lyricPanelOpacity}%`)
@@ -88,6 +102,11 @@ export const useSettings = create<SettingsState>((set, get) => ({
   reset: async () => {
     const settings = await window.songloft.settings.reset()
     set({ settings })
+    applyToDocument(settings, get().coverAccent)
+  },
+
+  apply: (settings) => {
+    set({ settings, loaded: true })
     applyToDocument(settings, get().coverAccent)
   },
 

@@ -5,7 +5,8 @@
  * 白名单暴露成 `window.songloft`，渠道名只能从这里取 —— 避免两边各写一份字符串。
  */
 
-import type { PlayMode } from './types'
+import type { ParsedLyric } from './lyric'
+import type { PlayMode, Song } from './types'
 
 export const IPC = {
   // ── 配置持久化（主进程持有 JSON 文件，渲染层只透过 IPC 读写）────────────────
@@ -31,13 +32,6 @@ export const IPC = {
   windowToggleMaximize: 'window:toggle-maximize',
   windowClose: 'window:close',
   windowGetState: 'window:get-state',
-  /**
-   * 进出迷你模式（连歌词展开一起）。
-   *
-   * 归在「窗口」这一组而不是界面状态里：迷你模式要动的是**真窗口** —— 尺寸、最小尺寸、
-   * 置顶、可缩放，全是窗口的事，渲染层碰不到（也没有必要碰）。几何怎么算见 main/windows.ts。
-   */
-  windowSetMini: 'window:set-mini',
   trayUpdate: 'tray:update',
   openExternal: 'shell:open-external',
   /** 弹保存框把文本写盘（导出歌单备份；渲染层没有文件系统权限） */
@@ -54,10 +48,41 @@ export const IPC = {
   /** 主进程代查 GitHub 上的最新 release（渲染层不直连第三方，也省掉 CORS 与 UA 的坑） */
   clientUpdateCheck: 'app:check-client-update',
 
+  // ── 迷你窗口（独立 BrowserWindow，见 main/mini-window.ts）──────────────────
+  //
+  // 四个来回都经过主进程转手，原因只有一条：**两个渲染层之间没有直接通道**
+  // （contextIsolation + 各自独立的 webContents），而播放的唯一事实源在主窗口那边。
+  // 主进程在这里只做「转发 + 算窗口尺寸」，不碰任何播放状态。
+  /** 主窗口 → 主进程：开 / 关迷你窗 */
+  miniSetOpen: 'mini:set-open',
+  /** 迷你窗 → 主进程：报一下此刻的布局（条 / 面板 / 菜单），由它算窗口高度 */
+  miniResize: 'mini:resize',
+  /** 迷你窗 → 主进程：界面与设置都就绪了（主进程据此显示窗口，并把请求转给主窗口） */
+  miniReady: 'mini:ready',
+  /** 主窗口 → 主进程：推一份播放状态（转给迷你窗） */
+  miniPush: 'mini:push',
+  /** 迷你窗 → 主进程：发一条遥控命令（转给主窗口执行） */
+  miniCommand: 'mini:command',
+
   // ── 主进程 → 渲染层（单向推送）────────────────────────────────────────
   onMediaCommand: 'media:command',
   onWindowState: 'window:state',
-  onNavigate: 'app:navigate'
+  onNavigate: 'app:navigate',
+  /** 迷你窗开没开（推给主窗口：那颗按钮的高亮、以及要不要继续推送状态都看它） */
+  onMiniOpen: 'mini:open',
+  /** 播放状态快照（推给迷你窗） */
+  onMiniState: 'mini:state',
+  /** 迷你窗在要状态（推给主窗口：请立刻推一份完整快照） */
+  onMiniRequest: 'mini:request',
+  /** 遥控命令（推给主窗口：落到真播放器上） */
+  onMiniCommand: 'mini:command',
+  /**
+   * 设置被某个窗口改了（推给**其余**窗口）。
+   *
+   * 两个窗口各有一份 useSettings，而主题 / 强调色 / 两份不透明度都是「一改就该两处同时变」
+   * 的东西。只靠调用方自己刷新的话，主窗口改主题、迷你条还停在旧主题上。
+   */
+  onSettingsChanged: 'settings:changed'
 } as const
 
 export interface WindowState {
@@ -67,22 +92,120 @@ export interface WindowState {
 }
 
 /**
- * 迷你模式的三个开关：是否迷你 + 下方面板是否展开 + 窗口里正开着右键菜单。
+ * 迷你窗的固定尺寸与下限。
  *
- * 一并传，是因为它们共同决定窗口高度。分两次传的话，主进程会在两次调用之间先摆出
- * 一个中间尺寸 —— 那一下是看得见的。
- *
- * ★ 面板里装的是歌词还是播放队列，主进程**不关心**（两者共用同一份高度）：所以这里只有
- *   一个布尔量，而不是 `panel: 'lyrics' | 'queue' | null`。
- * ★ `menu` 也是同一个道理：菜单里有哪几项、滑块是在调什么，主进程不关心；它只需要知道
- *   「页面上有个菜单开着，而 HTML 画的菜单出不了这个 64px 高的窗口」，据此临时把窗口加高
- *   （见 main/windows.ts 的 MINI_MENU_SIZE）。面板已经展开时这一项不起作用（那档本来就够高）。
+ * ★ 只有宽度与「播放条那一档高度」是死的：面板高度可由用户拖（见 MiniWindowLayout），
+ *   拖出来的值存进设置（AppSettings.miniPanelHeight）。
+ * ★ MINI_BAR_HEIGHT 必须与样式表里 `.mini-player` 的高度一致（styles/components.css 的
+ *   `--mini-bar-h`）—— 两边差一档就是「条里空出一截」或「控件被裁掉」。
+ * ★ MINI_MENU_HEIGHT 是为什么存在：右键菜单是页面里的 DOM，**画不出窗口** —— 而条自己只有
+ *   64px 高，一份「两个不透明度滑块」的菜单实测 150px 上下，压进去只会剩一条带滚动条的缝
+ *   （.context-menu 的 max-height 是 60vh，60% × 64 = 38px）。所以菜单一开就把窗口临时加高到
+ *   这一档（面板已经展开时不必 —— 那档本来就够高）。
  */
-export interface MiniModeState {
-  mini: boolean
+export const MINI_BAR_HEIGHT = 64
+export const MINI_WIDTH = 400
+export const MINI_MENU_HEIGHT = 240
+/** 面板能拖到的最小高度：再矮就只剩一行歌词的位置，那个高度没有意义 */
+export const MINI_PANEL_MIN_HEIGHT = 180
+/** 面板的默认高度（首次打开 / 没拖过时用） */
+export const MINI_PANEL_DEFAULT_HEIGHT = 416
+
+/**
+ * 迷你窗此刻的布局。
+ *
+ * 三个量共同决定窗口高度（`main/mini-window.ts` 的 applyMiniBounds），**必须一起传**：
+ * 分两次传的话，主进程会在两次调用之间先摆出一个中间尺寸 —— 那一下是看得见的。
+ *
+ * ★ 面板里装的是歌词还是播放队列，主进程**不关心**（两者共用同一份高度）：所以这里只有一个
+ *   布尔量，而不是 `panel: 'lyrics' | 'queue' | null`。
+ * ★ `menu` 同理：菜单里有哪几项、滑块在调什么，主进程不关心；它只需要知道「页面上有个菜单
+ *   开着，而 HTML 画的菜单出不了这个 64px 高的窗口」。
+ */
+export interface MiniWindowLayout {
+  /** 下方面板展开了没有 */
   expanded: boolean
+  /** 面板希望的高度（px；展开时才有意义，下限见 MINI_PANEL_MIN_HEIGHT） */
+  panelHeight: number
+  /** 窗口里正开着右键菜单 */
   menu: boolean
 }
+
+/**
+ * 迷你窗要显示的播放状态 —— **轻的那一半**，跟着播放进度走（约每秒几次）。
+ *
+ * 拆成轻 / 重两半不是为了省几个字节，而是为了让「每秒四次的推送」不必带上队列与歌词
+ * （队列最多 500 首、歌词可能上百行，都塞进每秒四次的包里纯属白烧）。
+ */
+export interface MiniPlayerLight {
+  /** 当前曲目在 order 里的游标；-1 = 还没开始播 */
+  cursor: number
+  playing: boolean
+  position: number
+  duration: number
+  volume: number
+  muted: boolean
+  playMode: PlayMode
+  /** 当前曲目收没收藏（主窗口那份收藏表是唯一事实源） */
+  favorite: boolean
+  /** 主窗口按封面取出的强调色。迷你窗自己算不了（那要 canvas + 主进程代取字节） */
+  accent: string | null
+}
+
+/**
+ * **重的那一半**：只在队列 / 歌词真的变了时才发（换歌时也会重发 —— 歌词跟着换）。
+ *
+ * ★ 顺序要紧：两者同时变化时**先发这一份、再发 light**。反过来的话，迷你窗会拿新 cursor 去
+ *   查旧 queue，取到的是另一首歌（或 undefined）。
+ * ★ media 也在这里：封面是交给 `img` 直接请求的，地址里得带 `access_token`，而迷你窗**没有
+ *   会话**（见 MiniApp 的说明）——服务器地址与 token 只能由主窗口喂过来。
+ * ★ 字段与 state/usePlayer 的 PlayerState 一一对应，迷你窗那边的镜像 store 直接照着贴。
+ */
+export interface MiniPlayerHeavy {
+  queue: Song[]
+  order: number[]
+  lyrics: ParsedLyric
+  lyricsLoading: boolean
+  lyricFailed: boolean
+  media: { baseUrl: string; accessToken: string }
+}
+
+export interface MiniPlayerSnapshot {
+  light: MiniPlayerLight
+  heavy: MiniPlayerHeavy
+}
+
+/**
+ * 迷你窗发来的**遥控命令**。
+ *
+ * 命名与 PlayerState 上的方法一一对应，主窗口那份执行器于是就是一张直白的 switch
+ * （见 renderer 的 state/mini-host.ts）—— 换一套名字只会多出一层翻译。
+ *
+ * ★ 这里刻意**没有**「播放某一批歌」「加入队列」这类带歌曲数组的命令：迷你窗里没有能触发它
+ *   们的入口（曲库、歌单、搜索都在主窗口那边），凭空多一条通道等于多一份要维护的语义。
+ *   真需要时再加，别顺手补全。
+ */
+export type MiniCommand =
+  | { kind: 'toggle' }
+  | { kind: 'pause' }
+  | { kind: 'next'; auto: boolean }
+  | { kind: 'previous' }
+  | { kind: 'seek'; seconds: number }
+  | { kind: 'seek-by'; delta: number }
+  | { kind: 'set-volume'; volume: number }
+  | { kind: 'flush-volume' }
+  | { kind: 'toggle-mute' }
+  | { kind: 'cycle-play-mode' }
+  | { kind: 'set-play-mode'; mode: PlayMode }
+  | { kind: 'toggle-favorite' }
+  | { kind: 'jump-to'; index: number }
+  | { kind: 'remove-from-queue'; indexes: number[] }
+  | { kind: 'move-in-queue'; from: number; to: number }
+  | { kind: 'clear-queue' }
+  | { kind: 'reload-lyrics' }
+
+/** 迷你窗里那两个面板装什么（与主窗口抽屉的 PanelTab 同一套语义，只是少一个「正在播放」） */
+export type MiniPanel = 'lyrics' | 'queue'
 
 export type MediaCommand =
   | { kind: 'play-pause' }
@@ -200,13 +323,29 @@ export interface AppSettings {
   /**
    * **迷你窗口**的整窗不透明度 0–100，与 windowOpacity **各存一份、互不影响**。
    *
-   * ★ 主窗与迷你窗是**同一个 BrowserWindow**（迷你只是被主进程缩成 400×64、外加一条
-   *   界面形态），所以两者在 DOM 上是同一棵树的两种形态 —— 分开靠的是 <html> 上的
-   *   data-mini 标记（见 base.css 里那两条 opacity）。
+   * ★ 两个窗口各有一份自己的界面树（迷你窗是独立 BrowserWindow），所以分开靠的是
+   *   <html> 上的 data-mini 标记（见 base.css 里那两条 opacity）。
    * ★ 为什么不与 windowOpacity 共用一个值：它们想要的通透程度本来就不一样 —— 主窗常与
    *   别的窗口并排看，迷你条则要浮在屏幕角上、还能瞧见底下在放什么。
    */
   miniWindowOpacity: number
+  /**
+   * 迷你窗**下方那块面板**（歌词 / 播放队列共用）自己的底色浓度 0–100。
+   *
+   * ★ 它是相对**播放条那层底色**的浓度（样式表里 `color-mix(--mini-tint …)`），所以 100 就是
+   *   「与播放条一致」—— 深浅两个主题下都成立，不必为两边各写一个默认值。
+   * ★ 与 windowOpacity / miniWindowOpacity 不是一回事：那两个调的是**整窗**（桌面会透进来），
+   *   这一个只在窗口内部透 —— 面板淡下去露出的是同一窗口里它下面那层。
+   *   与 lyricPanelOpacity 也不是一个：那个只作用于歌词区域，且只在歌词那边生效。
+   */
+  miniPanelOpacity: number
+  /**
+   * 迷你窗面板的高度 px（用户拖着调的，见 main/mini-window.ts 与 MiniPlayer 底部那根把手）。
+   *
+   * 存下来是因为「我拖到这么高」是个偏好而不是临时值：迷你窗每次打开都是新窗口，
+   * 不记的话拖出来的高度一关就没了。下限见 MINI_PANEL_MIN_HEIGHT。
+   */
+  miniPanelHeight: number
   /** 歌词字号 px */
   lyricFontSize: number
   /**
@@ -297,6 +436,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   windowOpacity: 100,
   // 迷你窗同样默认实心（与主窗各管各的）
   miniWindowOpacity: 100,
+  // 100 = 与播放条一致（相对浓度，见 AppSettings.miniPanelOpacity 的说明）
+  miniPanelOpacity: 100,
+  miniPanelHeight: MINI_PANEL_DEFAULT_HEIGHT,
   lyricFontSize: 30,
   // 默认不铺额外底色：歌词区域透出所在面板的玻璃质感（与改动前一致）
   lyricPanelOpacity: 0,
