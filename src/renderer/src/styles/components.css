@@ -1158,6 +1158,25 @@
   overflow: hidden;
   background: var(--mini-panel-tint);
   animation: mini-panel-in var(--dur-3) var(--ease);
+  /*
+   * ★★ 面板里的文字**压成实色**。
+   *
+   * 这一块的底浓度是用户拧的（上面那条 --mini-panel-tint），拧低时桌面从窗口里透上来 ——
+   * 而文字本身带 alpha（后续歌词行只有 26%、队列次要文字 56%），底色一透，字就跟着糊，
+   * 看上去像「文字也被调了透明度」。把这几档在**实底**上的等效值算出来写在下面，
+   * 「面板背景不透明度只改背景」这句话才成立：字的观感与底色 100% 时一模一样，透出来的是底。
+   *
+   * ★ 用 color-mix 而不是手写十六进制：`rgb(…) X% + 实底 (100-X)%` 正好等于「那档颜色以
+   *   X% 不透明度压在那个实底上」，于是这里只写**浓度**，不必再维护一批算出来的色值。
+   *   墨色取 --mini-text-ink（深浅两套在 tokens.css 的迷你窗那两段里给），实底取 --glass-base。
+   *   改上面那几档浓度时这几个数跟着改一次即可（两边写的是同一个浓度）。
+   */
+  --text-1: color-mix(in srgb, var(--mini-text-ink) 94%, var(--glass-base));
+  --text-2: color-mix(in srgb, var(--mini-text-ink) 64%, var(--glass-base));
+  --text-3: color-mix(in srgb, var(--mini-text-ink) 56%, var(--glass-base));
+  --text-4: color-mix(in srgb, var(--mini-text-ink) 40%, var(--glass-base));
+  /* 歌词那几档同样压底：见 tokens.css 的 --lyric-underlay 与下面 .lyric-line 那几条 */
+  --lyric-underlay: var(--glass-base);
 }
 
 @keyframes mini-panel-in {
@@ -1828,7 +1847,11 @@
   line-height: 1.5;
   /* 各档浓度 = 歌词字色（默认主题文字色，可为任意颜色）的百分之多少 × 字体不透明度。
      用 color-mix 而不是整个元素的 opacity：调淡之后「当前行最亮、其余逐档变暗」依然成立 */
-  color: color-mix(in srgb, var(--lyric-fg) calc(28% * var(--lyric-fg-alpha)), transparent);
+  color: color-mix(
+    in srgb,
+    var(--lyric-fg) calc(28% * var(--lyric-fg-alpha)),
+    var(--lyric-underlay, transparent)
+  );
   transition:
     color var(--dur-2) var(--ease),
     transform var(--dur-2) var(--ease);
@@ -1837,11 +1860,19 @@
 }
 
 .lyric-line:hover {
-  color: color-mix(in srgb, var(--lyric-fg) calc(44% * var(--lyric-fg-alpha)), transparent);
+  color: color-mix(
+    in srgb,
+    var(--lyric-fg) calc(44% * var(--lyric-fg-alpha)),
+    var(--lyric-underlay, transparent)
+  );
 }
 
 .lyric-line[data-active='true'] {
-  color: color-mix(in srgb, var(--lyric-fg) calc(96% * var(--lyric-fg-alpha)), transparent);
+  color: color-mix(
+    in srgb,
+    var(--lyric-fg) calc(96% * var(--lyric-fg-alpha)),
+    var(--lyric-underlay, transparent)
+  );
   font-weight: 620;
   transform: scale(1.045);
 }
@@ -1853,28 +1884,48 @@
 .lyric-translation {
   font-size: 0.78em;
   font-weight: 450;
-  color: color-mix(in srgb, var(--lyric-fg) calc(28% * var(--lyric-fg-alpha)), transparent);
+  color: color-mix(
+    in srgb,
+    var(--lyric-fg) calc(28% * var(--lyric-fg-alpha)),
+    var(--lyric-underlay, transparent)
+  );
   margin-top: 2px;
 }
 
 .lyric-line[data-active='true'] .lyric-translation {
-  color: color-mix(in srgb, var(--lyric-fg) calc(68% * var(--lyric-fg-alpha)), transparent);
+  color: color-mix(
+    in srgb,
+    var(--lyric-fg) calc(68% * var(--lyric-fg-alpha)),
+    var(--lyric-underlay, transparent)
+  );
 }
 
 .lyric-roman {
   font-size: 0.7em;
-  color: color-mix(in srgb, var(--lyric-fg) calc(28% * var(--lyric-fg-alpha)), transparent);
+  color: color-mix(
+    in srgb,
+    var(--lyric-fg) calc(28% * var(--lyric-fg-alpha)),
+    var(--lyric-underlay, transparent)
+  );
   letter-spacing: 0.01em;
 }
 
 /* 逐字高亮：未唱到的字压暗，唱到的字由 ::after 蒙层逐字揭开 */
 .lyric-word {
   position: relative;
-  color: color-mix(in srgb, var(--lyric-fg) calc(28% * var(--lyric-fg-alpha)), transparent);
+  color: color-mix(
+    in srgb,
+    var(--lyric-fg) calc(28% * var(--lyric-fg-alpha)),
+    var(--lyric-underlay, transparent)
+  );
 }
 
 .lyric-line[data-active='true'] .lyric-word[data-sung='false'] {
-  color: color-mix(in srgb, var(--lyric-fg) calc(34% * var(--lyric-fg-alpha)), transparent);
+  color: color-mix(
+    in srgb,
+    var(--lyric-fg) calc(34% * var(--lyric-fg-alpha)),
+    var(--lyric-underlay, transparent)
+  );
 }
 
 .lyric-line[data-active='true'] .lyric-word[data-sung='true'] {

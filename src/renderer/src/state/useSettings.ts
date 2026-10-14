@@ -14,6 +14,7 @@ import { create } from 'zustand'
 
 import { DEFAULT_SETTINGS, type AppSettings } from '@shared/ipc'
 import { readableTextOn } from '@/lib/color'
+import { isMiniWindow } from '@/lib/mini-window'
 
 interface SettingsState {
   settings: AppSettings
@@ -76,9 +77,14 @@ function applyToDocument(settings: AppSettings, coverAccent: string | null): voi
    * 歌词文字：颜色与不透明度分开给。
    * ★ 不透明度传的是 0–1（而不是 %），因为样式表里要拿它**乘**各档浓度
    *   （`calc(28% * var(--lyric-fg-alpha))`）—— 百分比之间不能相乘。
-   * ★ 颜色为空时回落到主题的文字色，这样「跟随主题」在深浅两种主题下都对得上。
+   * ★ 颜色为空时回落到主题的文字色，这样「跟随主题」在深浅两种主题下都对得上 ——
+   *   但**迷你窗回落到墨色**（--mini-text-ink，不透明）而不是 --text-1（带一点 alpha）：
+   *   那边面板的底浓度可由用户拧低、会透出桌面，字色若带 alpha，那几档浓度乘下来会残留
+   *   一点点透明（26% 抑或 94% 都会），看着就像「文字跟着背景一起变淡」。
+   *   用户自己指定颜色时本来就是个不透明色值，不必管。
    */
-  root.style.setProperty('--lyric-fg', settings.lyricFontColor || 'var(--text-1)')
+  const lyricInk = isMiniWindow() ? 'var(--mini-text-ink)' : 'var(--text-1)'
+  root.style.setProperty('--lyric-fg', settings.lyricFontColor || lyricInk)
   root.style.setProperty('--lyric-fg-alpha', String(settings.lyricFontOpacity / 100))
 }
 
