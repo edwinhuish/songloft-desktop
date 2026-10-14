@@ -50,6 +50,14 @@ const exactly = (n) => Object.assign((v) => v === n, { label: `=${n}` })
 const atLeast = (n) => Object.assign((v) => v >= n, { label: `>=${n}` })
 /** 上限：几何偏差这类量只需要"不超过"，用 = 会把亚像素舍入变成假失败 */
 const atMost = (n) => Object.assign((v) => v <= n, { label: `<=${n}` })
+/**
+ * 值要匹配这个正则。
+ *
+ * 用于「形状固定、内容会变」的东西 —— 迷你条上那行 `03:12/04:15` 就是：秒数随播放走，
+ * 但「两个时间拼在一起、中间一个斜杠」这个形状是固定的（钉死的那个值只会在截图里过期）。
+ */
+const matches = (re) =>
+  Object.assign((v) => typeof v === 'string' && re.test(v), { label: `~${re}` })
 /** 断言数组与给定序列**逐项相等**（元素与顺序都要对，用于钉住菜单项的顺序） */
 const equals = (...want) =>
   Object.assign(
@@ -476,11 +484,48 @@ window.__t = {
      */
     pluginWebviews: vis('webview').length,
     pluginOverlays: vis('.plugin-view-overlay').map((e) => e.dataset.state ?? ''),
-    // 迷你模式（整窗换成一条小播放条，DOM 在 .shell 直下、不在任何 .surface 里）
+    /*
+     * 迷你播放器。
+     * ★ 它的界面**在另一个窗口里**（独立 BrowserWindow → 另一个渲染进程 → 另一个 CDP
+     *   target，见 main/mini-window.ts），所以这一份探针在哪个页面里跑就量到哪一边：
+     *   · 主窗口这边这三个数永远是 0 —— 那正是「主界面没有被换成迷你条」的证据；
+     *   · 迷你窗那边 .mini-player 恒为 1，面板/队列按开合变化。
+     *   ★ 迷你那几个 DOM 不在任何 .surface 里，所以不走 vis()（那一页里也没有 data-hidden）。
+     */
     miniPlayer: document.querySelectorAll('.mini-player').length,
     miniPanel: document.querySelectorAll('.mini-panel').length,
     miniQueue: document.querySelectorAll('.mini-queue').length,
-    shellMini: (document.querySelector('.shell') || {}).dataset?.mini ?? '',
+    /*
+     * 底栏那颗迷你按钮的按下态。窗口是**主进程**开的，渲染层没有别的渠道知道它开着没有
+     * （状态由主进程推回来，见 useUi.miniOpen）—— 所以这一条同时验了两件事：
+     * 按钮跟着状态走，以及主进程那条推送真的到了。
+     * 三种取值：'true' 开着 / '' 关着 / 'missing' 按钮不在（那就是界面坏了，不是状态）。
+     */
+    miniOpen:
+      vis('.playerbar [aria-label="关闭迷你播放器"]').length > 0
+        ? 'true'
+        : vis('.playerbar [aria-label="迷你播放器"]').length > 0
+          ? ''
+          : 'missing',
+    /*
+     * 迷你条中栏那两行（歌名 / 歌手）与右上角那一组窗口钮。
+     * ★ 中栏的行数必须**去重后再数**：一行放不下时那一行会挂两份文本（循环滚动的第二份），
+     *   直接数 .mini-line-copy 会随歌名长短在 2 与 4 之间飘。
+     * ★ 窗口钮按 aria-label 逐个点名（equals 连顺序一起钉）：这一条同时挡住「少了一颗」
+     *   与「那第三颗『退出迷你模式』又回来了」—— 独立窗口之后它已经没有意义。
+     */
+    miniInfo: [
+      ...new Set(
+        [...document.querySelectorAll('.mini-info-text .mini-line-copy')].map((e) =>
+          (e.textContent || '').trim()
+        )
+      )
+    ],
+    miniTime: (document.querySelector('.mini-time') || {}).textContent ?? '',
+    miniControls: document.querySelectorAll('.mini-controls button').length,
+    miniWinButtons: [...document.querySelectorAll('.mini-window-actions button')].map(
+      (e) => e.getAttribute('aria-label') || ''
+    ),
     // 登录页：形状 + 出错时那条提示（探不通服务器与账号密码错是两句不同的话）
     login: document.querySelectorAll('.login').length,
     probeText: [...document.querySelectorAll('.probe-result')]
@@ -508,19 +553,37 @@ window.__t = {
 'ready'
 `
 
-async function findPage() {
+/**
+ * 找一个渲染层的调试 target。
+ *
+ * `hash` 给了就只要 URL 以它结尾的那一个（'#mini' = 迷你窗那一页）—— 两个窗口各是一个
+ * target，不筛的话拿到的取决于 CDP 列出来的顺序，跑十次红三次那种。
+ */
+async function findPage(hash = '') {
   for (let i = 0; i < 60; i += 1) {
     try {
       const res = await fetch(`http://127.0.0.1:${CDP}/json`)
       const list = await res.json()
-      const page = list.find((t) => t.type === 'page' && t.webSocketDebuggerUrl)
+      const page = list.find(
+        (t) => t.type === 'page' && t.webSocketDebuggerUrl && (!hash || t.url.endsWith(hash))
+      )
       if (page) return page
     } catch {
       /* 还没起来 */
     }
     await sleep(500)
   }
-  throw new Error('等不到渲染层调试 target')
+  throw new Error(`等不到渲染层调试 target${hash ? `（${hash}）` : ''}`)
+}
+
+/** 连上某个 target 的 WebSocket（连不上就是启动没起来，直接抛） */
+async function openSocket(url) {
+  const socket = new WebSocket(url)
+  await new Promise((resolve, reject) => {
+    socket.addEventListener('open', resolve, { once: true })
+    socket.addEventListener('error', reject, { once: true })
+  })
+  return socket
 }
 
 class Session {
@@ -579,7 +642,11 @@ class Session {
 }
 
 /**
- * [输出名, 表达式（只允许一次点击）, 点完后等多久, 期望的 DOM 统计]
+ * [输出名, 表达式（只允许一次点击）, 点完后等多久, 期望的 DOM 统计, 在哪一页跑]
+ *
+ * ★ 第 5 项 'mini' = 这一步在**迷你窗那一页**里跑（默认在主窗口）。两个窗口各是一个 CDP
+ *   target，而 window.__t 这些助手是**按页面注入**的 —— 不指明跑哪一页，点「歌词」那一步
+ *   会在主窗口里找 `.mini-bar`（那里没有），断言表现成 NOT_FOUND。
  *
  * mock 数据基线：43 首（41 本地 + 2 网络 + 0 电台）、5 位歌手、8 张专辑、5 种流派、
  * 3 张歌单、10 条最近播放、6 首收藏、5 个文件夹；流派「摇滚」12 首。
@@ -1119,36 +1186,59 @@ const STEPS = [
     { fullPlayer: exactly(0), titlebarGlass: exactly(true) }
   ],
   /*
-   * ── 迷你模式 ───────────────────────────────────────────────────────────
-   * 整窗换成一条小播放条：窗口几何在主进程（main/windows.ts），渲染层只报
-   * 「开没开 + 面板展没展开」。shellMini 就是那个标记 —— 少了它界面会一半迷你一半原样。
-   * ★ 迷你那几个 DOM **不在**任何 `.surface` 里（挂在 .shell 直下），所以不走 vis()。
+   * ── 迷你播放器（一个**独立的窗口**，见 main/mini-window.ts）─────────────────
+   * 底栏那颗按钮只开 / 关那个窗口；主窗口自始至终不缩、不重排、也不换界面 ——
+   * 所以「点完之后主窗口里没有 .mini-player」与「按钮变成按下态」这两条要一起断言：
+   * 只看前者的话，「按钮没接上」也能过。
    */
   [
-    '56-mini-enter',
-    'window.__t.click(\'.playerbar button[aria-label="迷你模式"]\')',
-    2000,
-    { shellMini: exactly('true'), miniPlayer: exactly(1) }
+    '56-mini-open',
+    "window.__t.clickLabel('迷你播放器')",
+    2600,
+    { miniOpen: exactly('true'), miniPlayer: exactly(0) }
+  ],
+  /*
+   * 下面这几步在**迷你窗那一页**里跑（另一个 target，见 STEPS 上面那段说明）。
+   *
+   * 这一步不带动作，只验条本身的形状 —— 点封面（这一条上唯一不点出动作的地方）。
+   * 中栏**两行**（歌名 / 歌手 + 时间）、时间在第一行之下、控件五颗、右上角只有
+   * 最小化与关闭：这几条正是这一版重做过的外观，截图看不出「少了一行」。
+   */
+  [
+    '57-mini-bar',
+    "window.__t.click('.mini-cover')",
+    600,
+    {
+      miniPlayer: exactly(1),
+      miniPanel: exactly(0),
+      miniInfo: exactly(2),
+      miniTime: matches(/^\d{1,2}:\d{2}\/\d{1,2}:\d{2}$/),
+      miniControls: exactly(5),
+      miniWinButtons: equals('最小化', '关闭')
+    },
+    'mini'
   ],
   // 条下面能展开歌词 / 队列。歌词这一份与底栏、满窗播放共用同一个 LyricsView，
   // 所以那 10 行的断言在这里同样成立 —— 丢行的回归只该有一份，但三处都得罩住。
   [
-    '57-mini-lyrics',
-    'window.__t.click(\'.mini-bar [aria-label="歌词"]\')',
+    '58-mini-lyrics',
+    'window.__t.clickLabel("歌词")',
     2000,
-    { miniPanel: exactly(1), lyricLines: exactly(10) }
+    { miniPanel: exactly(1), lyricLines: exactly(10) },
+    'mini'
   ],
   [
-    '58-mini-queue',
-    'window.__t.click(\'.mini-bar [aria-label="播放队列"]\')',
+    '59-mini-queue',
+    'window.__t.clickLabel("播放队列")',
     1600,
-    { miniPanel: exactly(1), miniQueue: exactly(1) }
+    { miniPanel: exactly(1), miniQueue: exactly(1) },
+    'mini'
   ],
   [
-    '59-mini-exit',
-    'window.__t.click(\'.mini-bar [aria-label="退出迷你模式"]\')',
+    '60-mini-close',
+    "window.__t.clickLabel('关闭迷你播放器')",
     2000,
-    { shellMini: exactly(''), miniPlayer: exactly(0) }
+    { miniOpen: exactly(''), miniPlayer: exactly(0) }
   ],
 
   // 折叠成图标条后，图标与歌单封面必须仍然居中。带计数的项曾因 .nav-count 的
@@ -1156,7 +1246,7 @@ const STEPS = [
   // 放在命令面板之前：面板的 Escape 绑在它自己的输入框上，从 window 派发关不掉，
   // 先折叠就不会让它盖在侧栏截图上。
   [
-    '60-sidebar-collapsed',
+    '61-sidebar-collapsed',
     // 收起/展开那颗按钮压在侧栏右下角（`.sidebar-toggle`），没有可见文字 ——
     // 是个纯图标钮，只能按 aria-label 点它
     "window.__t.clickLabel('收起侧栏')",
@@ -1164,7 +1254,7 @@ const STEPS = [
     { offCenter: atMost(1) }
   ],
   [
-    '61-command-palette',
+    '62-command-palette',
     "window.__t.key('k', { ctrlKey: true })",
     1400,
     {
@@ -1181,7 +1271,7 @@ const STEPS = [
   ],
   // 关掉面板：Esc 绑在它**自己那个输入框**上（从 window 派发到不了那个处理器）
   [
-    '62-palette-closed',
+    '63-palette-closed',
     "window.__t.keyOn('.palette-input', 'Escape')",
     900,
     { paletteItems: exactly(0) }
@@ -1193,15 +1283,15 @@ const STEPS = [
    * （折叠态才要求两者对齐）—— 拿 offCenter 断言展开会得到一条永远红的断言。
    */
   [
-    '63-sidebar-expanded',
+    '64-sidebar-expanded',
     "window.__t.clickLabel('展开侧栏')",
     1200,
     { sidebarCollapsed: exactly('false') }
   ],
-  ['64-nav-menu-again', "window.__t.clickLabel('导航菜单')", 900],
-  ['65-open-settings', "window.__t.click('.context-menu button', '设置')", 1600],
+  ['65-nav-menu-again', "window.__t.clickLabel('导航菜单')", 900],
+  ['66-open-settings', "window.__t.click('.context-menu button', '设置')", 1600],
   [
-    '66-settings-account-again',
+    '67-settings-account-again',
     "window.__t.click('.settings-nav button', '账号')",
     2200,
     { settingText: containsAll('退出登录', '测试连接') }
@@ -1220,7 +1310,7 @@ const STEPS = [
    *   （见 stubConfirm 的说明），否则 CDP 驱动器会一直等一个没人能点的按钮。
    */
   [
-    '67-logout',
+    '68-logout',
     "window.__t.click('.btn', '退出登录')",
     2200,
     {
@@ -1229,19 +1319,19 @@ const STEPS = [
       confirmCalls: containsAll('退出登录')
     }
   ],
-  ['68-login-account', "window.__t.type('#login-user', 'admin')", 900],
-  ['69-login-password', "window.__t.type('#login-pass', 'admin')", 900],
+  ['69-login-account', "window.__t.type('#login-user', 'admin')", 900],
+  ['70-login-password', "window.__t.type('#login-pass', 'admin')", 900],
   // 先给一个**连不上**的地址：这时该说的话是「连不上」，与「用户名或密码不正确」不是一句
-  ['70-login-bad-url', "window.__t.type('#server-url', 'http://127.0.0.1:9')", 900],
+  ['71-login-bad-url', "window.__t.type('#server-url', 'http://127.0.0.1:9')", 900],
   [
-    '71-login-failed',
+    '72-login-failed',
     "window.__t.submit('.login-form')",
     3000,
     { login: exactly(1), probeErrors: atLeast(1), probeText: containsAll('无法连接') }
   ],
-  ['72-login-good-url', "window.__t.type('#server-url', 'http://127.0.0.1:58091')", 900],
+  ['73-login-good-url', "window.__t.type('#server-url', 'http://127.0.0.1:58091')", 900],
   [
-    '73-login-success',
+    '74-login-success',
     "window.__t.submit('.login-form')",
     4000,
     { login: exactly(0), navs: atLeast(5), surface: exactly('native') }
@@ -1255,11 +1345,7 @@ async function main() {
   const page = await findPage()
   console.log(`[drive] 已连接 ${page.url}`)
 
-  const ws = new WebSocket(page.webSocketDebuggerUrl)
-  await new Promise((resolve, reject) => {
-    ws.addEventListener('open', resolve, { once: true })
-    ws.addEventListener('error', reject, { once: true })
-  })
+  const ws = await openSocket(page.webSocketDebuggerUrl)
   const session = new Session(ws)
   await session.send('Page.enable')
   await session.send('Runtime.enable')
@@ -1282,16 +1368,38 @@ async function main() {
   await session.evaluate('window.__t.stubConfirm()')
   console.log('[drive] 启动时 DOM:', JSON.stringify(await session.evaluate('window.__t.counts()')))
 
+  /*
+   * 迷你窗那一页的会话。★ **按需连**，不在启动时就找它：它是底栏那颗按钮点下去才出现的
+   * 第二个窗口（另一个渲染进程），启动那一刻这个 target 根本不存在。
+   * 连上之后把同一份 HELPERS 注进那一页 —— 否则那边没有 window.__t，步骤只能靠裸表达式写。
+   */
+  let miniSession = null
+  const sessionFor = async (onPage) => {
+    if (onPage !== 'mini') return session
+    if (!miniSession) {
+      const target = await findPage('#mini')
+      const socket = await openSocket(target.webSocketDebuggerUrl)
+      miniSession = new Session(socket)
+      await miniSession.send('Page.enable')
+      await miniSession.send('Runtime.enable')
+      await miniSession.evaluate(HELPERS)
+      await miniSession.evaluate('window.__t.stubConfirm()')
+      console.log(`[drive] 已连接迷你窗 ${target.url}`)
+    }
+    return miniSession
+  }
+
   let failures = 0
-  for (const [name, expr, wait, expect] of STEPS) {
+  for (const [name, expr, wait, expect, onPage] of STEPS) {
+    const active = await sessionFor(onPage)
     let clicked
     try {
-      clicked = await session.evaluate(expr)
+      clicked = await active.evaluate(expr)
     } catch (error) {
       clicked = `ERR ${error.message}`
     }
-    const bytes = await session.shot(name, wait ?? 1000)
-    const stats = await session.evaluate('window.__t.counts()')
+    const bytes = await active.shot(name, wait ?? 1000)
+    const stats = await active.evaluate('window.__t.counts()')
 
     let verdict = ''
     if (expect) {
@@ -1314,6 +1422,8 @@ async function main() {
   }
 
   ws.close()
+  /* 迷你窗那一页若连过，也得断掉 —— 否则进程会挂在那个 socket 上不退出 */
+  miniSession?.ws.close()
 
   if (failures > 0) {
     console.error(`[drive] ${failures} 个界面的期望值未满足`)

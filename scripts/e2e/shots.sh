@@ -5,7 +5,7 @@
 #   1. docs/e2e-walkthrough.png —— 全部步骤的覆盖图：一格一步、带步骤名。
 #      每格很小（看不清字），它存在的意义是**一屏看完整片森林** ——
 #      「哪一格是空的 / 白了 / 弹窗没关掉」这种问题在这张图上一眼就抓得到，
-#      而逐个点开 73 张 png 是没人会做的事。
+#      而逐个点开 74 张 png 是没人会做的事。
 #   2. docs/screenshots/*.png   —— 主要界面的单张图，留给 README 嵌。
 #      这些是**看得清**的（1440 宽折到 1080），所以不与覆盖图重复职责。
 #
@@ -36,8 +36,13 @@ count="$(find "$SHOTS" -name '*.png' | wc -l)"
 echo "==> 从 $count 张巡检截图生成文档用图"
 
 # ── 主要界面：挑出有代表性的那几步，换成能看懂的短名字 ──────────────────────
-# 键是巡检里的步骤名（前缀匹配），值是文档里那份的名字。
+# 键是巡检里的步骤名（前缀匹配），值是文档里那份的名字；
+# 可选的第三段是缩放方式（默认折到 1080 宽）。
 # 改界面后步骤可能挪动，所以这里用**名字**而不是序号找 —— 序号会漂，名字不会。
+#
+# ★ 迷你窗那一张要单独说：它是**另一个窗口**（另一张 CDP 截图），只有 400px 宽 ——
+#   按默认那档折到 1080 是从 400 放上去，字会糊成一片。整倍放大（2x）配最近邻采样
+#   出来的是「像素大一点的同一张图」，比插值出来的灰边清楚得多。
 PICKS=(
   'home:home'
   'library:library'
@@ -51,7 +56,7 @@ PICKS=(
   'extensions-store:extensions-store'
   'extensions-manage:extensions-manage'
   'fullplayer-open:full-player'
-  'mini-lyrics:mini-player'
+  'mini-lyrics:mini-player:2x'
   'logout:login'
   'login-failed:login-error'
 )
@@ -62,14 +67,21 @@ find "$OUT_DIR" -maxdepth 1 -name '*.png' -delete
 
 for pick in "${PICKS[@]}"; do
   step="${pick%%:*}"
-  name="${pick##*:}"
+  rest="${pick#*:}"
+  name="${rest%%:*}"
+  # 第三段可省：省略时 ${rest##*:} 就是 name 本身，于是走默认那档缩放
+  scale="${rest##*:}"
   # 步骤名形如 `43-extensions-store`，用尾部通配匹配
   src="$(find "$SHOTS" -maxdepth 1 -name "*-$step.png" | head -1)"
   if [ -z "$src" ]; then
     echo "    跳过 $name：没找到步骤 *-$step.png（巡检步骤改名了？）" >&2
     continue
   fi
-  magick "$src" -resize 1080x -strip -depth 8 "$OUT_DIR/$name.png"
+  if [ "$scale" = '2x' ]; then
+    magick "$src" -filter point -resize 200% -strip -depth 8 "$OUT_DIR/$name.png"
+  else
+    magick "$src" -resize 1080x -strip -depth 8 "$OUT_DIR/$name.png"
+  fi
   echo "    $name.png  ←  $(basename "$src")"
 done
 

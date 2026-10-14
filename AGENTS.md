@@ -133,7 +133,8 @@ src/
    ├─ components/    Sidebar / TitleBar / SongTable / PlayerBar / LyricsView / CommandPalette /
    │                 Panel / ContextMenu / Modal / Toasts / SelectionBar /
    │                 FullPlayer（满窗播放：盖在原生面上的浮层）/
-   │                 MiniPlayer（迷你模式的整窗界面）/
+   │                 MiniPlayer（迷你窗那一条，跑在**另一个窗口**里，见 §4）/
+   │                 （同目录的 ../MiniApp.tsx 是那个窗口的根，与 App.tsx 并列）
    │                 ExtensionFrame（扩展主框架：左侧栏 + 右内容面）/
    │                 PluginSurface（扩展 webview 栈）/ PluginIcon /
    │                 RegistrySourcesDialog（管理订阅源）
@@ -205,10 +206,16 @@ src/
   窗口唯一常驻的拖拽区与关闭入口，不能被它吃掉），但上边界要**伸到标题栏底下**
   （`top: -titlebar-h`，内容靠 `padding-top` 让开），标题栏再由 `.shell[data-fullplayer]`
   换成透明底 —— 满窗播放时这两块要的是**同一张**底色，各画一份「看着差不多」的糊封面
-  在接缝处一定对不上。切去扩展面、进迷你时它跟着一起被藏，切回来原样还在；
+  在接缝处一定对不上。切去扩展面时它跟着一起被藏，切回来原样还在；
   底下的页面一直挂着没被卸载，收起后仍是离开时那一页。
-* **迷你模式**（`useUi.mini`）：整个界面换成一条小播放条，**窗口几何在主进程**
-  （`main/windows.ts` 的 `MINI_SIZE` / `MINI_PANEL_SIZE`），渲染层只报"开没开 + 面板展没展开"。
+* **迷你播放器**（底栏那颗按钮，`components/MiniPlayer.tsx` + `MiniApp.tsx`）：它是**另一个
+  BrowserWindow**（`main/mini-window.ts`），主窗口一点都不动 —— 这也是它没有走 `surface`
+  也没有走满窗播放那套「藏起来」的原因：它压根不在这个窗口里。
+  两边靠主进程中转：主窗口推**播放状态快照**过去（轻的一半跟进度走、重的一半带队列与歌词
+  和封面的 token），迷你窗把动作变成**遥控命令**发回来（`state/mini-host.ts` ↔
+  `state/remotePlayer.ts`）。播放的唯一事实源永远在主窗口（`state/localPlayer.ts`），
+  `state/usePlayer.ts` 因此是一个**分流器**：主窗口拿到真播放器、迷你窗拿到镜像 ——
+  于是 `Queue` / `LyricsView` 这些组件两边共用同一份实现。
 
 新加播放相关的界面时照着这条走：读同一个 `usePlayer`、复用 `PlayerProgress`（"拖动期间只动
 本地 scrub、松手才 seek"只有那一份）与 `LyricsView`，别复制一份状态出去。
@@ -274,9 +281,13 @@ src/
 `run.sh`（编排）、`shots.sh`（把截图整理成文档用图）、`fixtures/`（自动登录配置与封面）。
 产物落在 `.e2e/`（已 gitignore）。
 
-一次巡检 **73 步**，覆盖：首页 / 曲库（类型与分面筛选、文件夹逐级进入）/ 歌单 / 最近 / 收藏 /
+一次巡检 **74 步**，覆盖：首页 / 曲库（类型与分面筛选、文件夹逐级进入）/ 歌单 / 最近 / 收藏 /
 搜索（含空态）/ 多选与右键菜单 / 设置九个分区 / 扩展面（商店、订阅源、插件管理、扩展页 webview）/
-播放（面板与满窗的歌词、队列、迷你模式）/ 命令面板 / 退出登录与登录。每步一张截图。
+播放（面板与满窗的歌词、队列、迷你窗）/ 命令面板 / 退出登录与登录。每步一张截图。
+
+⚠️ **迷你播放器在另一个窗口里**（独立 BrowserWindow，见 §4），所以那几步要切到**它的 CDP
+target** 上跑 —— STEPS 里用第 5 项 `'mini'` 标出来（`drive.mjs` 的 `sessionFor`）。不标就会在
+主窗口里找 `.mini-bar`，断言表现成 `NOT_FOUND`。
 
 `pnpm run shots` 从这些截图生成**文档引用**的两份东西，`README.md` 与 `docs/development.md`
 引的就是它们（都是生成物，改界面后重跑，别手工截图替换）：
@@ -284,7 +295,7 @@ src/
 | 产物 | 用途 |
 |---|---|
 | `docs/screenshots/*.png` | 主要界面单张图（1440 宽折到 1080），嵌进 README |
-| `docs/e2e-walkthrough.png` | 全部 73 个状态的覆盖图，一格一步带步骤名 —— 用于一屏扫出「哪一格是空的」 |
+| `docs/e2e-walkthrough.png` | 全部 74 个状态的覆盖图，一格一步带步骤名 —— 用于一屏扫出「哪一格是空的」 |
 
 截图一律是**浅色主题**：`fixtures/config.json` 里把 `theme` 写成了 `light`（`system` 在无桌面
 偏好的 Xvfb 里本来也解析成浅色，写死只是为了避免随环境漂）。断言与主题无关，想换深色改这一项。
@@ -525,16 +536,19 @@ query 回退分支）—— 按「像不像外链」判断会让整店退成首�
 | 窗口是**透明窗口** | `main/windows.ts` 的 `transparent: true`（恒开） | 界面再淡也只是与窗口那块底色混在一起，看着像「变暗」，桌面透不进来 |
 | 整棵界面树带 opacity | `styles/base.css` 里 `body { opacity: var(--window-opacity) }` | 窗口虽有 alpha 通道，可每一层画上去的都是实心的，全被遮住 |
 
-配套的三条：`html` / `body` **不许铺底色**（底色一律由 `.shell` 画）；这条 opacity 挂在 `body`
-而不是 `#root` 上 —— `Modal` 是 portal 到 `body` 的（见 `components/Modal.tsx`），挂在 `#root`
-里的话对话框不跟着透，一开一关是两个浓度；迷你那一份由 `html[data-mini='true'] body` 顶掉 ——
-迷你窗与主窗是**同一个 BrowserWindow**（主进程只把它缩成 400×64），渲染层里也是同一棵树，
-不靠那个标记就分不开。
+配套的三条：`html` / `body` **不许铺底色**（主窗口里底色一律由 `.shell` 画，迷你窗里由
+`.mini-bar` / `.mini-panel` 画）；这条 opacity 挂在 `body` 而不是 `#root` 上 —— `Modal` 是
+portal 到 `body` 的（见 `components/Modal.tsx`），挂在 `#root` 里的话对话框不跟着透，一开一关
+是两个浓度；迷你那一份（`--mini-window-opacity`）由 `html[data-mini='true'] body` 顶掉 ——
+两个窗口各是一棵独立的界面树，但**共用同一份样式表与同一套变量名**，不靠 <html> 上那个标记
+（`main.tsx` 在第一帧之前就打上）就分不开。
 
-★ 它和 `glassIntensity` / `lyricPanelOpacity` **不是一类**：那几项调的是「某个面**自己那层
-底色**」有多厚，而窗口始终是实心的 —— 怎么调都只透出同一窗口里它下面的一层，桌面永远进不来。
-播放条 / 迷你条自己的底色浓度因此写死在 `tokens.css` 的 `--bar-tint-opacity`（57%），不再是
-设置项：让「整窗」与「底色」两层都能拧，只会让人说不清是哪一层在变。
+★ 它和 `glassIntensity` / `lyricPanelOpacity` / `miniPanelOpacity` **不是一类**：那几项调的是
+「某个面**自己那层底色**」有多厚，而窗口始终是实心的 —— 怎么调都只透出同一窗口里它下面的一层，
+桌面永远进不来。播放条 / 迷你条自己的底色浓度因此写死在 `tokens.css` 的 `--bar-tint-opacity`
+（57%），不再是设置项：让「整窗」与「底色」两层都能拧，只会让人说不清是哪一层在变。
+`miniPanelOpacity` 是这里面唯一一个**相对值**（100% = 与播放条一致，见 `tokens.css` 那段）：
+深浅两个主题下「跟着条走」对应的绝对值不一样，而用户手里只有一根滑块。
 
 ⚠ 透明窗口是**创建时**属性，运行中改不了 —— 所以它恒开、不跟设置开关（否则拧一次滑块就得
 重启应用）。代价是窗口一直带 alpha 通道；两个浓度默认都是 100，观感与改动前一致。
