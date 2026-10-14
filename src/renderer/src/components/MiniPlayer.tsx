@@ -13,7 +13,9 @@
  *   迷你模式的意思就是把它挂在屏幕一角，不该再摆音量条、播放模式、收藏那一整套。
  *   右上角那三颗窗口钮**不进那一行**（绝对定位，落在这 64px 上方本来就空着的那条缝里，
  *   见 .mini-window-actions）：条里那点横向余量只有歌名在吃，让三颗去占一行就是把歌名挤窄。
- * ★ 封面右边那两行见下面 ScrollingLine 与 .mini-info：第一行「歌名 - 歌手」放不下就滚动。
+ * ★ 封面右边那两行见下面 ScrollingLine 与 .mini-info：**这一栏的宽度是被条宽定死的**
+ *   （flex: 1 1 0 + min-width: 0 + overflow: hidden），歌名再长也撑不开它 —— 右边那几颗钮
+ *   因此永远钉在各自的位置上。放不下时第一行**循环滚动**（不是来回蹭），两遍之间不留空档。
  * ★ 歌词与队列**共用下方那一块面板**（见 MiniPanel）：两颗钮互斥，尺寸只跟「开没开」有关，
  *   所以换内容不闪不跳。
  * ★ 栅格的顺序是「播放条在**上**、面板在下」（DOM 顺序同此），不是反过来：窗口加高时长的是
@@ -243,63 +245,95 @@ export function MiniPlayer(): React.JSX.Element {
   )
 }
 
+/** 循环里两份文本之间的间隔（px）：太窄两遍读起来像连成了一句，太宽又白等 */
+const LOOP_GAP = 48
+/** 滚动的观感速度（px/s） */
+const LOOP_SPEED = 40
+/** keyframes 两头各留的停顿比例（须与 styles/components.css 的 mini-line-scroll 一致） */
+const LOOP_DWELL = 0.14
+
 /**
- * 「歌名 - 歌手」那一行：**放不下就来回滚动**。
+ * 「歌名 - 歌手」那一行：**放不下就循环滚动**（跑马灯那一套，不是来回蹭）。
  *
- * ★ 位移与时长由 JS 量、动画交给 CSS：滚动速度得跟着**溢出距离**走 —— 长歌名该滚得久一点、
- *   短的三两下就该到头；写死一个 animation-duration 的结果是「短的慢得发慌、长的还没走完
- *   就回头」。量出来的两个值写成 CSS 变量，动画本身仍在样式表里（见 .mini-line-track）。
- * ★ 不溢出时一个 data 属性都不挂：绝大多数时候这行是静态的，常挂着 animation 只是白烧电。
- *   prefers-reduced-motion 由 base.css 那条全局规则兜住（动画时长会被压到 0.01ms），
+ * ★ 「循环」= 文本连续两份首尾相接，动画只把整条往左推**一份**（含间隔）的距离，推到尽头时
+ *   第二份的脑袋正好落在第一份原来的位置上 —— 于是画面与起点逐像素相同，接得严丝合缝。
+ *   `animation-direction: alternate`（来回滚）做不到这一点：它滚到头会**倒着**退回去，
+ *   读到一半的信息被倒放一遍，长标题尤其明显。
+ * ★ 位移与时长由 JS 量、动画交给 CSS：速度得跟着**文本宽度**走 —— 长歌名该滚得久一点、
+ *   短的三两下就到头；写死一个 animation-duration 的结果是「短的慢得发慌、长的还在挪」。
+ *   量出来的值写成 CSS 变量，动画本身仍在样式表里（见 .mini-line-track）。
+ * ★ 有两条前提，缺一条这套就静默失效：
+ *   ① 外层 .mini-line 的宽度由条上的 flex 定死（.mini-info 是 flex: 1 1 0 + min-width: 0），
+ *      所以「量出来的溢出」是真实溢出，而不是被文本自己撑宽的假象；
+ *   ② 内层 .mini-line-track 是 width: max-content，不会被外层剪窄 —— 否则量到的永远是 0，
+ *      滚动就静默不触发了。
+ * ★ 不溢出时**一个 data 属性、一份重复文本都不挂**：绝大多数时候这行是静态的，常挂着
+ *   animation 只是白烧电，重复的那份还会被读屏软件念第二遍。
+ *   prefers-reduced-motion 由 base.css 那条全局规则兜住（时长压到 0.01ms 且只跑一次），
  *   那种情况下它停在行首，效果与「截断显示」等价。
- * ★ 量的是「内层真实文本宽 - 外层可视宽」：内层特意写成 width: max-content（见样式表），
- *   所以它不会被外层剪窄，量出来的就是文本自己的宽度。
  */
 function ScrollingLine({ title, artist }: { title: string; artist: string }): React.JSX.Element {
   const outerRef = useRef<HTMLDivElement>(null)
-  const innerRef = useRef<HTMLSpanElement>(null)
-  /** 需要往左让出的像素：0 = 这一行放得下，不滚 */
-  const [shift, setShift] = useState(0)
+  const copyRef = useRef<HTMLSpanElement>(null)
+  /** 循环一周期要往左推的距离（一份文本宽 + 间隔）：0 = 这一行放得下，不滚 */
+  const [loop, setLoop] = useState(0)
 
   useEffect(() => {
     const outer = outerRef.current
-    const inner = innerRef.current
-    if (!outer || !inner) return
+    const copy = copyRef.current
+    if (!outer || !copy) return
 
     const measure = (): void => {
-      const overflow = inner.offsetWidth - outer.clientWidth
-      // 4px 以内当没溢出：为了几个像素来回蹭，比截断还难看
-      setShift(overflow > 4 ? overflow : 0)
+      const overflow = copy.offsetWidth - outer.clientWidth
+      // 4px 以内当没溢出：为了几个像素一直晃，比截断还难看
+      setLoop(overflow > 4 ? copy.offsetWidth + LOOP_GAP : 0)
     }
     measure()
     /* 窗口宽度、字号、歌词面板开合都会改这一行的可见宽度 —— 交给 ResizeObserver，
-       不然「拉动窗口之后该滚的不滚、不该滚的一直晃」。
-       文本变了则由下面那个依赖数组负责重测（可见宽度没变，观察器不会响）。 */
+       不然「该滚的不滚、不该滚的一直晃」。
+       文本变了则由下面那个依赖数组负责重测（可见宽度没变，观察器不会响）。
+       注意观察的是外框而不是那一份文本：追加的第二份是它的兄弟，不会把外框撑大，
+       所以这里量一次就收敛，不会「加了第二份 → 溢出变了 → 再量」地来回抖。 */
     const observer = new ResizeObserver(measure)
     observer.observe(outer)
     return () => observer.disconnect()
   }, [title, artist])
 
+  const text = (
+    <>
+      <span className="playerbar-title">{title}</span>
+      {/* 没在播放时没有歌手，那半截连分隔号一起不画 —— 不能留下一个孤零零的「-」 */}
+      {artist ? <span className="playerbar-artist"> - {artist}</span> : null}
+    </>
+  )
+
   return (
     <div className="mini-line" ref={outerRef}>
-      <span
+      <div
         className="mini-line-track"
-        ref={innerRef}
-        data-scroll={shift > 0 ? 'true' : undefined}
+        data-scroll={loop > 0 ? 'true' : undefined}
         style={
-          shift > 0
+          loop > 0
             ? ({
-                // 40px/s 的观感速度；两头各停 0.8s（停顿是 keyframes 里那两段百分比给的）
-                '--mini-line-shift': `-${shift}px`,
-                '--mini-line-dur': `${(shift / 40 + 1.6).toFixed(2)}s`
+                gap: `${LOOP_GAP}px`,
+                '--mini-line-shift': `-${loop}px`,
+                // 两头各停 LOOP_DWELL，真正在走的只有剩下的那一段：
+                // 想要 LOOP_SPEED 的观感，整周期就得按「走的时间占比」放大
+                '--mini-line-dur': `${(loop / (LOOP_SPEED * (1 - 2 * LOOP_DWELL))).toFixed(2)}s`
               } as React.CSSProperties)
             : undefined
         }
       >
-        <span className="playerbar-title">{title}</span>
-        {/* 没在播放时没有歌手，那半截连分隔号一起不画 —— 不能留下一个孤零零的「-」 */}
-        {artist ? <span className="playerbar-artist"> - {artist}</span> : null}
-      </span>
+        <span className="mini-line-copy" ref={copyRef}>
+          {text}
+        </span>
+        {/* 第二份只为「第一份走出去时」垫在后面。读屏软件不该把它念第二遍 */}
+        {loop > 0 ? (
+          <span className="mini-line-copy" aria-hidden="true">
+            {text}
+          </span>
+        ) : null}
+      </div>
     </div>
   )
 }

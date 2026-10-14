@@ -1217,12 +1217,16 @@
 /*
  * 封面：贴窗口左缘的**全高**方块（尺寸由 TSX 直接取 var(--mini-bar-h) 给，见 MiniPlayer.tsx
  * —— 这里不重复那个数值）。
+ * ★ flex: none 与那几颗钮同理：整条上**只有 .mini-info 许收缩**，其余每一件都按自己的尺寸
+ *   站着。封面若是允许收缩的 flex item，条里一旦出现负的自由空间（改条宽、加控件时很容易），
+ *   被压扁的会是它 —— 一个被拉成椭圆的封面比歌名少显示几个字更扎眼。
  * ★ 下边那个 -1px 是为了「全高」真的全：条的内容盒比条身少了下边框那 1px，不让它吐回来，
  *   贴左缘的封面底下就会留一道 1px 的缝（那条边框线）。吐出来之后它的上下正好顶到窗口边缘。
  * ★ 这么一来它会盖住进度线最左边那一段（封面在 DOM 里排在进度线后面，两者都定位），
  *   所以进度线给了 z-index：3px 的线压在封面底边上，播到哪儿都看得见。
  */
 .mini-bar .cover {
+  flex: none;
   margin-bottom: -1px;
 }
 
@@ -1283,35 +1287,52 @@
 /*
  * 封面右边那两行：第一行「歌名 - 歌手」，第二行「播放时间/总时长」。
  *
+ * ★ 这一栏是整条上**唯一允许收缩**的一格，三个条件一个都不能少：
+ *   `flex: 1 1 0` —— 基准给 0，它的宽度就只由「条宽 - 其余各件」算出来，与歌名多长无关；
+ *   `min-width: 0` —— flex item 的自动最小尺寸默认是「内容宽」，不给 0 的话长歌名会把它
+ *                     顶宽，进而把右边那几颗钮挤走（这正是「标题撑开布局」的成因）；
+ *   `overflow: hidden` —— 兜底：这一栏里的东西一律剪在这儿，任何情况下都不许往外顶。
+ *   于是「右侧按钮位置固定，不受标题长度影响」不是靠调间距凑出来的，是这七个字保证的。
  * ★ 行距压到 1.3：两行加起来继承 body 那 1.5 是 38px，比条里那行控件（30px）还高，
  *   两头就没余量了。压一档（约 32px）后上下各留十几 px，条里也顺带紧凑些。
  */
 .mini-info {
+  flex: 1 1 0;
   min-width: 0;
-  flex: 1;
+  overflow: hidden;
   line-height: 1.3;
 }
 
 /*
- * 第一行：放不下就来回滚动。滚不滚由 ScrollingLine 量出来后挂 data-scroll（见 MiniPlayer.tsx），
- * 位移与时长也由它算成两个 CSS 变量 —— 动画本身留在这里，别把 keyframes 搬进 JS。
+ * 第一行：放不下就**循环滚动**（跑马灯）。滚不滚由 ScrollingLine 量出来后挂 data-scroll
+ * （见 MiniPlayer.tsx），位移与时长也由它算成 CSS 变量 —— 动画本身留在这里，
+ * 别把 keyframes 搬进 JS。
  *
  * ★ 外层 overflow: hidden 是那扇「窗」；内层必须 width: max-content，否则它会被这扇窗剪窄，
  *   量出来的溢出永远是 0，滚动也就永远不触发（这一行就变成静默失效了）。
- * ★ keyframes 两头各留 14% 的停顿：来回都停一下，读起来才不慌；不写停顿就是一直匀速晃。
+ * ★ 内层是 flex 而不是 inline-block：循环要**两份文本并排**接起来，靠 flex 的 gap 给它们
+ *   留间隔（gap 的具体值由 TSX 内联给，见 LOOP_GAP —— 位移得与它对齐，写在样式表里就成了
+ *   两个地方各记一个数）。flex item 默认会收缩，所以 width: max-content 这条更关键。
+ * ★ keyframes 两头各留 14% 的停顿 —— 这一段是「读的人跟得上」的全部来源：
+ *   100% 的停帧与 0% 的停帧是同一幅画面（第二份的脑袋正落在第一份原来的位置上），
+ *   所以停顿不会造成跳动，只是每绕一圈松一口气。改这个百分比要连 TSX 的 LOOP_DWELL 一起改。
  */
 .mini-line {
   overflow: hidden;
 }
 
+.mini-line-copy {
+  white-space: nowrap;
+}
+
 .mini-line-track {
-  display: inline-block;
+  display: flex;
   white-space: nowrap;
   width: max-content;
 }
 
 .mini-line-track[data-scroll='true'] {
-  animation: mini-line-scroll var(--mini-line-dur, 8s) linear infinite alternate;
+  animation: mini-line-scroll var(--mini-line-dur, 8s) linear infinite;
 }
 
 @keyframes mini-line-scroll {
