@@ -5,7 +5,8 @@
  * 整窗只有一条播放条（外加它下面那块可展开的歌词 / 队列面板），见 components/MiniPlayer.tsx。
  *
  * 这里负责的只有「接线」这四件事，一件都不该散到别处：
- *   1. 读设置（主题 / 强调色 / 两份不透明度 / 歌词字号都靠它落到 <html> 上）；
+ *   1. 读设置（主题 / 强调色 / 整窗浓度、以及迷你窗那**两块面板**各自的浓度 / 歌词字号，
+ *      都靠它落到 <html> 上）；
  *      ★ 迷你窗**不建会话**：不 bootstrap、不碰凭据、不发任何业务请求。理由见 useAuth 的
  *        mirroredMedia —— 两个渲染层各持一个 ApiClient 会在刷新令牌轮换时互相踢下线。
  *        它需要的媒体地址与 token 由主窗口随快照喂进来。
@@ -26,12 +27,13 @@ import type { MiniWindowLayout } from '@shared/ipc'
 import { ContextMenuHost, useContextMenu } from './components/ContextMenu'
 import { MiniPlayer } from './components/MiniPlayer'
 import { installMiniBridge } from './state/remotePlayer'
-import { useMiniView } from './state/useMiniView'
+import { selectPanelHeight, useMiniView } from './state/useMiniView'
 import { useSettings } from './state/useSettings'
 
 export function MiniApp(): React.JSX.Element {
   const panel = useMiniView((s) => s.panel)
-  const panelHeight = useMiniView((s) => s.panelHeight)
+  /** **当前那一块**面板的高度（两块各记一份，见 useMiniView 的 selectPanelHeight） */
+  const panelHeight = useMiniView(selectPanelHeight)
   const menuOpen = useContextMenu((s) => s.open)
 
   /**
@@ -53,8 +55,15 @@ export function MiniApp(): React.JSX.Element {
     void (async () => {
       try {
         await useSettings.getState().load()
-        // 面板高度是「上次拖出来的那一份」（见 AppSettings.miniPanelHeight）
-        useMiniView.getState().setPanelHeight(useSettings.getState().settings.miniPanelHeight)
+        /*
+         * 面板高度是「上次拖出来的那一份」，两块**各有一份**（见 AppSettings 里那两个字段）：
+         * 一次把两份都铺进去，之后切面板时用的就是各自那一份，不必在这里按当前面板挑。
+         */
+        const { settings } = useSettings.getState()
+        useMiniView.getState().applyHeights({
+          lyrics: settings.miniLyricsPanelHeight,
+          queue: settings.miniQueuePanelHeight
+        })
       } finally {
         /*
           ★ 这一段必须在 finally 里：读设置失败（IPC 出错、配置坏了）时若直接跳过，
@@ -100,7 +109,8 @@ function layout(): MiniWindowLayout {
   const view = useMiniView.getState()
   return {
     expanded: view.panel !== null,
-    panelHeight: view.panelHeight,
+    // 同一份口径：**当前那一块**的高度（见 selectPanelHeight）
+    panelHeight: selectPanelHeight(view),
     menu: useContextMenu.getState().open
   }
 }

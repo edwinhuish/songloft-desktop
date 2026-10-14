@@ -543,22 +543,30 @@ portal 到 `body` 的（见 `components/Modal.tsx`），挂在 `#root` 里的话
 两个窗口各是一棵独立的界面树，但**共用同一份样式表与同一套变量名**，不靠 <html> 上那个标记
 （`main.tsx` 在第一帧之前就打上）就分不开。
 
-★ 它和 `glassIntensity` / `lyricPanelOpacity` / `miniPanelOpacity` **不是一类**：那几项调的是
-「某个面**自己那层底色**」有多厚，而窗口始终是实心的 —— 怎么调都只透出同一窗口里它下面的一层，
-桌面永远进不来。播放条 / 迷你条自己的底色浓度因此写死在 `tokens.css` 的 `--bar-tint-opacity`
-（57%），不再是设置项：让「整窗」与「底色」两层都能拧，只会让人说不清是哪一层在变。
-`miniPanelOpacity` 是这里面唯一一个**相对值**（100% = 与播放条一致，见 `tokens.css` 那段）：
+★ 它和 `glassIntensity` / `lyricPanelOpacity` / `miniLyricsPanelOpacity` / `miniQueuePanelOpacity`
+**不是一类**：那几项调的是「某个面**自己那层底色**」有多厚，而窗口始终是实心的 —— 怎么调都只透出
+同一窗口里它下面的一层，桌面永远进不来。播放条 / 迷你条自己的底色浓度因此写死在 `tokens.css` 的
+`--bar-tint-opacity`（57%），不再是设置项：让「整窗」与「底色」两层都能拧，只会让人说不清是哪一层在变。
+迷你窗那两块面板的浓度是这里面唯一两个**相对值**（100% = 与播放条一致，见 `tokens.css` 那段）：
 深浅两个主题下「跟着条走」对应的绝对值不一样，而用户手里只有一根滑块。
+⚠ 歌词与队列**各存一份**（浓度 `miniLyricsPanelOpacity` / `miniQueuePanelOpacity`，高度
+`miniLyricsPanelHeight` / `miniQueuePanelHeight`）：两块要能分别调。**挑哪一份不在 `tokens.css` 里定**
+（那一层只有 `:root` 那几条）：得按 `.mini-player` 上的 `data-panel` 挑，而自定义属性是「声明在哪就在
+哪解析」—— 写在 `:root` 上的派生值拿的是 `:root` 那一刻的源值，子孙再改那个变量也影响不到它。
+所以「挑」与「由它派生」一起落在 `components.css` 的 `.mini-player` 上：`.mini-player` 自己声明
+`--mini-panel-opacity: 100%`（收起那一档）与它派生的底色 / 两条阴影权重，两条
+`.mini-player[data-panel='…']` 只覆盖那个源值。老配置里那两个单份的值由 `main/store.ts` 接给两块
+（逐项只在新键还没落盘时接，见那里的说明）。
 
-★ 另外 `miniPanelOpacity` 还会**顺带换掉窗口那圈阴影**：面板淡下去之后，围着「条 + 面板」
-那一圈就成了「围着一块透明区域描边」，而挂件真正的下边缘已经移到了**条的下边** ——
-所以那一圈按面板浓度淡出，同时按互补比例淡入**播放条自己那一圈**。两份权重是
-`tokens.css` 的 `--mini-shadow-keep` / `--mini-shadow-bar`（加起来恒等于 100%），两个落点是
-`components.css` 的 `.mini-surface` 与 `.mini-player::before`。⚠ 后者**必须画在不裁剪的那一层
-上**：条在 `.mini-surface` 里，而那一层 `overflow: hidden` —— 元素自己的阴影不受牵连，子孙的
-会，挂在条上的话阴影的左 / 右 / 上三条边当场被剪掉。为此 `--win-shadow` 拆成了「颜色 + 模糊
-半径」几个零件（4 处整条重写 → 1 处 + 各主题覆盖零件），主窗口读的还是合起来的那一条。
-`--mini-shadow-keep` / `--mini-shadow-bar` 的值域是**百分比**（color-mix 的占比吃百分比）。
+★ 面板浓度还会**顺带换掉窗口那圈阴影**：面板淡下去之后，围着「条 + 面板」那一圈就成了
+「围着一块透明区域描边」，而挂件真正的下边缘已经移到了**条的下边** —— 所以那一圈按面板浓度淡出，
+同时按互补比例淡入**播放条自己那一圈**。两份权重是 `components.css` 的 `--mini-shadow-keep` /
+`--mini-shadow-bar`（加起来恒等于 100%），两个落点是 `.mini-surface` 与 `.mini-player::before`。
+⚠ 后者**必须画在不裁剪的那一层上**：条在 `.mini-surface` 里，而那一层 `overflow: hidden` ——
+元素自己的阴影不受牵连，子孙的会，挂在条上的话阴影的左 / 右 / 上三条边当场被剪掉。为此
+`--win-shadow` 拆成了「颜色 + 模糊半径」几个零件（4 处整条重写 → 1 处 + 各主题覆盖零件），
+主窗口读的还是合起来的那一条。`--mini-shadow-keep` / `--mini-shadow-bar` 的值域是**百分比**
+（color-mix 的占比吃百分比）。
 
 ⚠ 透明窗口是**创建时**属性，运行中改不了 —— 所以它恒开、不跟设置开关（否则拧一次滑块就得
 重启应用）。代价是窗口一直带 alpha 通道；两个浓度默认都是 100，观感与改动前一致。

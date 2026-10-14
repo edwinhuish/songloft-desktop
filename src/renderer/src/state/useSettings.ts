@@ -64,11 +64,16 @@ function applyToDocument(settings: AppSettings, coverAccent: string | null): voi
   root.style.setProperty('--mini-window-opacity', String(settings.miniWindowOpacity / 100))
 
   /*
-   * 迷你窗面板那层底色：传**百分比**（样式表里用 color-mix 的占比，见 tokens.css）。
-   * 它是相对播放条那层底色的浓度，100 = 与播放条完全一致 —— 深浅两个主题下都成立，
+   * 迷你窗那两块面板（歌词 / 队列）各自的底色：传**百分比**（样式表里用 color-mix 的占比，
+   * 见 components.css 的 .mini-player）。
+   * 它们是相对播放条那层底色的浓度，100 = 与播放条完全一致 —— 深浅两个主题下都成立，
    * 所以不必（也不能）按主题给两套默认值。
+   * ★ 两块各写一条：这一层只负责把两个候选值摆到 <html> 上，**不做选择** ——
+   *   「此刻生效的是哪一份」由样式表按 .mini-player 上的 data-panel 挑（那儿才能表达
+   *   「哪个面板开着」，且底色与阴影权重必须跟着同一份值走）。
    */
-  root.style.setProperty('--mini-panel-opacity', `${settings.miniPanelOpacity}%`)
+  root.style.setProperty('--mini-lyrics-panel-opacity', `${settings.miniLyricsPanelOpacity}%`)
+  root.style.setProperty('--mini-queue-panel-opacity', `${settings.miniQueuePanelOpacity}%`)
 
   /* 歌词区域自己那层底色：与上面两项互不相干，也不参与整窗浓度（见 shared/ipc.ts） */
   root.style.setProperty('--lyric-panel-opacity', `${settings.lyricPanelOpacity}%`)

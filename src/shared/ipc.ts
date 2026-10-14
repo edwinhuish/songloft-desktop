@@ -106,17 +106,19 @@ export interface WindowState {
  * 迷你窗的固定尺寸与下限。
  *
  * ★ 只有宽度与「播放条那一档高度」是死的：面板高度可由用户拖（见 MiniWindowLayout），
- *   拖出来的值存进设置（AppSettings.miniPanelHeight）。
+ *   拖出来的值存进设置 —— 歌词与队列**各记一份**（AppSettings.miniLyricsPanelHeight /
+ *   miniQueuePanelHeight），两块于是可以不一样高。
  * ★ MINI_BAR_HEIGHT 必须与样式表里 `.mini-player` 的高度一致（styles/components.css 的
  *   `--mini-bar-h`）—— 两边差一档就是「条里空出一截」或「控件被裁掉」。
  * ★ 宽度 380 这一档实测（拿一首长歌名 + 时长 1:02:05 的歌压中栏）：中栏 174px、悬浮那一层
  *   的音量条 84px，五颗控件与右上角那颗窗口钮的右边缘都正好落在 380 上 —— 一个不裁。
  *   再往下调就是中栏与音量条互相让位（两者都是可收缩的 flex 项），歌名那头先开始看不见字。
- * ★ MINI_MENU_HEIGHT 是为什么存在：菜单（components/ContextMenu 那一份，不透明度那两个旋钮
- *   就挂在它上面）是页面里的 DOM，**画不出窗口** —— 而条自己只有 64px 高，一份「两个滑块」的
+ * ★ MINI_MENU_HEIGHT 是为什么存在：菜单（components/ContextMenu 那一份，几根不透明度旋钮
+ *   就挂在它上面）是页面里的 DOM，**画不出窗口** —— 而条自己只有 64px 高，一份「两根滑块」的
  *   菜单压不进去：它两行加起来一百多像素，而 .context-menu 的 max-height 是 60vh，窗口只有
  *   64px 时 60% × 64 = 38px，菜单当场变成一条带滚动条的缝。所以菜单一开就把窗口临时加高到
- *   这一档（面板展开的那一档本来就比它高，不必再让）。菜单里加减内容时要回来看看够不够。
+ *   这一档（面板展开的那一档本来就比它高，不必再让）。菜单里加减内容时要回来看看够不够 ——
+ *   这一档是为**两根滑块**算的（整窗浓度 + 那块面板的浓度），再加一行就不够了。
  */
 export const MINI_BAR_HEIGHT = 64
 /** 播放条（与面板）自己的宽度 —— **窗口**比它宽，两侧多出来的那圈留给阴影，见 MINI_SHADOW_EDGE */
@@ -140,9 +142,9 @@ export const MINI_MENU_HEIGHT = 240
 export const MINI_SHADOW_EDGE = 10
 /** 迷你窗**窗口**的尺寸 = 播放器本体 + 两侧留给阴影的那一圈 */
 export const MINI_WINDOW_WIDTH = MINI_WIDTH + MINI_SHADOW_EDGE * 2
-/** 面板能拖到的最小高度：再矮就只剩一行歌词的位置，那个高度没有意义 */
+/** 面板能拖到的最小高度：再矮就只剩一行歌词的位置，那个高度没有意义（两块共用同一个下限） */
 export const MINI_PANEL_MIN_HEIGHT = 180
-/** 面板的默认高度（首次打开 / 没拖过时用） */
+/** 两块面板的默认高度（首次打开 / 这块还没拖过时用；两块可以各自拖成不一样高） */
 export const MINI_PANEL_DEFAULT_HEIGHT = 416
 
 /**
@@ -151,8 +153,9 @@ export const MINI_PANEL_DEFAULT_HEIGHT = 416
  * 三个量共同决定窗口高度（`main/mini-window.ts` 的 applyBounds），**必须一起传**：
  * 分两次传的话，主进程会在两次调用之间先摆出一个中间尺寸 —— 那一下是看得见的。
  *
- * ★ 面板里装的是歌词还是播放队列，主进程**不关心**（两者共用同一份高度）：所以这里只有一个
- *   布尔量，而不是 `panel: 'lyrics' | 'queue' | null`。
+ * ★ 面板里装的是歌词还是播放队列，主进程**不关心**：两块各有各的高度（见
+ *   AppSettings.miniLyricsPanelHeight / miniQueuePanelHeight），但窗口只需要知道**开着的那一块**
+ *   此刻多高 —— 所以这里只有一个布尔量与一个高度，而不是 `panel: 'lyrics' | 'queue' | null`。
  * ★ `menu` 同理：菜单里有哪几项、滑块在调什么，主进程不关心；它只需要知道「页面上有个菜单
  *   开着，而 HTML 画的菜单出不了这个 64px 高的窗口」——高度那一档是死的（MINI_MENU_HEIGHT），
  *   所以给布尔量就够了。
@@ -160,7 +163,7 @@ export const MINI_PANEL_DEFAULT_HEIGHT = 416
 export interface MiniWindowLayout {
   /** 下方面板展开了没有 */
   expanded: boolean
-  /** 面板希望的高度（px；展开时才有意义，下限见 MINI_PANEL_MIN_HEIGHT） */
+  /** **开着的那一块**面板希望的高度（px；展开时才有意义，下限见 MINI_PANEL_MIN_HEIGHT） */
   panelHeight: number
   /** 窗口里正开着菜单（上部那颗钮拉出来的不透明度菜单） */
   menu: boolean
@@ -365,7 +368,7 @@ export interface AppSettings {
    */
   miniWindowOpacity: number
   /**
-   * 迷你窗**下方那块面板**（歌词 / 播放队列共用）自己的底色浓度 0–100。
+   * 迷你窗**歌词面板**自己的底色浓度 0–100。
    *
    * ★ 它是相对**播放条那层底色**的浓度（样式表里 `color-mix(--mini-tint …)`），所以 100 就是
    *   「与播放条一致」—— 深浅两个主题下都成立，不必为两边各写一个默认值。
@@ -375,17 +378,25 @@ export interface AppSettings {
    * ★★ 它还牵动**窗口那圈阴影**（面板淡下去之后，围着一块透明区域画阴影就是错的）：
    *   围着「条 + 面板」那一圈按同一比例淡出，围着播放条自己那一圈按互补比例淡入 ——
    *   面板透到 0 时，挂件的下边缘就是**条的下边缘**，阴影跟过来围住它。
-   *   两份权重在 tokens.css（--mini-shadow-keep / --mini-shadow-bar），
-   *   两个落点在 components.css 的 .mini-surface 与 .mini-player::before。
+   *   两份权重在 components.css 的 .mini-player（--mini-shadow-keep / --mini-shadow-bar），
+   *   两个落点在 .mini-surface 与 .mini-player::before。
+   * ★ 歌词与队列**各存一份**（两块要能分别调）：这里存的是两个候选值，「此刻生效的是哪一份」
+   *   由样式表按 .mini-player 上的 data-panel 挑 —— 挑选需要一个组件上的选择器，JS 不掺和。
    */
-  miniPanelOpacity: number
+  miniLyricsPanelOpacity: number
+  /** 迷你窗**播放队列面板**的底色浓度。与 miniLyricsPanelOpacity 同义、各管各的 */
+  miniQueuePanelOpacity: number
   /**
-   * 迷你窗面板的高度 px（用户拖着调的，见 main/mini-window.ts 与 MiniPlayer 底部那根把手）。
+   * 迷你窗歌词面板的高度 px（用户拖着调的，见 main/mini-window.ts 与 MiniPlayer 底部那根把手）。
    *
    * 存下来是因为「我拖到这么高」是个偏好而不是临时值：迷你窗每次打开都是新窗口，
    * 不记的话拖出来的高度一关就没了。下限见 MINI_PANEL_MIN_HEIGHT。
+   * ★ 两块各存一份：拖歌词那根把手改的是这一项，切到队列时用的是 miniQueuePanelHeight ——
+   *   于是「歌词拉高看歌词、队列留矮一点」这种组合是可能的（两块互不影响）。
    */
-  miniPanelHeight: number
+  miniLyricsPanelHeight: number
+  /** 迷你窗播放队列面板的高度 px。与 miniLyricsPanelHeight 同义、各管各的 */
+  miniQueuePanelHeight: number
   /** 歌词字号 px */
   lyricFontSize: number
   /**
@@ -476,9 +487,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   windowOpacity: 100,
   // 迷你窗同样默认实心（与主窗各管各的）
   miniWindowOpacity: 100,
-  // 100 = 与播放条一致（相对浓度，见 AppSettings.miniPanelOpacity 的说明）
-  miniPanelOpacity: 100,
-  miniPanelHeight: MINI_PANEL_DEFAULT_HEIGHT,
+  // 两块面板各自一份；100 = 与播放条一致（相对浓度，见 AppSettings.miniLyricsPanelOpacity 的说明）
+  miniLyricsPanelOpacity: 100,
+  miniQueuePanelOpacity: 100,
+  // 两块各自一份高度：默认一样，用户拖过之后才分岔
+  miniLyricsPanelHeight: MINI_PANEL_DEFAULT_HEIGHT,
+  miniQueuePanelHeight: MINI_PANEL_DEFAULT_HEIGHT,
   lyricFontSize: 30,
   // 默认不铺额外底色：歌词区域透出所在面板的玻璃质感（与改动前一致）
   lyricPanelOpacity: 0,

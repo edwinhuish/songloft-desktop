@@ -43,8 +43,9 @@
  *     原样）在独立窗口下不存在了：迷你窗关掉就是关掉，主窗口一直好好的。最小化那颗也已去掉：
  *     迷你窗的用处正是「一直摆在那儿」，缩进任务栏就等于看不见了（系统那一侧的最小化仍在，
  *     从底栏那颗按钮或托盘再点一下就唤回来，见 main/mini-window.ts 的 openMiniWindow）。
- *     ★ 那颗钮（从右数第二个）开出来的就是**共享的那份菜单**（components/ContextMenu，两根滑块，
- *       全条唯一入口）：它长在窗口
+ *     ★ 那颗钮（从右数第二个）开出来的就是**共享的那份菜单**（components/ContextMenu，全条唯一
+ *       入口）：里面是两根滑块 —— 整窗浓度那根，加**此刻这块面板**的浓度那根（面板没开时只有
+ *       前者，理由见下面 opacityMenu）。它长在窗口
  *       **内部**、条下面那块透明容器让出来的地方 —— HTML 画不出窗口之外，而 Wayland 下又没法给
  *       新建的弹窗定位，所以菜单要地方，只能是窗口自己让出一段（加高的是窗口，不是播放器，
  *       见 shared/ipc.ts 的 MINI_MENU_HEIGHT）。
@@ -56,12 +57,19 @@
  *   关闭这一颗也得自己给 —— 少了它就是「这个窗关不掉」。
  *
  * ★ 面板高度可拖（把手压在窗口下边缘，见 .mini-resize）：窗口只会**向下**长，所以默认位置
- *   在工作区上方（见 main/mini-window.ts）；拖出来的高度落盘到 settings.miniPanelHeight。
+ *   在工作区上方（见 main/mini-window.ts）；拖出来的高度落盘 —— 歌词与队列**各记一份**
+ *   （settings.miniLyricsPanelHeight / miniQueuePanelHeight），于是两块可以不一样高：
+ *   拖歌词那根把手只改歌词那一份，切到队列时用的是队列自己那一份（见 ResizeHandle）。
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { MINI_BAR_HEIGHT, MINI_PANEL_MIN_HEIGHT, MINI_SHADOW_EDGE } from '@shared/ipc'
+import {
+  MINI_BAR_HEIGHT,
+  MINI_PANEL_MIN_HEIGHT,
+  MINI_SHADOW_EDGE,
+  type MiniPanel
+} from '@shared/ipc'
 import {
   IconChevronDown,
   IconClose,
@@ -84,7 +92,7 @@ import { Cover, Slider } from './primitives'
 import { useUnfocusable } from '@/hooks/useUnfocusable'
 import { displayArtist, formatDuration } from '@/lib/format'
 import { usePlayer } from '@/state/usePlayer'
-import { useMiniView } from '@/state/useMiniView'
+import { selectPanelHeight, useMiniView } from '@/state/useMiniView'
 import { useSettings } from '@/state/useSettings'
 
 /** 条上这几颗控件的图标尺寸（比底栏那套小一档，见 components.css 的 --mini-ctl-h） */
@@ -115,13 +123,19 @@ export function MiniPlayer(): React.JSX.Element {
   const player = usePlayer()
   /** 下方那块面板装什么（null = 收起）。★ 这份状态在 useMiniView 上，见那里的说明 */
   const panel = useMiniView((s) => s.panel)
-  /** 面板高度：写进行内样式（布局是「条 / 面板 / 透明容器」，面板得是固定尺寸那一项） */
-  const panelHeight = useMiniView((s) => s.panelHeight)
+  /**
+   * 面板高度：写进行内样式（布局是「条 / 面板 / 透明容器」，面板得是固定尺寸那一项）。
+   * ★ 取的是**当前那一块**的高度（两块各记一份，见 useMiniView 的 selectPanelHeight）——
+   *   切面板时这里跟着换，窗口高度也跟着换（MiniApp 把它报给主进程）。
+   */
+  const panelHeight = useMiniView(selectPanelHeight)
   const togglePanel = useMiniView((s) => s.togglePanel)
   /** 当前曲目收没收藏：收藏表在主窗口那边，这里是镜像来的（见 state/remotePlayer.ts） */
   const favorite = useMiniView((s) => s.favorite)
   const miniOpacity = useSettings((s) => s.settings.miniWindowOpacity)
-  const panelOpacity = useSettings((s) => s.settings.miniPanelOpacity)
+  /* 两块面板各自的浓度：菜单里那一行只给**开着的那一块**用，所以两个值都得在手边 */
+  const lyricsPanelOpacity = useSettings((s) => s.settings.miniLyricsPanelOpacity)
+  const queuePanelOpacity = useSettings((s) => s.settings.miniQueuePanelOpacity)
   const patchSettings = useSettings((s) => s.patch)
   /** 那颗下拉钮（右上角从右数第二个）。既是菜单的入口，也是「再点一次收起」的判据（见 menuOpen） */
   const opacityBtnRef = useRef<HTMLButtonElement>(null)
@@ -159,45 +173,62 @@ export function MiniPlayer(): React.JSX.Element {
   const position = scrub ?? player.currentTime
 
   /**
-   * 迷你窗的窗口菜单：两个不透明度旋钮。**全条唯一的入口是右上角从右数第二个按钮**（那颗
-   * .win-btn）—— 交互带的右键已撤、封面右键让给系统，条上别处一律不开应用菜单（见
-   * suppressContextMenu）。
+   * 迷你窗的窗口菜单：整窗浓度一根滑块，加**此刻那块面板**的浓度一根。**全条唯一的入口是右上角
+   * 从右数第二个按钮**（那颗 .win-btn）—— 交互带的右键已撤、封面右键让给系统，条上别处一律不开
+   * 应用菜单（见 suppressContextMenu）。
    *
    * ★ 封面右键不再开这一份：拖拽区（= 非客户区）的右键由**系统**弹窗口菜单（Electron 文档那条），
    *   旋钮改由按钮独占。挂在按钮上本来也是最稳的那条路 —— 它在窗口钮组里、整组标着 no-drag，
    *   一定收得到。
+   * ★★ 面板那一行跟的是 `panel`：标签写清是歌词还是队列，滑块调的也是那一块的设置项（两块各存
+   *   一份浓度，见 shared/ipc.ts）。为什么不把两块**并列**摆出来：菜单里同时放两根面板滑块就是
+   *   三行，而「两行」正是 MINI_MENU_HEIGHT 那一档按着算出来的（见 shared/ipc.ts 的说明）——
+   *   并列就得让迷你窗为一个临时弹出的菜单再长高一截。只给**眼前这一块**也够用：拖这根滑块时
+   *   看着的本来就只有这一块（另一块在设置页里调，那两块并列，改完能立刻切过来比对）。
+   *   ⚠ 面板收起时这一行**不出现**：没有面板可看，滑它也没有观感可对照。
    * ★ 做成**函数**而不是模块级常量：两个 value 与 onChange 要取「点开这一刻」的设置值，
-   *   常量数组会把它们钉死在首次渲染那一份上。
+   *   常量数组会把它们钉死在首次渲染那一份上。`panel` 同理 —— 菜单是一份快照，取的就是
+   *   点开这一刻开着的那一块（见 toggleOpacityMenu）。
    */
-  const opacityMenu = (): MenuItem[] => [
-    {
-      key: 'mini-opacity',
-      label: '播放器不透明度',
-      slider: {
-        min: 0,
-        max: 100,
-        value: miniOpacity,
-        onChange: (value) => void patchSettings({ miniWindowOpacity: value })
+  const opacityMenu = (): MenuItem[] => {
+    const rows: MenuItem[] = [
+      {
+        key: 'mini-opacity',
+        label: '播放器不透明度',
+        slider: {
+          min: 0,
+          max: 100,
+          value: miniOpacity,
+          onChange: (value) => void patchSettings({ miniWindowOpacity: value })
+        }
       }
-    },
-    {
-      key: 'mini-panel-opacity',
+    ]
+    if (panel) {
+      const isLyrics = panel === 'lyrics'
       /*
-        面板那层底色是**相对播放条**的浓度（100 = 与条一致），见 tokens.css ——
-        所以它在深浅两个主题下都说得通，不必分两套默认值。
+        面板那层底色是**相对播放条**的浓度（100 = 与条一致），见 styles/components.css 的
+        .mini-player 那一段 —— 所以它在深浅两个主题下都说得通，不必分两套默认值。
         ★ 它顺带牵动**窗口那圈阴影**：面板调淡时，围着「条 + 面板」那一圈跟着淡出，
           围着播放条自己那一圈按互补比例淡入（面板透到 0，挂件的下边缘就是条的下边缘）。
           两个落点见样式表 .mini-surface 与 .mini-player::before，这里不必额外做什么。
       */
-      label: '面板背景不透明度',
-      slider: {
-        min: 0,
-        max: 100,
-        value: panelOpacity,
-        onChange: (value) => void patchSettings({ miniPanelOpacity: value })
-      }
+      rows.push({
+        key: `mini-panel-opacity-${panel}`,
+        label: isLyrics ? '歌词面板不透明度' : '队列面板不透明度',
+        slider: {
+          min: 0,
+          max: 100,
+          // 取**这一块**此刻的值：菜单开的时候取一次（之后由这一行自己管，见 MenuSliderRow）
+          value: isLyrics ? lyricsPanelOpacity : queuePanelOpacity,
+          onChange: (value) =>
+            void patchSettings(
+              isLyrics ? { miniLyricsPanelOpacity: value } : { miniQueuePanelOpacity: value }
+            )
+        }
+      })
     }
-  ]
+    return rows
+  }
 
   /**
    * 点那颗钮：**开着就收起，关着就展开**。
@@ -233,7 +264,11 @@ export function MiniPlayer(): React.JSX.Element {
        suppressContextMenu），根这一层只管把整棵树收进来（含 useUnfocusable）。
        ★ 条上留白处（控件行上下的那两条空带）、封面、透明容器是**拖拽区**，它们的右键归**系统**
          窗口菜单（见样式表 .mini-bar 那段「两种口径」）—— 与这一棵树无关，所以这里没有对应代码。 */
-    <div className="mini-player" ref={rootRef}>
+    /* data-panel 报「此刻开着的是哪一块面板」：面板那层底色、以及窗口那圈阴影的两个权重，都要按
+       它挑一份出来（见样式表 .mini-player 那一段）。收起时**不带**这个属性 —— CSS 里那一档是
+       「没有面板」，取满浓度。
+       ★ 它只影响样式：布局与窗口高度不归它管（那些走 MiniWindowLayout 报给主进程）。 */
+    <div className="mini-player" ref={rootRef} data-panel={panel ?? undefined}>
       {/*
         ★★ 内容层（播放条 + 面板）：**窗口阴影画在这一层的框上**，不画在 .mini-player 上。
           后者撑满整窗 —— 菜单开着、或系统事件（平铺 / 全屏）把窗口拉大时，多出来的那一段也
@@ -488,9 +523,11 @@ export function MiniPlayer(): React.JSX.Element {
         （原生窗口的尺寸做不了动画），内容这边补一段**自顶向下拉出来**的展开，看着才不像
         「啪」地一下多出一块 —— 展开方向是刻意的，见样式表 @keyframes mini-panel-in。
 
-        ★ 歌词与队列共用这一块地方：主进程那边只有「开没开」一个布尔量，换内容不动窗口尺寸，
-          所以两颗钮之间来回点不会闪也不会跳。队列那一份要自己给滚动容器（见 .mini-queue）——
-          歌词那边是 LyricsView 里的 .lyrics 自带 flex: 1 + overflow-y: auto。
+        ★ 歌词与队列共用这一格地方（同一时刻只有一块）。**两块各有各的高度**（见 useMiniView）：
+          换内容会换高度、窗口跟着主进程重摆一次；同一块里开合（点两次同一颗钮）才是不动窗口的
+          那一路 —— 主进程那边收到的仍是「开没开 + 此刻这一块多高」两个量（见 MiniWindowLayout）。
+          队列那一份要自己给滚动容器（见 .mini-queue）—— 歌词那边是 LyricsView 里的 .lyrics
+          自带 flex: 1 + overflow-y: auto。
         ★ 队列**不给右键菜单**（menu={false}）：那一份菜单里的动作（加入歌单、从曲库删除、
           查看歌手…）全都要主窗口的曲库与会话，迷你窗里没有它们 —— 菜单画得出来、点了没反应，
           比没有这个菜单更糟。
@@ -516,10 +553,13 @@ export function MiniPlayer(): React.JSX.Element {
               「系统把窗口拉高」时并不等于面板下边缘（中间那段是透明容器）。
             ★ 位移按「相对按下那一刻」算，不是累加每次 move：窗口在拖的过程中一直在长，
               用增量算的话每一帧都在拿变化后的尺寸当基准，很快就飘了。
-            ★ 松手才落盘（settings.miniPanelHeight），拖动期间只改内存 —— 每个 pointermove 写一次
-              配置就是几十次全量落盘，主进程会被拖住（与音量那套合并写同一个理由）。
+            ★ 松手才落盘（敲准**这一块**那一项：settings.miniLyricsPanelHeight 或
+              miniQueuePanelHeight），拖动期间只改内存 —— 每个 pointermove 写一次配置就是几十次
+              全量落盘，主进程会被拖住（与音量那套合并写同一个理由）。
+            ★ 把 `panel` 传下去而不是让它自己去读：拖的时候改的就是**眼前这一块**，落盘也该落
+              那一项 —— 两处各读一次状态的话，将来面板一多就会有一处落错键。
           */}
-            <ResizeHandle />
+            <ResizeHandle panel={panel} />
           </div>
         ) : null}
       </div>
@@ -542,9 +582,14 @@ export function MiniPlayer(): React.JSX.Element {
  *
  * 单独拎出来是因为它自己就是一小份状态（按下那一刻的位置与高度），与整条播放条无关 ——
  * 混在 MiniPlayer 里会让「换歌重渲染」与「拖动中的中间态」互相搅。
+ *
+ * ★ `panel` 是**它正拖着的那一块**（由 MiniPlayer 传下来，那边知道现在开着谁）：拖动本身只需
+ *   改「当前高度」（store 自己认面板），但**落盘**要落到那一块的设置项上 —— 两块各记一份，
+ *   拖歌词那根把手不该动到队列（见 shared/ipc.ts 的 miniLyricsPanelHeight）。
  */
-function ResizeHandle(): React.JSX.Element {
-  const panelHeight = useMiniView((s) => s.panelHeight)
+function ResizeHandle({ panel }: { panel: MiniPanel }): React.JSX.Element {
+  /** 拖动的基准是**这一块**此刻的高度（两块各记一份，见 selectPanelHeight） */
+  const panelHeight = useMiniView(selectPanelHeight)
   const setPanelHeight = useMiniView((s) => s.setPanelHeight)
   const patchSettings = useSettings((s) => s.patch)
   /** 按下那一刻的指针位置与面板高度；null = 没在拖 */
@@ -556,6 +601,7 @@ function ResizeHandle(): React.JSX.Element {
    * 窗口只会**向下**长（位置不动），拖过屏幕下边缘的部分就看不见了 —— 所以上限不能只是
    * 「一个很大的数」，得以当前屏幕为准。主进程那边还有一道同样的钳制（工作区高度），
    * 两道都要：这里管的是「手上的感觉」不越界，那边管的是「窗口真的不越界」。
+   * ★ 两块共用这一个上限（它只跟屏幕与播放条有关，与哪一块无关）。
    * ★ 减去的两项要与主进程算窗口高度时的一致：播放条那一档 + 窗口上下那两圈阴影边距
    *   （MINI_SHADOW_EDGE）。少减一边，拖到底时窗口会被主进程钳住、面板最下面一截被裁掉。
    */
@@ -588,7 +634,11 @@ function ResizeHandle(): React.JSX.Element {
         if (!drag.current) return
         drag.current = null
         event.currentTarget.releasePointerCapture(event.pointerId)
-        void patchSettings({ miniPanelHeight: useMiniView.getState().panelHeight })
+        // 取 store 里**这一刻**的值（拖动期间改的就是它）：不写两处，免得与上面那几步算出两份
+        const height = useMiniView.getState().heights[panel]
+        void patchSettings(
+          panel === 'queue' ? { miniQueuePanelHeight: height } : { miniLyricsPanelHeight: height }
+        )
       }}
       onPointerCancel={() => {
         drag.current = null

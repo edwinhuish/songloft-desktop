@@ -130,28 +130,21 @@
   --player-tint: color-mix(in srgb, var(--glass-base) var(--bar-tint-opacity), transparent);
   --mini-tint: color-mix(in srgb, var(--glass-base) var(--bar-tint-opacity), transparent);
   /*
-   * 迷你窗**面板**（歌词 / 队列那块，见 components.css 的 .mini-panel）自己的底色浓度。
-   * 它是相对**上面那条播放条**的浓度，不是绝对的不透明度：
+   * 迷你窗那**两块**面板（歌词 / 播放队列，见 components.css 的 .mini-panel）各自的底色浓度。
+   * 两条都是相对**上面那条播放条**的浓度，不是绝对的不透明度：
    *   100% = 与播放条完全一致（默认），调低则只在窗口内部变淡（露出的是同一个窗口里它下面那层）。
    * ★ 为什么不写成一个绝对值：深浅两个主题下「与播放条一致」对应的绝对值不一样（浅色是纯白实底、
    *   深色是 57% 的深色玻璃，见 --mini-tint 与浅色那段覆盖），而用户手里只有一根滑块。
    *   相对浓度让它一个默认值就够，也让「跟着条走」这件事在换主题后依然成立。
-   * 值由 useSettings 写到 <html> 上（settings.miniPanelOpacity，单位是百分比）。
+   * ★★ 两块**各存一份**（要能分别调）：这里只是两个**候选值**，由 useSettings 写到 <html> 上
+   *   （settings.miniLyricsPanelOpacity / miniQueuePanelOpacity，单位是百分比）。
+   *   ⚠ 「此刻生效的是哪一份」**不在这里定** —— 挑选要一个能表达「哪个面板开着」的选择器，
+   *     而这一层是全局变量表，只有 :root 那几条。实际挑选在 components.css 的 .mini-player 上：
+   *     它按自己的 data-panel 决定 --mini-panel-opacity 取哪一条，底色与阴影权重再由那一条派生。
+   *     于是「面板浓度」这件事仍然只有一个生效值，不会出现底色与阴影各拿一份的情况。
    */
-  --mini-panel-opacity: 100%;
-  --mini-panel-tint: color-mix(in srgb, var(--mini-tint) var(--mini-panel-opacity), transparent);
-  /*
-   * 上面那个浓度的**两处派生物**：窗口那圈阴影照这两个互补比例分两份画
-   * （见 components.css 的 .mini-surface 与 .mini-player::before）。
-   *   --mini-shadow-keep → 围着「条 + 面板」那一圈（面板还剩多少浓度）
-   *   --mini-shadow-bar  → 围着播放条自己那一圈（面板退掉了多少）
-   * ★ 两者加起来恒等于 100%，于是两个端点都是**算得出来**的、不是调出来的：
-   *     100% → 与从前逐像素相同（那一圈仍是整条并集，条自己那份权重为 0、不画）；
-   *       0% → 面板整块透掉，挂件的下边缘变成**条的下边缘**，阴影跟着换成条那一圈。
-   * ★ 写成百分比而不是 0–1：color-mix 的占比吃百分比（与 --mini-panel-opacity 同一档）。
-   */
-  --mini-shadow-keep: var(--mini-panel-opacity);
-  --mini-shadow-bar: calc(100% - var(--mini-panel-opacity));
+  --mini-lyrics-panel-opacity: 100%;
+  --mini-queue-panel-opacity: 100%;
 
   /* 歌词区域叠在宿主之上的那层额外底色：0% 是默认，也就是完全透出所在面板 */
   --lyric-panel-opacity: 0%;
