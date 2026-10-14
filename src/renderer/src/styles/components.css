@@ -1741,6 +1741,9 @@ select.input option {
   transition: background var(--dur-2) var(--ease);
 }
 
+/* 圆钮颜色分主题（--switch-knob，见 tokens.css）：深色主题下是白钮压在浅膜轨道上，
+   浅色主题下是白钮压在灰轨道上。★ 那道极淡的阴影只在浅色主题里有用（白钮压在浅灰轨道上
+   要靠它把边缘托出来），深色主题下它落在白钮背后，看不出来也不碍事。 */
 .switch::after {
   content: '';
   position: absolute;
@@ -1749,7 +1752,8 @@ select.input option {
   width: 17px;
   height: 17px;
   border-radius: 50%;
-  background: var(--text-1);
+  background: var(--switch-knob);
+  box-shadow: var(--shadow-1);
   transition: transform var(--dur-2) var(--ease);
 }
 
@@ -1757,9 +1761,11 @@ select.input option {
   background: var(--accent);
 }
 
+/* 打开时圆钮滑到右边。颜色沿用同一颗令牌，别再写死一个 #fff ——
+   「开」与「关」的圆钮本来就是同一颗，两处各写一份迟早只改一处 */
 .switch[aria-checked='true']::after {
   transform: translateX(17px);
-  background: #fff;
+  background: var(--switch-knob);
 }
 
 /* 设置页 */
