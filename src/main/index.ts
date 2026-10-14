@@ -207,8 +207,9 @@ function sendToRenderer(channel: string, payload: unknown): void {
 /**
  * 这条 IPC 是哪个窗口发来的。
  *
- * ★ 三颗窗口钮（最小化 / 最大化 / 关闭）一律作用于**它自己**：迷你窗那颗关闭只该关掉迷你条，
- *   不该把主界面一起收掉；那颗最小化同理。原先一律打到 mainWindow 上，是因为当时只有一个窗。
+ * ★ 几颗窗口钮（最小化 / 最大化 / 关闭）一律作用于**它自己**：迷你窗那颗关闭只该关掉迷你条，
+ *   不该把主界面一起收掉（迷你条上那颗最小化已撤掉，但语义照旧）。原先一律打到 mainWindow 上，
+ *   是因为当时只有一个窗。
  */
 function senderWindow(event: Electron.IpcMainInvokeEvent): BrowserWindow | null {
   return BrowserWindow.fromWebContents(event.sender)

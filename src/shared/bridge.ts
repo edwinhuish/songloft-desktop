@@ -51,8 +51,9 @@ export interface SongloftBridge {
   }
   window: {
     /**
-     * 这三颗窗口钮一律**作用于调用它自己所在的那个窗口**（主进程按 event.sender 认窗口），
-     * 不是「主窗口」：迷你窗那颗最小化不该把主窗口收掉，那颗关闭也只该关掉迷你条。
+     * 这几颗窗口钮一律**作用于调用它自己所在的那个窗口**（主进程按 event.sender 认窗口），
+     * 不是「主窗口」：迷你窗那颗关闭只该关掉迷你条，不该把主界面一起收掉
+     * （它有「最小化」时同理，那颗钮现在已从界面上撤掉，但这个语义不变）。
      */
     minimize(): Promise<void>
     toggleMaximize(): Promise<boolean>

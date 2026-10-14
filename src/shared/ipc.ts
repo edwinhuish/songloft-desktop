@@ -109,13 +109,16 @@ export interface WindowState {
  *   拖出来的值存进设置（AppSettings.miniPanelHeight）。
  * ★ MINI_BAR_HEIGHT 必须与样式表里 `.mini-player` 的高度一致（styles/components.css 的
  *   `--mini-bar-h`）—— 两边差一档就是「条里空出一截」或「控件被裁掉」。
+ * ★ 宽度 380 这一档实测（拿一首长歌名 + 时长 1:02:05 的歌压中栏）：中栏 174px、悬浮那一层
+ *   的音量条 84px，五颗控件与右上角那颗窗口钮的右边缘都正好落在 380 上 —— 一个不裁。
+ *   再往下调就是中栏与音量条互相让位（两者都是可收缩的 flex 项），歌名那头先开始看不见字。
  * ★ MINI_MENU_HEIGHT 是为什么存在：右键菜单是页面里的 DOM，**画不出窗口** —— 而条自己只有
  *   64px 高，一份「两个不透明度滑块」的菜单实测 150px 上下，压进去只会剩一条带滚动条的缝
  *   （.context-menu 的 max-height 是 60vh，60% × 64 = 38px）。所以菜单一开就把窗口临时加高到
  *   这一档（面板已经展开时不必 —— 那档本来就够高）。
  */
 export const MINI_BAR_HEIGHT = 64
-export const MINI_WIDTH = 400
+export const MINI_WIDTH = 380
 export const MINI_MENU_HEIGHT = 240
 /** 面板能拖到的最小高度：再矮就只剩一行歌词的位置，那个高度没有意义 */
 export const MINI_PANEL_MIN_HEIGHT = 180

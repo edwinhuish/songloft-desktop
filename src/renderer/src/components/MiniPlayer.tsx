@@ -19,11 +19,13 @@
  *     （条与下方面板一起），见样式表 .mini-info-hover —— 条只有 64px 高，作为命中区太窄了。
  *   · 控件：上一首 / 播放 / 下一首 / 歌词 / 队列。比底栏那套小一档（见 .mini-bar 的
  *     --mini-ctl-h），因为这一条总共只有 64px 高。
- *   · 右上角：最小化 / 关闭。**没有「退出迷你模式」** —— 那颗钮的语义（把窗口换回原样）
- *     在独立窗口下不存在了：迷你窗关掉就是关掉，主窗口一直好好的。
+ *   · 右上角：**只有关闭**。**没有「退出迷你模式」** —— 那颗钮的语义（把窗口换回原样）
+ *     在独立窗口下不存在了：迷你窗关掉就是关掉，主窗口一直好好的。最小化那颗也已去掉：
+ *     迷你窗的用处正是「一直摆在那儿」，缩进任务栏就等于看不见了（系统那一侧的最小化仍在，
+ *     从底栏那颗按钮或托盘再点一下就唤回来，见 main/mini-window.ts 的 openMiniWindow）。
  *
  * ★ 无边框窗口没有系统标题栏：拖拽区得自己给（整条都是拖拽区，控件逐个放行，见样式表），
- *   最小化与关闭这两颗也得自己给 —— 少一颗就是「这个窗关不掉」。
+ *   关闭这一颗也得自己给 —— 少了它就是「这个窗关不掉」。
  *
  * ★ 面板高度可拖（把手压在窗口下边缘，见 .mini-resize）：窗口只会**向下**长，所以默认位置
  *   在工作区上方（见 main/mini-window.ts）；拖出来的高度落盘到 settings.miniPanelHeight。
@@ -36,7 +38,6 @@ import {
   IconClose,
   IconHeart,
   IconLyrics,
-  IconMinimize,
   IconPause,
   IconPlay,
   IconQueue,
@@ -292,20 +293,13 @@ export function MiniPlayer(): React.JSX.Element {
         </div>
 
         {/*
-          右上角那一组：最小化 / 关闭（与主窗口标题栏右端同序、同样子，只是小一档）。
+          右上角那一颗：关闭（与主窗口标题栏右端那颗同款 .win-btn，只是小一档）。
+          ★ 原先这里还有一颗最小化，已去掉 —— 理由见文件头那一段（系统那一侧的最小化还在，
+            从底栏那颗按钮或托盘再点一下就唤回来）。
           它整个落在控件行上方那条缝里（高度由 CSS 按条高与控件高算出来），所以那一行
           的空隙有多高，这里的图标就只能是多大 —— 11px 是这条缝能舒服放下的上限。
         */}
         <div className="mini-window-actions">
-          <button
-            type="button"
-            className="win-btn"
-            data-tip="最小化"
-            aria-label="最小化"
-            onClick={() => void window.songloft.window.minimize()}
-          >
-            <IconMinimize size={11} />
-          </button>
           <button
             type="button"
             className="win-btn"
