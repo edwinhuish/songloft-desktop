@@ -61,7 +61,7 @@ export const useLocalFiles = create<LocalFilesState>((set, get) => ({
   clear: () => set({ songs: [] })
 }))
 
-/** 列表里第 index 首开始播（「本地文件」页的行双击与「播放全部」都走它） */
+/** 列表里第 index 首开始播（曲库页「本地」那一半的行双击与「播放全部」都走它） */
 export function playLocalFileAt(index: number): void {
   const songs = useLocalFiles.getState().songs
   if (songs.length === 0) return
@@ -87,7 +87,7 @@ export function playLocalFiles(paths: readonly string[]): void {
  * 还没登录就顺手把人放进来。
  *
  * 双击一个音频文件时，用户要的是「听这首歌」—— 拦在登录页上什么都做不了（曲库确实得有
- * 会话，本地文件不需要）。所以这里替他进免登录模式，并把界面切到「本地文件」那一页：
+ * 会话，本地文件不需要）。所以这里替他进免登录模式，并把界面切到曲库页的「本地」那一半：
  * 双结果都摆在眼前，「我刚打开的那首歌」和「还能放别的什么」。
  *
  * ★ 已经登录（或已经在免登录模式里）就什么都不做：此刻用户多半正看着别的页面，

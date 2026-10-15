@@ -682,29 +682,39 @@ const STEPS = [
 
   // ── 曲库：类型筛选 → 分面浏览 → 组合筛选 ──────────────────────────────
   ['02-library', "window.__t.click('.nav-item', '曲库')", 2200, { rows: exactly(43) }],
+  /*
+   * ★ 类型筛选这三步的选择器**必须带上 `[aria-label="歌曲类型"]`**：曲库页头上还有另一颗
+   *   `.segmented`（服务器 / 本地 来源切换，见 pages/LibraryPage），而两边的可见文字里都有
+   *   「服务器」—— 不限定的话按文字点会先命中页头那一颗，于是「切了类型」其实什么都没筛，
+   *   断言却对着 41 行绿。
+   */
   [
-    '03-library-type-local',
-    "window.__t.click('.segmented button', '本地')",
+    '03-library-type-server',
+    "window.__t.click('.segmented[aria-label=\"歌曲类型\"] button', '服务器')",
     2000,
-    { rows: exactly(41), chipTitles: containsAll('本地') }
+    { rows: exactly(41), chipTitles: containsAll('服务器') }
   ],
   [
     '04-library-type-radio',
-    "window.__t.click('.segmented button', '电台')",
+    "window.__t.click('.segmented[aria-label=\"歌曲类型\"] button', '电台')",
     2000,
     { rows: exactly(0), chipTitles: containsAll('电台') }
   ],
   // 切回「全部」：分面浏览必须在不带类型过滤的基线上看，否则后面 rows 断言会串味
   [
     '05-library-type-all',
-    "window.__t.click('.segmented button', '全部')",
+    "window.__t.click('.segmented[aria-label=\"歌曲类型\"] button', '全部')",
     2000,
     { rows: exactly(43) }
   ],
-  // 打开分类浏览。默认维是「歌手」，所以卡片内容必须是歌手名
+  /*
+   * 打开分类浏览。默认维是「歌手」，所以卡片内容必须是歌手名。
+   * ★ 它现在是一颗**图标钮**（需求：与看法切换一起挪到「显示隐藏歌单曲目」左边），
+   *   没有可见文字 —— 只能按 aria-label 点（byText 够不着）。
+   */
   [
     '06-library-browse-on',
-    "window.__t.click('.btn', '分类浏览')",
+    "window.__t.clickLabel('分类浏览')",
     2600,
     { cards: exactly(5), cardTitles: containsAll('陈屿', '野岸乐队') }
   ],
@@ -724,11 +734,11 @@ const STEPS = [
     { rows: exactly(12), cards: exactly(0), chipTitles: containsAll('流派：摇滚') }
   ],
 
-  // 「曲库」页的第二个标签：内容换成目录，**标题还得是「曲库」** —— 这一条正是
-  // 「两个页面合成了一页」的判据，只看 folderRows 的话，"又开了一个页面"也能过。
+  // 换一种看法（工具条里那一对图标钮之一）：内容换成目录，**标题还得是「曲库」** ——
+  // 这一条正是「同一页的不同看法」的判据，只看 folderRows 的话，"又开了一个页面"也能过。
   [
     '09-library-folders-tab',
-    "window.__t.click('.segmented button', '文件夹')",
+    "window.__t.clickLabel('按文件夹浏览')",
     2200,
     { folderRows: exactly(5), pageTitle: exactly('曲库') }
   ],
@@ -737,7 +747,7 @@ const STEPS = [
    * 点进去就该是 N 行 —— mock 那两个数字以前对不上（清单 8 首、实际 10 行），
    * 只数「非空」的话这种自相矛盾会一直躺着。
    *
-   * ★ 这两步必须紧跟在上一步（文件夹标签刚打开）之后：先把标签切回「曲库」再点
+   * ★ 这两步必须紧跟在上一步（文件夹看法刚切过去）之后：先切回「按标签浏览」再点
    *   .folder-row，会拿到一个 NOT_FOUND —— 而 NOT_FOUND 那一步的截图看着还挺正常。
    */
   [
@@ -753,12 +763,12 @@ const STEPS = [
     2000,
     { folderRows: exactly(5), crumbs: equals('音乐根目录') }
   ],
-  // 换回「曲库」标签：模式要能来回切，且切回来不能是空页
+  // 换回「按标签浏览」：两种看法要能来回切，且切回来不能是空页（上一段筛的「流派：摇滚」还在）
   [
     '12-library-tab-back',
-    "window.__t.click('.segmented button', '曲库')",
+    "window.__t.clickLabel('按标签浏览')",
     2400,
-    { rows: atLeast(1), folderRows: exactly(0), pageTitle: exactly('曲库') }
+    { rows: exactly(12), folderRows: exactly(0), pageTitle: exactly('曲库') }
   ],
 
   // ── 歌单 / 最近 / 收藏 ─────────────────────────────────────────────────
@@ -1375,6 +1385,42 @@ const STEPS = [
     "window.__t.submit('.login-form')",
     4000,
     { login: exactly(0), navs: atLeast(5), surface: exactly('native') }
+  ],
+
+  /*
+   * ── 曲库页的两半：服务器 / 本地 ─────────────────────────────────────────
+   * 侧栏只有一个「曲库」入口（原先是「曲库 + 本地文件」两颗钮），看哪一半由页头那颗分段
+   * 切换决定（见 pages/LibraryPage）。放在这一段（刚重新登录）：界面刚重挂过，曲库是未筛选的
+   * 基线，三档行数都能钉死。
+   *
+   * ★ 第 76 步与第 78 步是**成对**的：先在「服务器」那一半筛成 2 首 → 切去「本地」→ 再切回来
+   *   还得是那 2 首。两半各占一个页面槽（见 App 的 PAGE_SLOTS）；若把它们做成同一个实例里换
+   *   渲染分支，这一趟回来会变回 43 首 —— 而那正是「换个来源看看」时最不该丢掉的东西。
+   */
+  ['75-library-server-half', "window.__t.click('.nav-item', '曲库')", 2200, { rows: exactly(43) }],
+  [
+    '76-library-type-remote',
+    "window.__t.click('.segmented[aria-label=\"歌曲类型\"] button', '网络')",
+    2000,
+    { rows: exactly(2) }
+  ],
+  [
+    '77-library-local-half',
+    "window.__t.click('.segmented[aria-label=\"曲库来源\"] button', '本地')",
+    1800,
+    {
+      // 同一页（大标题不变），但内容换成了本机那批文件 —— 这一趟巡检一个文件也没挑过，
+      // 所以这里必须是空态：不是「43 首曲库的歌」混进来，也不是一片白
+      pageTitle: exactly('曲库'),
+      rows: exactly(0),
+      emptyText: containsAll('还没有打开过本地文件')
+    }
+  ],
+  [
+    '78-library-server-back',
+    "window.__t.click('.segmented[aria-label=\"曲库来源\"] button', '服务器')",
+    2200,
+    { rows: exactly(2), folderRows: exactly(0) }
   ]
 ]
 

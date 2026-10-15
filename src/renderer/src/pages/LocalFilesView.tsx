@@ -1,12 +1,15 @@
 /**
- * 本地文件。
+ * 曲库页的「本地」那一半（页头的来源切换切到「本地」，见 LibraryPage）。
  *
- * 这一页是「双击音频文件就能播」在界面上的那一半：文件已经进来之后，用户要能看见它、
+ * 这一块是「双击音频文件就能播」在界面上的那一半：文件已经进来之后，用户要能看见它、
  * 换一首放、或者再挑几个进来。
  *
- * ★ 它是**全应用唯一不需要登录的内容页**（曲库、歌单、收藏、搜索都读后端，本地文件读的是
- *   本机磁盘）。所以免登录模式进来就落在这里，页面上那条提示也只在这一页出现 ——
- *   既说清「为什么这几个入口是灰的」，也给出回登录页的那条路。
+ * ★ 它是全应用唯一**不需要登录**的内容：曲库、歌单、收藏、搜索都读后端，这里读的是本机
+ *   磁盘。所以免登录模式进来就落在这儿，页面上那条提示也只在这一块出现 —— 既说清
+ *   「为什么那几个入口都不在」，也给出回登录页的那条路。
+ *
+ * ★ 与另外两半（LibraryView / FoldersView）同一个版式：**不自己画页头** —— 大标题与
+ *   来源切换由 LibraryPage 提供，这里只画自己那一行（说明 + 动作）和列表。
  *
  * ★ 刻意不复用 SongTable：那张表是为**曲库里的歌**做的（收藏、加入歌单、从曲库删除、
  *   查看歌手专辑、拖到侧栏歌单…全都要经后端），而这里每一首都不在曲库里。与其传一堆
@@ -16,14 +19,7 @@
 
 import { useState } from 'react'
 
-import {
-  IconFolderOpen,
-  IconMusic,
-  IconPause,
-  IconPlay,
-  IconServer,
-  IconTrash
-} from '@/components/Icons'
+import { IconFolderOpen, IconPause, IconPlay, IconServer, IconTrash } from '@/components/Icons'
 import { EmptyState } from '@/components/primitives'
 import { useAuth } from '@/state/useAuth'
 import { useLocalFiles, playLocalFileAt, pickLocalFiles } from '@/state/useLocalFiles'
@@ -33,7 +29,7 @@ import { toast } from '@/state/useToasts'
 /** 列宽（与 SongTable 同一个写法：grid 轨道直接写进 style） */
 const GRID = '38px minmax(220px, 3fr) 84px 112px'
 
-export function LocalFilesPage(): React.JSX.Element {
+export function LocalFilesView(): React.JSX.Element {
   const songs = useLocalFiles((s) => s.songs)
   const remove = useLocalFiles((s) => s.remove)
   const clear = useLocalFiles((s) => s.clear)
@@ -59,20 +55,14 @@ export function LocalFilesPage(): React.JSX.Element {
   }
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title row" style={{ gap: 10 }}>
-            <IconMusic size={24} />
-            本地文件
-          </h1>
-          <p className="page-subtitle">
-            {songs.length === 0
-              ? '打开本机的音频文件直接播放，不需要连接服务器'
-              : `共 ${songs.length} 个文件 · 双击任意一行开始播放`}
-          </p>
+    <>
+      <div className="row-between" style={{ gap: 14, marginBottom: 14 }}>
+        <div className="page-subtitle truncate" style={{ margin: 0, minWidth: 0 }}>
+          {songs.length === 0
+            ? '本机磁盘上的音频文件：打开就能放，不需要连接服务器'
+            : `共 ${songs.length} 个文件 · 双击任意一行开始播放`}
         </div>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="row" style={{ gap: 8, flex: 'none' }}>
           <button
             type="button"
             className="btn"
@@ -122,7 +112,6 @@ export function LocalFilesPage(): React.JSX.Element {
 
       {songs.length === 0 ? (
         <EmptyState
-          icon={<IconMusic size={26} />}
           title="还没有打开过本地文件"
           description="也可以直接把音频文件拖到应用图标上、或用系统里「用 Songloft Desktop 打开」—— 双击即播，不必登录"
           action={
@@ -204,6 +193,6 @@ export function LocalFilesPage(): React.JSX.Element {
           })}
         </div>
       )}
-    </div>
+    </>
   )
 }

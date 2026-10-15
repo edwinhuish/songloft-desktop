@@ -7,14 +7,19 @@
  * 桌面端相对移动端多做的一点：面包屑做成可点击的层级链（移动端只有返回箭头），
  * 深目录下从 `Pop/2020/Live` 跳回 `Pop` 只要一次点击。
  *
- * ★ 页面标题与标签条由 LibraryPage 提供，这里只画自己那一行（目录摘要 + 动作）
- *   和目录内容 —— 两处各写一遍标题，迟早会长歪。
+ * ★ 页头（大标题 +「服务器 / 本地」来源切换）由 LibraryPage 提供，这里只画自己那一行
+ *   （目录摘要 + 动作）和目录内容 —— 两处各写一遍标题，迟早会长歪。
+ *
+ * ★ 那一行右边开着**同一对看法切换钮**（components/LibraryViewSwitch，曲库视图 / 文件夹视图）：
+ *   页头那格已经归来源切换了，不在这里再画一次的话，进了文件夹就再也切不回曲库。
+ *   分类浏览那颗钮不跟过来 —— 它管的是分面网格，只在曲库视图里有东西可看。
  */
 
 import { useMemo, useState } from 'react'
 
 import type { Song } from '@shared/types'
 import { IconFolder, IconFolderOpen, IconMusic, IconPlay, IconRefresh } from '@/components/Icons'
+import { LibraryViewSwitch } from '@/components/LibraryViewSwitch'
 import { EmptyState } from '@/components/primitives'
 import { SelectionBar } from '@/components/SelectionBar'
 import { LIBRARY_COLUMNS, SongTable } from '@/components/SongTable'
@@ -62,6 +67,7 @@ export function FoldersView({ path }: { path: string }): React.JSX.Element {
             : `${folders.length} 个子文件夹 · ${data?.total_songs ?? 0} 首歌${path ? ` · ${path}` : ''}`}
         </div>
         <div className="row" style={{ gap: 8, flex: 'none' }}>
+          <LibraryViewSwitch mode="folders" />
           <button type="button" className="btn" onClick={() => result.reload()}>
             <IconRefresh size={15} />
             刷新

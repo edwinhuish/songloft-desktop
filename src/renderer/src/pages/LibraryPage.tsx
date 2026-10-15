@@ -1,12 +1,19 @@
 /**
- * 曲库页 = 外壳（标题 +「曲库 / 文件夹」标签条）+ 两种模式各自的内容。
+ * 曲库页 = 外壳（标题 +「服务器 / 本地」切换）+ 各来源、各看法自己的内容。
  *
- * 「曲库」与「文件夹」本来就是同一批歌的两种切法（按标签筛 / 按目录钻），所以并成一页。
+ * ★ 侧栏只有一个「曲库」入口：后端的曲库与**本机磁盘上的音频文件**是两份来源不同的东西
+ *   （后者读磁盘、不需要登录，见 §8.16），所以页头那颗切换按**来源**分 ——
+ *   「服务器」= 后端曲库（按标签 / 按文件夹两种看法），「本地」= 本机那批文件。
+ *   合并的是入口，不是把两份数据混在一起：换到「本地」时一个后端请求也不发。
  *
- * ★ 底下仍然是**两条路由**（library / folders），而不是一个组件内的 state：
+ * ★ 底下仍然是**三条路由**（library / folders / local），而不是一个组件内的 state：
  *   文件夹要能带着当前目录深链、面包屑要能一段段跳回去，局部 state 表达不了这些
  *   （刷新窗口或后退就丢）；主进程菜单、命令面板也都是按路由打的。
- *   所以这一页只负责标签条与标题，模式内容各自成块（LibraryView / FoldersView）。
+ *   所以这一页只负责页头与来源切换，内容各自成块（LibraryView / FoldersView / LocalFilesView）。
+ *
+ * ★ 「曲库 / 文件夹」与「分类浏览」这两只看法的入口是**工具条里的图标钮**，不再占页头
+ *   （见 components/LibraryViewSwitch 与下面那一段）：它们属于「服务器」那一半的两种看法，
+ *   而页头那一格现在归来源切换。文件夹视图里也画同一对钮，否则进去了就出不来。
  *
  * 曲库模式（LibraryView）做了三件原 Flutter 端没做好的事：
  *   1. **分面浏览就在同一页**：歌手/专辑/流派/语种/风格 五个维度用 chip 切换，
@@ -28,62 +35,84 @@ import {
   IconSparkle,
   IconUpload
 } from '@/components/Icons'
+import { LibraryViewSwitch } from '@/components/LibraryViewSwitch'
 import { CardGridSkeleton, Cover, EmptyState } from '@/components/primitives'
 import { SelectionBar } from '@/components/SelectionBar'
 import { LIBRARY_COLUMNS, SongTable, type SongSort } from '@/components/SongTable'
 import { getFacets } from '@/api/endpoints'
 import { useAsync } from '@/hooks/useAsync'
 import { useSongList } from '@/hooks/useSongList'
-import { requireClient } from '@/state/useAuth'
+import { requireClient, useAuth } from '@/state/useAuth'
 import { usePlayer } from '@/state/usePlayer'
 import { useUi, type NativeRoute } from '@/state/useUi'
 import { FoldersView } from './FoldersView'
+import { LocalFilesView } from './LocalFilesView'
 
+/**
+ * 歌曲类型（后端 `type` 参数）。
+ *
+ * ★ 第一档的**值**仍是 `local`（后端口径：存在服务器本机磁盘上的歌），但**名字**改叫
+ *   「服务器」—— 页头那颗来源切换把「本地」这个词拿走了（它现在指本机磁盘上的文件），
+ *   两处都叫「本地」的话，这一行看上去像在筛下面那三种来源里的第二种。
+ */
 const TYPE_OPTIONS: { value: SongType | 'all'; label: string }[] = [
   { value: 'all', label: '全部' },
-  { value: 'local', label: '本地' },
+  { value: 'local', label: '服务器' },
   { value: 'remote', label: '网络' },
   { value: 'radio', label: '电台' }
 ]
 
 const BROWSE_FIELDS: FacetField[] = ['artist', 'album', 'genre', 'language', 'style']
 
-/** 本页的两条路由（两个页面槽，各留一份实例：见 App 的 PAGE_SLOTS） */
-type LibraryRoute = Extract<NativeRoute, { name: 'library' | 'folders' }>
+/** 本页的三条路由（三个页面槽，各留一份实例：见 App 的 PAGE_SLOTS） */
+type LibraryRoute = Extract<NativeRoute, { name: 'library' | 'folders' | 'local' }>
 
 /**
  * @param route 由页面槽传进来，**不是**自己从 useUi 里读「当前路由」：这一页在槽里常驻
- *   （library 与 folders 各一份实例），不活跃的那一份读到的「当前路由」已经属于别人了 ——
- *   拿它渲染会让留在 DOM 里的这一页跟着变脸（曲库槽里画出文件夹、反之亦然），
+ *   （library / folders / local 各一份实例），不活跃的那一份读到的「当前路由」已经属于别人了
+ *   —— 拿它渲染会让留在 DOM 里的这一页跟着变脸（曲库槽里画出文件夹、反之亦然），
  *   而它本该停在用户离开时的样子；更要紧的是「曲库」那一半的筛选条件会跟着一起丢。
  */
 export function LibraryPage({ route }: { route: LibraryRoute }): React.JSX.Element {
   const navigate = useUi((s) => s.navigate)
+  const guest = useAuth((s) => s.guest)
+  const local = route.name === 'local'
 
   return (
     <div className="page">
       <div className="page-header">
         <h1 className="page-title">曲库</h1>
-        {/* 视图切换（不是筛选）：所以走 .segmented，而不是筛选区那种 chip */}
-        <div className="segmented" role="group" aria-label="曲库视图">
-          <button
-            type="button"
-            aria-pressed={route.name !== 'folders'}
-            onClick={() => navigate({ name: 'library' })}
-          >
-            曲库
-          </button>
-          <button
-            type="button"
-            aria-pressed={route.name === 'folders'}
-            onClick={() => navigate({ name: 'folders', path: '' })}
-          >
-            文件夹
-          </button>
-        </div>
+        {/* 来源切换（不是筛选）：所以走 .segmented，而不是筛选区那种 chip。
+            ★ 免登录模式下**不摆出来**：那一半的每一项都要会话（与侧栏同一口径 ——
+              不是灰掉，是不摆出来），此时能看的本来就只有「本地」那一半。 */}
+        {guest ? null : (
+          <div className="segmented" role="group" aria-label="曲库来源">
+            <button
+              type="button"
+              aria-pressed={!local}
+              /* 已经在「服务器」那一半时**什么都不做**：按着的是这一档，再点一下不该把人从
+                 「文件夹」看法里拽回「曲库」看法 —— 换看法是工具条那对图标钮的事 */
+              onClick={() => {
+                if (local) navigate({ name: 'library' })
+              }}
+            >
+              服务器
+            </button>
+            <button type="button" aria-pressed={local} onClick={() => navigate({ name: 'local' })}>
+              本地
+            </button>
+          </div>
+        )}
       </div>
 
-      {route.name === 'folders' ? <FoldersView path={route.path} /> : <LibraryView />}
+      {/* 三种内容各自成块，共同点是都**不自己画页头**（标题与来源切换在上面那一层） */}
+      {local ? (
+        <LocalFilesView />
+      ) : route.name === 'folders' ? (
+        <FoldersView path={route.path} />
+      ) : (
+        <LibraryView />
+      )}
     </div>
   )
 }
@@ -203,6 +232,19 @@ function LibraryView(): React.JSX.Element {
         </div>
 
         <div className="row" style={{ gap: 8 }}>
+          {/* 看法的入口（图标钮）：换一种切法看同一批歌。排在「显示隐藏歌单曲目」左手边 */}
+          <LibraryViewSwitch mode="library" />
+          <button
+            type="button"
+            className="icon-btn"
+            data-active={browsing}
+            aria-pressed={browsing}
+            aria-label="分类浏览"
+            data-tip="按歌手 / 专辑 / 流派 / 语种 / 风格分类浏览"
+            onClick={() => setBrowsing((v) => !v)}
+          >
+            <IconSparkle size={16} />
+          </button>
           <button
             type="button"
             className="btn"
@@ -215,16 +257,6 @@ function LibraryView(): React.JSX.Element {
             }}
           >
             显示隐藏歌单曲目
-          </button>
-          <button
-            type="button"
-            className="btn"
-            data-size="sm"
-            data-variant={browsing ? 'primary' : 'default'}
-            onClick={() => setBrowsing((v) => !v)}
-          >
-            <IconSparkle size={14} />
-            分类浏览
           </button>
           <select
             className="input"

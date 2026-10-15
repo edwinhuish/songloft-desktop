@@ -105,7 +105,8 @@ src/
    ├─ pages/         10 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
    │                 Recent / Search / Settings / Login / Extensions
    │                 （同目录还有 PluginStore —— 扩展面的「插件商店」那一栏；
-   │                  「文件夹」不是独立页面，是 LibraryPage 里的一个标签，见 FoldersView）
+   │                  以及两个页内视图 FoldersView / LocalFilesView —— 「文件夹」与「本地文件」
+   │                  都不是独立页面，是 LibraryPage 一页三份内容里的两份，见 AGENTS.md 第 4 节）
    ├─ components/    Sidebar / TitleBar / SongTable / PlayerBar / LyricsView / CommandPalette /
    │                 Panel / ContextMenu / Modal / Toasts / SelectionBar / FullPlayer /
    │                 MiniPlayer / ExtensionFrame / PluginSurface / RegistrySourcesDialog / …
@@ -116,8 +117,9 @@ src/
    └─ styles/        tokens.css / base.css / components.css / index.css
 ```
 
-> 两条容易看错的地方：**「文件夹」不是一个页面**（它是曲库页里的第二个标签），
-> 而**「扩展」那一整面不在 `renderRoute` 的 switch 里** —— 它有自己的路由与侧栏，
+> 两条容易看错的地方：**侧栏只有一个「曲库」入口** —— `LibraryPage` 一页三份内容
+> （服务器的曲库 / 服务器的文件夹 / 本机磁盘上的文件），由页头那颗「服务器 / 本地」切换决定
+> 看哪一份；而**「扩展」那一整面不在 `renderRoute` 的 switch 里** —— 它有自己的路由与侧栏，
 > 详见 [`../AGENTS.md`](../AGENTS.md) 第 4 节。
 
 技术栈版本表见 [`../AGENTS.md`](../AGENTS.md) 第 2 节。
@@ -261,12 +263,13 @@ pnpm run e2e
 并断言曲库的类型筛选真的收敛了行数（43 → 41 → 0）、流派分面的**卡片文字**确实换成了流派名
 （卡片数同为 5，只数个数区分不出「有没有点中 chip」）。
 
-一次完整巡检 **74 步**，按链路大致这么分布（每步都会截一张图）：
+一次完整巡检 **78 步**，按链路大致这么分布（每步都会截一张图）：
 
 | 链路 | 覆盖到的关键判据 |
 |---|---|
 | 首页 / 曲库 | 统计条名目、类型筛选的行数收敛（43 → 41 → 0）、分面卡片**文字**换成维度名、筛选 chip |
 | 文件夹 | 目录行上「N 首」与点进去的实际行数一致、面包屑逐级跳回 |
+| 曲库的两半 | 「服务器 / 本地」切换真的换了内容（本地那一半是空态），切回来时上半场的筛选**还在**（2 首，不是 43 首） |
 | 歌单 / 最近 / 收藏 | 列表条目、歌单内有序列表、本机记录条数 |
 | 搜索 | 命中数（只可能来自后端）、相关歌单/歌手/专辑三块、空态文案 |
 | 多选与右键菜单 | Ctrl 加选的行数递增、操作条文案、菜单条目/分割线/本地曲那句说明 |
@@ -299,7 +302,7 @@ pnpm run e2e && pnpm run shots
 | 产物 | 用途 |
 |---|---|
 | `docs/screenshots/*.png` | 主要界面的单张图（1440 宽折到 1080），嵌进 README |
-| `docs/e2e-walkthrough.png` | **全部 74 个状态**的覆盖图：一格一步、带步骤名；用于一屏扫出「哪一格是空的 / 弹窗没关掉」 |
+| `docs/e2e-walkthrough.png` | **全部 78 个状态**的覆盖图：一格一步、带步骤名；用于一屏扫出「哪一格是空的 / 弹窗没关掉」 |
 
 它们都是**生成物**：改了界面就重跑这两条命令，不要手工截图替换 —— 手工图会安静地过期，
 而且下一次没人愿意重做。脚本按**步骤名**（不是序号）挑图，序号会随步骤增删而漂。

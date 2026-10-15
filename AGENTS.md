@@ -140,11 +140,13 @@ src/
    │                 usePlugins（已装扩展 + 顺序 + 运行时音频状态，唯一事实源）/
    │                 useLibrary（曲库数据的版本号 + 后台任务守望，见 §5.7）/
    │                 song-metadata（起播时按缺口补齐元数据：只补缺失 / 超时 / 缓存 / 请服务端补齐）
-   ├─ pages/         11 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
-   │                 Recent / Search / Settings / Login / Extensions / LocalFiles
-   │                 （+ 同目录的 PluginStore）
-   │                 （「文件夹」不是独立页面，是 LibraryPage 里的一个标签，见 FoldersView；
-   │                  LocalFiles 是唯一不需要登录的一页，见 §8.16）
+   ├─ pages/         10 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
+   │                 Recent / Search / Settings / Login / Extensions
+   │                 （+ 同目录的 PluginStore，以及两个**页内视图**：FoldersView / LocalFilesView）
+   │                 （「文件夹」与「本地文件」都不是独立页面 —— 侧栏只有一个「曲库」入口，
+   │                  LibraryPage 一页三份内容：服务器的曲库（按标签）/ 服务器的文件夹
+   │                  （按目录）/ 本机磁盘上的音频文件（唯一不需要登录的那一份，见 §8.16）。
+   │                  看哪一份由页头那颗「服务器 / 本地」切换决定）
    ├─ components/    Sidebar / TitleBar / SongTable / PlayerBar / LyricsView / CommandPalette /
    │                 Panel / ContextMenu / Modal / Toasts / SelectionBar /
    │                 FullPlayer（满窗播放：盖在原生面上的浮层）/
@@ -195,8 +197,8 @@ src/
 * **页面组件不许自己读「当前路由」**（`useUi(s => s.nativeRoute)`）：常驻之后，不活跃的那份
   实例读到的已经属于别人了，会当场变脸。参数一律由页面槽经 props 传进去（`LibraryPage`
   为此收 `route`）。
-* **`library` 与 `folders` 是两个槽**，不是一个：共用一个槽的话，切标签会把「曲库」那一半的
-  筛选条件一并卸掉。
+* **`library` / `folders` / `local` 是三个槽**，不是一个：共用一个槽的话，换个来源或换只看法
+  会把「服务器」那一半的筛选条件一并卸掉（三条路由落在同一页的三种内容上，见 LibraryPage）。
 
 代价是数据的新鲜度不再由「重新挂载」自动保证，改由那三个数据 hook 自己盯（见 §5.8）。
 
@@ -301,7 +303,8 @@ src/
 `run.sh`（编排）、`shots.sh`（把截图整理成文档用图）、`fixtures/`（自动登录配置与封面）。
 产物落在 `.e2e/`（已 gitignore）。
 
-一次巡检 **74 步**，覆盖：首页 / 曲库（类型与分面筛选、文件夹逐级进入）/ 歌单 / 最近 / 收藏 /
+一次巡检 **78 步**，覆盖：首页 / 曲库（类型与分面筛选、文件夹逐级进入、服务器与本地两半来回切）/
+歌单 / 最近 / 收藏 /
 搜索（含空态）/ 多选与右键菜单 / 设置九个分区 / 扩展面（商店、订阅源、插件管理、扩展页 webview）/
 播放（面板与满窗的歌词、队列、迷你窗）/ 命令面板 / 退出登录与登录。每步一张截图。
 
@@ -315,7 +318,7 @@ target** 上跑 —— STEPS 里用第 5 项 `'mini'` 标出来（`drive.mjs` �
 | 产物 | 用途 |
 |---|---|
 | `docs/screenshots/*.png` | 主要界面单张图（1440 宽折到 1080），嵌进 README |
-| `docs/e2e-walkthrough.png` | 全部 74 个状态的覆盖图，一格一步带步骤名 —— 用于一屏扫出「哪一格是空的」 |
+| `docs/e2e-walkthrough.png` | 全部 78 个状态的覆盖图，一格一步带步骤名 —— 用于一屏扫出「哪一格是空的」 |
 
 截图一律是**浅色主题**：`fixtures/config.json` 里把 `theme` 写成了 `light`（`system` 在无桌面
 偏好的 Xvfb 里本来也解析成浅色，写死只是为了避免随环境漂）。断言与主题无关，想换深色改这一项。
@@ -630,8 +633,9 @@ guest 自己的背景不透明，那块也永远透不出来。
 ### 8.16 本地文件即播：必须走自定义协议，且「免登录」是与 `status` 正交的一位
 
 「双击一个音频文件就能放」在桌面端有三个来源，而它们到达的时刻都很随意：启动参数（Windows /
-Linux 的文件关联把路径追加在 argv 里）、macOS 的 `open-file` 事件、用户自己从菜单或「本地文件」
-页挑的。链路：`main/local-files.ts`（收件口：排队 + 摇铃）→ `IPC.localFilesTakePending`（取走）→
+Linux 的文件关联把路径追加在 argv 里）、macOS 的 `open-file` 事件、用户自己从菜单（Ctrl+O）或
+「曲库 → 本地」那一半挑的。链路：`main/local-files.ts`（收件口：排队 + 摇铃）→
+`IPC.localFilesTakePending`（取走）→
 `renderer/state/useLocalFiles`（收件箱 → 队列）→ `main/media-protocol.ts`（把地址读成字节）。
 
 * **播放地址必须是自定义协议 `songloft-media://`，不能是 `file://`。** Chromium 不允许 http(s)
@@ -655,8 +659,9 @@ Linux 的文件关联把路径追加在 argv 里）、macOS 的 `open-file` 事�
   「与服务器现在是什么关系」，「不连服务器、只听本机文件」与它正交 —— 免登录进来之后照样可以
   再登录。于是「能不能进主界面」只在一处判断：`status === 'authenticated' || guest`（`App.tsx`）。
   **播放本身从不问登录状态**：本地文件读磁盘，只有曲库那几页要会话；免登录时侧栏与标题栏下拉
-  只留「本地文件 + 设置」（其余每一项点进去都是一页「尚未登录」，摆着不如不摆），命令面板与
-  工具栏搜索也一并收起来。
+  只留「曲库 + 设置」，而且曲库那颗钮的落点是**本地**那一半（页头那颗「服务器 / 本地」切换在
+  免登录时不摆出来，见 pages/LibraryPage）—— 其余每一项点进去都是一页「尚未登录」，摆着不如
+  不摆。命令面板与工具栏搜索也一并收起来。
 * **本地文件的 id 是路径散列取负**（`localSongId`）：服务端 id 全是正整数，负数永远撞不上
   （撞上的后果是收藏 / 播放上报落到曲库里另一首歌头上）。所有要走服务端的动作都得让开：
   播放上报与「最近播放」、歌词、多音轨探测、元数据补齐（`song-metadata` 会请服务端跑一次
@@ -672,7 +677,8 @@ Linux 的文件关联把路径追加在 argv 里）、macOS 的 `open-file` 事�
 * 这条链**不在 `pnpm run e2e` 里**（e2e 里没有可双击的文件）。要端到端验一遍，最省事的做法是
   把它当启动参数递进去：`SONGLOFT_USER_DATA=$(mktemp -d) electron . --no-sandbox <某个音频文件>`
   —— 应当**只有一条迷你播放器露面、没有主窗口**，并且直接出声（见 §8.17）；不带文件的普通启动
-  照旧是完整主界面。再从菜单 / 「本地文件」页挑文件时走的仍是**主界面**那条路（免登录 + 本地文件页）。
+  照旧是完整主界面。再从菜单 / 「曲库 → 本地」那一半挑文件时走的仍是**主界面**那条路
+  （免登录 + 曲库页的「本地」那一半）。
 
 ---
 
@@ -776,7 +782,7 @@ Linux 的文件关联把路径追加在 argv 里）、macOS 的 `open-file` 事�
 已对齐：曲库浏览（类型 / 分面 / 排序 / 无限滚动）、歌单增删改与拖拽重排、收藏、最近播放、
 文件夹浏览、逐字歌词与点击跳转、播放队列、命令面板、扫描与重复检测、设置项。
 
-**本地文件即播（桌面端独有）**：双击本机的音频文件（或菜单 / 「本地文件」页里挑）就开始放，
+**本地文件即播（桌面端独有）**：双击本机的音频文件（或菜单 / 曲库页的「本地」那一半里挑）就开始放，
 **不需要登录、也不进曲库** —— 上游只有「后端扫描入库的本地文件」这一条路。装了包之后系统里
 「用 Songloft Desktop 打开」也归它（`fileAssociations`，见 §8.16）。
 ★ 双击文件起的那一趟是**本地文件会话**：**只**起一个迷你播放器（它自己就是播放器），主界面

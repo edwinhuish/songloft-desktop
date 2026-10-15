@@ -39,7 +39,6 @@ import {
   IconListMusic,
   IconMaximize,
   IconMinimize,
-  IconMusic,
   IconPin,
   IconPuzzle,
   IconRestore,
@@ -154,16 +153,18 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
    */
   const navMenuItems = (): MenuItem[] => {
     /*
-     * 免登录模式（见 useAuth）：这份菜单只留「本地文件 + 设置」。
+     * 免登录模式（见 useAuth）：这份菜单只留「曲库 + 设置」。
      * 其余每一项点下去都是一页「尚未登录」（它们全都要会话），摆着不如不摆 —— 与侧栏同一口径。
+     * 「曲库」落在**本地**那一半（读本机磁盘、不要会话，见 pages/LibraryPage），
+     * 名字跟着侧栏走而不叫「本地文件」：落到的那一页大标题就是「曲库」。
      * 设置留着，是因为登录 / 切服务器那个入口就在它里面。
      */
     if (guest) {
       return [
         {
           key: 'local',
-          label: '本地文件',
-          icon: <IconMusic size={16} />,
+          label: '曲库',
+          icon: <IconLibrary size={16} />,
           onClick: () => navigate({ name: 'local' })
         },
         { key: 'sep-manage', label: '', separator: true },

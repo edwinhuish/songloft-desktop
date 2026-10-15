@@ -23,7 +23,6 @@ import {
   IconHome,
   IconLibrary,
   IconListMusic,
-  IconMusic,
   IconPlus,
   IconServer
 } from './Icons'
@@ -62,10 +61,11 @@ export function Sidebar(): React.JSX.Element {
   /** 正在被拖动的歌单（只为把源项淡下去） */
   const [draggingId, setDraggingId] = useState<number | null>(null)
   /**
-   * 免登录模式（见 useAuth）：这一栏只留「本地文件」一个入口。
+   * 免登录模式（见 useAuth）：这一栏只留「曲库」一个入口，而且它落在**本地**那一半。
    *
-   * ★ 不是「把不能点的灰掉」，而是不摆出来：首页/曲库/歌单/我喜欢/最近播放**读了才知道**
-   *   要会话，点进去只会得到一页「尚未登录」。此处留下的那个入口，是这时唯一真有内容的去处。
+   * ★ 不是「把不能点的灰掉」，而是不摆出来：首页/歌单/我喜欢/最近播放**读了才知道**
+   *   要会话，点进去只会得到一页「尚未登录」。曲库那一页里有一半（本机磁盘上的文件）这时
+   *   真有内容，所以留给它 —— 落点见下面那颗钮的 onClick。
    */
   const guest = useAuth((s) => s.guest)
   const leaveGuest = useAuth((s) => s.leaveGuest)
@@ -183,42 +183,42 @@ export function Sidebar(): React.JSX.Element {
           ★ 侧栏刻意**没有**设置项：设置只在折叠菜单里，两处各留一份入口只会漂移 */}
       <div className="nav-group">
         {guest ? null : (
-          <>
-            <button
-              type="button"
-              className="nav-item"
-              aria-current={isActive('home')}
-              onClick={() => navigate({ name: 'home' })}
-              {...tip('首页')}
-            >
-              <IconHome size={18} />
-              <span className="nav-text">首页</span>
-            </button>
-
-            {/* 「文件夹」是曲库页里的一个标签（不是独立入口），所以进文件夹模式时这里照样高亮 */}
-            <button
-              type="button"
-              className="nav-item"
-              aria-current={isActive('library', (r) => r.name === 'folders')}
-              onClick={() => navigate({ name: 'library' })}
-              {...tip('曲库')}
-            >
-              <IconLibrary size={18} />
-              <span className="nav-text">曲库</span>
-            </button>
-          </>
+          <button
+            type="button"
+            className="nav-item"
+            aria-current={isActive('home')}
+            onClick={() => navigate({ name: 'home' })}
+            {...tip('首页')}
+          >
+            <IconHome size={18} />
+            <span className="nav-text">首页</span>
+          </button>
         )}
 
-        {/* 本地文件：唯一不需要登录的一页（读本机磁盘，不读后端） */}
+        {/*
+          曲库：**一个入口管两半** —— 后端的曲库与本机磁盘上的音频文件，由页头那颗
+          「服务器 / 本地」切换决定看哪一半（见 pages/LibraryPage）。原先它们是两颗钮，
+          但那是同一页的两种来源，摆成两条只会让人以为「本地文件」是另一个地方。
+          ★ 「文件夹」是曲库页里的一只看法（图标钮），所以进文件夹模式时这里照样高亮；
+            「本地」那一半同理 —— 三条路由都是同一页。
+          ★ 落点：不在「服务器」那一半就带过去 —— 从「本地」点回来 = 回曲库，与合并前那颗
+            「曲库」钮是同一条肌肉记忆；已经在服务器那一半（曲库 / 文件夹）就**什么都不做**，
+            免得点一下把「文件夹」看法里的人拽回「曲库」看法。
+          ★ 免登录模式的落点是**本地**那一半：它读本机磁盘、不需要会话，是这时唯一真有
+            内容的去处（服务器那一半的请求一个都不会发）。
+        */}
         <button
           type="button"
           className="nav-item"
-          aria-current={isActive('local')}
-          onClick={() => navigate({ name: 'local' })}
-          {...tip('本地文件')}
+          aria-current={isActive('library', (r) => r.name === 'folders' || r.name === 'local')}
+          onClick={() => {
+            if (route.name === 'library' || route.name === 'folders') return
+            navigate(guest ? { name: 'local' } : { name: 'library' })
+          }}
+          {...tip('曲库')}
         >
-          <IconMusic size={18} />
-          <span className="nav-text">本地文件</span>
+          <IconLibrary size={18} />
+          <span className="nav-text">曲库</span>
         </button>
 
         {guest ? null : (

@@ -47,7 +47,6 @@ import { formatVersion } from './lib/format'
 import { FavoritesPage } from './pages/FavoritesPage'
 import { HomePage } from './pages/HomePage'
 import { LibraryPage } from './pages/LibraryPage'
-import { LocalFilesPage } from './pages/LocalFilesPage'
 import { LoginPage } from './pages/LoginPage'
 import { PlaylistDetailPage } from './pages/PlaylistDetailPage'
 import { PlaylistsPage } from './pages/PlaylistsPage'
@@ -365,7 +364,7 @@ export function App(): React.JSX.Element {
    * 少了它，登录页会变成一个既拖不动也关不掉的窗口（只能 Alt+F4）。
    *
    * ★ 免登录模式走的是**主界面**（不是登录页）：那一整页服务的是「连上后端」这件事，
-   *   而免登录的人要的只是放本机的文件（见 state/useLocalFiles 与 pages/LocalFilesPage）。
+   *   而免登录的人要的只是放本机的文件（见 state/useLocalFiles 与 pages/LocalFilesView）。
    */
   if (status !== 'authenticated' && !guest) {
     return (
@@ -566,10 +565,10 @@ function Toolbar(): React.JSX.Element {
 /**
  * 原生面的页面槽名：一条原生路由一个槽。
  *
- * ★ `library` 与 `folders` 虽然落在同一个组件里（见 LibraryPage：同一页的两个标签），
- *   仍然**各占一个槽** —— 一个槽的话，两个标签就是在同一个实例里换渲染分支，
- *   切过去会把「曲库」那一半的筛选条件与模式一并卸掉，而它们正是切回来时要留住的东西。
- *   两个槽各留一份，标签条在两边各画一次（只显示一个，看不出重复）。
+ * ★ `library` / `folders` / `local` 三条路由虽然落在同一个组件里（见 LibraryPage：
+ *   同一页的三种内容），仍然**各占一个槽** —— 一个槽的话，「换一种看法」就是在同一个实例里
+ *   换渲染分支，切过去会把「曲库」那一半的筛选条件与模式一并卸掉，而它们正是切回来时要留住
+ *   的东西。三个槽各留一份，页头在每份里各画一次（只显示一个，看不出重复）。
  */
 type PageSlotName = NativeRoute['name']
 
@@ -669,13 +668,15 @@ function renderRoute(route: NativeRoute): React.JSX.Element {
   switch (route.name) {
     case 'home':
       return <HomePage />
-    // 「曲库」与「文件夹」是同一页的两种模式（标签条在页内），所以两条路由都落到它
+    /*
+     * 「曲库」这一页有三种内容（见 LibraryPage）：服务器的曲库（按标签）/ 服务器的文件夹
+     * （按目录）/ 本机磁盘上的文件。页头那颗来源切换只在三种之间跳，所以三条路由都落到它。
+     * ★ 免登录模式进来落的是 `local` 那一份 —— 它是唯一不读后端的内容。
+     */
     case 'library':
     case 'folders':
-      return <LibraryPage route={route} />
-    // 唯一不需要登录的一页（读本机磁盘，不读后端），免登录模式进来就落在这儿
     case 'local':
-      return <LocalFilesPage />
+      return <LibraryPage route={route} />
     case 'favorites':
       return <FavoritesPage />
     case 'recent':
