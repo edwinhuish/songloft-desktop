@@ -169,6 +169,18 @@ function ExtensionView({ plugin, active, ctx }: ExtensionViewProps): React.JSX.E
     view.className = 'plugin-webview'
     // 独立 session：宿主给 defaultSession 注入的 CSP 会连插件页一起改写（见 PLUGIN_PARTITION）
     view.setAttribute('partition', PLUGIN_PARTITION)
+    /**
+     * ★ 这一条是插件页里那些链接能不能点开的关键，别顺手删掉。
+     *
+     * 不给 `allowpopups` 时，guest 里的 `window.open` 与 `<a target="_blank">` 会被直接
+     * 丢弃：请求根本到不了主进程那个 `setWindowOpenHandler`（`deny` + `shell.openExternal`，
+     * 见 main/index.ts 的 hardenPluginSession）。症状是**点了没反应**，而且不报错、
+     * 控制台一行都没有 —— 在 guest 里查不出任何东西，只能靠这一处对。
+     *
+     * 放开的只是「允许发出新窗口请求」，落不落地由那个 handler 说了算：一律 deny，
+     * 真正被打开的是系统浏览器。所以它不是把窗口开给了第三方插件。
+     */
+    view.setAttribute('allowpopups', 'true')
     view.setAttribute('src', url)
     viewRef.current = view
 

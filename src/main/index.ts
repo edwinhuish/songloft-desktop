@@ -215,6 +215,20 @@ function applyCsp(): void {
 }
 
 /**
+ * `url` 是否已经不在 `base` 这个源上了。
+ *
+ * 解析不出来的一律按「离开了」处理：宁可把它交给系统浏览器，也不要在应用窗口里
+ * 导航到一个来路不明的地址（同一条取舍见 windows.ts 主窗口的 will-navigate）。
+ */
+function isForeignOrigin(url: string, base: string): boolean {
+  try {
+    return new URL(url).origin !== new URL(base).origin
+  } catch {
+    return true
+  }
+}
+
+/**
  * ★ 扩展页（webview guest）的 session 隔离与围栏。
  *
  * 两条与主窗口不同的地方：
@@ -245,10 +259,29 @@ function hardenPluginSession(): void {
       if (/^https?:/i.test(url)) void shell.openExternal(url)
       return { action: 'deny' }
     })
+    /**
+     * 插件页里的链接走哪条路，看它是不是「离开了插件页」：
+     *
+     *   * **同源** → 让它自己跳。插件内部换页是正常的（`pushState` / hash 这类更是连
+     *     这个事件都不产生，只有顶层导航才会走到这里）；
+     *   * **跨源** → 判为离开，改交给系统浏览器，guest 留在原地。不做这一条的话，点一个
+     *     普通的 `<a href="https://…">`（作者没写 `target`）会把这**一整格**换成那个外部
+     *     站点 —— 而扩展框架里没有「后退」，用户只能切走再切回来。
+     *
+     * ★ 判据取 guest **当前**的 URL，不是当初那个 src：插件自己也可能换过页（同源），
+     *   拿起始地址比会把它自己的后续导航误判成外链。
+     * ★ 最初那一次加载不经过这里（`<webview src>` 等同 loadURL，本就不派发 will-navigate），
+     *   所以后端连不上、重定向这些加载期的事不受影响。
+     */
     contents.on('will-navigate', (event, url) => {
-      // 插件页内部跳路由是正常的，只挡非 http(s)
-      if (/^https?:/i.test(url)) return
+      // 非 http(s)（file:// 、自定义协议）一律挡掉：同一条围栏，主窗口那边也是这么写的
+      if (!/^https?:/i.test(url)) {
+        event.preventDefault()
+        return
+      }
+      if (!isForeignOrigin(url, contents.getURL())) return
       event.preventDefault()
+      void shell.openExternal(url)
     })
   })
 }

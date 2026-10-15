@@ -117,6 +117,11 @@ export function createMainWindow(store: ConfigStore): BrowserWindow {
    * 硬性要求，少做一步就等于把系统能力交给第三方插件页。
    *
    * 顺带把非 http(s) 的挂载挡掉：插件页永远是后端上的 http(s) 资源。
+   *
+   * ⚠ `allowpopups` **不在这里覆写**（它是元素属性、不在 webPreferences 里）。渲染层会显式
+   *   声明它 —— 少了它，插件页里的 `<a target="_blank">` 与 `window.open` 会在 guest 层被
+   *   丢弃，主进程那个「deny + 系统浏览器」的 handler 连触发机会都没有（表现为链接点了没
+   *   反应）。放开它不等于放任开窗：真正的处置在 main/index.ts 的 hardenPluginSession。
    */
   window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     if (!/^https?:/i.test(params.src)) {
