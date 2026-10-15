@@ -131,6 +131,18 @@ export function App(): React.JSX.Element {
    */
   const guest = useAuth((s) => s.guest)
   const started = useRef(false)
+  /**
+   * 启动编排（读设置 → 校验会话 → 定落点）走完了没有。走完之前只给启动占位。
+   *
+   * ★ 主界面必须等它，不能只看 status：**落点是跟着会话一起定下来的**（没会话要落到
+   *   「本地文件」那一页，见下面那段启动编排）。而 useAuth 与 useUi 是两份 store、各走各的
+   *   调度（zustand 走 useSyncExternalStore，那一帧是在微任务边界上刷的）—— 会话那一位先到、
+   *   落点晚一步的话，中间会实打实地挂出一帧**默认路由（首页）**的主界面。
+   *   而首页一挂就出事：它的每个请求都要会话，`requireClient()` 是**同步抛**的，
+   *   抛在 effect 里会掀掉整棵组件树（表现为整个窗口一片空白）。
+   *   「走完了」与那个落点在同一个同步块里置位，中间就插不进这么一帧。
+   */
+  const [booted, setBooted] = useState(false)
 
   /* ── 窗级订阅：迷你窗那两条 + 窗口状态（可以、也必须反复装卸）────────── */
   /*
@@ -212,7 +224,27 @@ export function App(): React.JSX.Element {
         void usePlayer.getState().restoreLastQueue()
         // 查不到、没新版本都不出声（见函数注释）
         void checkUpdatesInBackground().catch(() => undefined)
+      } else {
+        /*
+         * 没有会话 —— 免登录是默认形态（见 useAuth.guest），落在「本地文件」那一页：
+         * 侧栏这时只剩「曲库（本地）」与「连接服务器」，而它是唯一真有内容的去处
+         * （首页 / 歌单 / 收藏 / 搜索都要会话，读起来就是一片错误）。
+         *
+         * ★ 用 setNativeRoute 而不是 navigate：这不是「用户走了一步」。进了历史的话，
+         *   Alt+← 会退回到默认那一页（首页），而那一页在没有会话时读不了任何数据
+         *   （`requireClient()` 是同步抛的，见 hooks/useAsync）。
+         * ★ 已经带着本地文件启动的那一趟（双击音频文件）不归这里管：文件的播放由
+         *   state/useLocalFiles 自己接（它只负责放出声，落点仍是这里定的这一页）。
+         */
+        useUi.getState().setNativeRoute({ name: 'local' })
       }
+
+      /*
+       * 编排到此为止，主界面 / 登录页可以挂了（见 booted 的说明）。
+       * ★ 这一步与上面那个落点必须在**同一个同步块**里（中间不能有 await）：晚一步就会先挂出
+       *   一帧拿默认路由的主界面。
+       */
+      setBooted(true)
     })()
 
     return () => {
@@ -331,11 +363,13 @@ export function App(): React.JSX.Element {
       usePlugins.getState().reset()
       /*
        * ★ 免登录模式下**不复位播放相关的界面**：用户正拿这个应用放本地文件，把迷你窗关掉、
-       *   把满窗播放收起来，等于「你选了免登录，所以我先把界面收了」。只有真的回到登录页
-       *   （未认证且不在免登录模式）才做这两下 —— 那时原生面整块要换成登录页。
+       *   把满窗播放收起来，等于「你没连服务器，所以我先把界面收了」。只有真的去登录页
+       *   （未认证且不在免登录形态）才做这两下 —— 那时原生面整块要换成登录页。
        *
        *   迷你窗在登录页没有对应界面（那一窗只有一条播放条 + 一块面板），而它显示的播放
        *   状态正是刚被清空的东西 —— 留着就是一个点不动的空条。满窗播放同理：它挂在原生面上。
+       *   ★ 进登录页的代价里也含这一条：从「连接服务器」进去、再按返回出来，迷你窗是关着的
+       *     那一趟的播放不受影响（音频不挂在界面上，见 state/usePlayer 的 audio）。
        */
       if (!guest) {
         void window.songloft.mini.setOpen(false)
@@ -359,19 +393,37 @@ export function App(): React.JSX.Element {
       .catch(() => undefined)
   }, [status, guest])
 
-  /*
-   * 未登录 / 启动中：同样是 frameless 窗口，必须带上标题栏才有拖拽区与窗口控制。
-   * 少了它，登录页会变成一个既拖不动也关不掉的窗口（只能 Alt+F4）。
+  /**
+   * 这一帧显示哪一层。
    *
-   * ★ 免登录模式走的是**主界面**（不是登录页）：那一整页服务的是「连上后端」这件事，
-   *   而免登录的人要的只是放本机的文件（见 state/useLocalFiles 与 pages/LocalFilesView）。
+   * ★ `booting` 必须单独一档、且排在最前，判据是「会话还没验完（status）**或**启动编排还没
+   *   走完（booted）」：那会儿既答不出该给主界面还是登录页，落点也还没定下来（见 booted）。
+   *   省掉它的话，有会话的人会先看见半秒免登录的主界面再跳成已登录，而没会话的人会先挂出
+   *   一帧默认路由（首页）—— 后者不只是闪一下，首页在没有会话时会直接把树掀掉。
+   *   这就是原来那个 `.shell-solo` 启动占位存在的理由。
+   * ★ 登录页是**一个目的地**，不是默认落点：没有会话时默认给的是免登录的主界面
+   *   （`guest` 默认 true），只有用户自己要去（侧栏「连接服务器」/「切换账号」/ 退出登录）
+   *   或者存着的凭据失效（见 useAuth 的 bootstrap）才落到这儿。
    */
-  if (status !== 'authenticated' && !guest) {
+  const screen: 'booting' | 'login' | 'main' =
+    !booted || status === 'booting'
+      ? 'booting'
+      : status === 'authenticated'
+        ? 'main'
+        : guest
+          ? 'main'
+          : 'login'
+
+  /*
+   * 启动中 / 登录页：同样是 frameless 窗口，必须带上标题栏才有拖拽区与窗口控制。
+   * 少了它，登录页会变成一个既拖不动也关不掉的窗口（只能 Alt+F4）。
+   */
+  if (screen !== 'main') {
     return (
       <div className="shell">
         <TitleBar solo />
         <div className="shell-solo">
-          {status === 'booting' ? (
+          {screen === 'booting' ? (
             <div className="solo-splash">
               <IconLoader size={26} />
               <div>正在恢复上次的会话…</div>

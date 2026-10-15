@@ -61,14 +61,15 @@ export function Sidebar(): React.JSX.Element {
   /** 正在被拖动的歌单（只为把源项淡下去） */
   const [draggingId, setDraggingId] = useState<number | null>(null)
   /**
-   * 免登录模式（见 useAuth）：这一栏只留「曲库」一个入口，而且它落在**本地**那一半。
+   * 免登录形态（见 useAuth，**这是没会话时的默认形态**）：这一栏只留「曲库」一个入口，
+   * 而且它落在**本地**那一半。
    *
    * ★ 不是「把不能点的灰掉」，而是不摆出来：首页/歌单/我喜欢/最近播放**读了才知道**
    *   要会话，点进去只会得到一页「尚未登录」。曲库那一页里有一半（本机磁盘上的文件）这时
    *   真有内容，所以留给它 —— 落点见下面那颗钮的 onClick。
    */
   const guest = useAuth((s) => s.guest)
-  const leaveGuest = useAuth((s) => s.leaveGuest)
+  const openLogin = useAuth((s) => s.openLogin)
 
   useEffect(() => {
     // 免登录模式下没有会话，歌单列表拉不回来 —— 不发这个注定失败的请求
@@ -264,13 +265,15 @@ export function Sidebar(): React.JSX.Element {
         {guest ? (
           <>
             {/* 免登录模式下这一区没有歌单可列，改成「怎么回到服务器」那一句 ——
-                它与上面的歌单区占同一块会伸缩的空间，所以在两种模式下侧栏的版式一致 */}
+                它与上面的歌单区占同一块会伸缩的空间，所以在两种模式下侧栏的版式一致。
+                ★ 这颗钮是登录页**唯一**的入口（其余两条在设置里与退出登录那一下），
+                  所以它必须一直在、且说得出点下去会发生什么 */}
             <div className="nav-empty">
               免登录模式
               <br />
               曲库、歌单与收藏需要连接服务器
             </div>
-            <button type="button" className="nav-item" onClick={leaveGuest} {...tip('连接服务器')}>
+            <button type="button" className="nav-item" onClick={openLogin} {...tip('连接服务器')}>
               <IconServer size={18} />
               <span className="nav-text">连接服务器</span>
             </button>

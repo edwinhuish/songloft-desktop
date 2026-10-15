@@ -18,7 +18,8 @@
 | pnpm | 12.x | `package.json` 的 `packageManager` 已锁 `pnpm@12.4.1` |
 | Songloft 后端 | 默认 `http://localhost:58091` | 本仓库**不含后端**。默认管理员 `admin` / `admin` |
 
-后端没起来时应用不会崩，会停在「服务器连接失败」的登录页并给出可操作的提示。
+没会话时应用不会崩：默认进免登录模式（落点是「本地文件」那一页），要连服务器点侧栏那颗
+「连接服务器」；后端没起来时登录页会以「服务器连接失败」给出可操作的提示。
 
 > 构建环境若导出 `ELECTRON_RUN_AS_NODE=1`（部分 agent / CI 的 shell 会这么干），Electron 会
 > 退化成纯 Node，主进程一启动就崩。本地跑脚本或调试时记得 `env -u ELECTRON_RUN_AS_NODE`。

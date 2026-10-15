@@ -1451,12 +1451,13 @@ async function main() {
   await session.send('Runtime.enable')
 
   /*
-   * 等启动编排跑完（设置 → 会话校验 → 预载），最多 20 秒。
+   * 等启动编排跑完（设置 → 会话校验 → 定落点），最多 20 秒。
    *
    * ★ 判据是**侧栏在不在**，不是 `.shell` 在不在：`.shell` 在启动中就挂着，
-   *   那会儿里面还是登录页 —— 早先只等 `.shell` 的话，第一步「点侧栏首页」会
-   *   撞在还没渲染出侧栏的那一帧上（断言表现成 `NOT_FOUND:.nav-item/首页`，
-   *   而紧接着的截图里侧栏明明在）。这是**偶发**的：跑十次红一次那种。
+   *   那会儿里面还是启动占位（主界面要等编排走完才挂，见 App 的 `booted`）—— 早先只等
+   *   `.shell` 的话，第一步「点侧栏首页」会撞在还没渲染出侧栏的那一帧上（断言表现成
+   *   `NOT_FOUND:.nav-item/首页`，而紧接着的截图里侧栏明明在）。这是**偶发**的：
+   *   跑十次红一次那种。
    */
   for (let i = 0; i < 40; i += 1) {
     if (await session.evaluate("!!document.querySelector('.nav-item')")) break

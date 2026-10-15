@@ -3299,9 +3299,34 @@ html[data-mini='true'] .toasts {
 /* ── 登录页 ───────────────────────────────────────────────────────────── */
 
 .login {
+  /* 「返回」是绝对定位到整页左上角的那一颗（见 .login-back），定位要看这一层 */
+  position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
+  /*
+   * ★ 这一行**必须钉死**（minmax(0, 1fr)），不能让它是 auto：
+   *   两栏都是「占满整窗高」的，右栏还要在内部滚 —— 行高若是按内容算的，右栏会被撑到
+   *   跟内容一样高（滚动容器自身没有溢出，自然也就滚不动），整块只是溢出到 .shell-solo
+   *   之外被它裁掉：底部那截表单既看不见也够不着，正是这一栏要修的那个毛病。
+   *   钉住之后两栏都拿到「容器高」这个确定值，右栏的 overflow-y 才真的生效。
+   */
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
+}
+
+/*
+ * 返回：回主界面。
+ *
+ * ★ 登录页现在是自己走进来的一个目的地（侧栏「连接服务器」/「切换账号」/ 退出登录），
+ *   所以出口要摆在最顺手的地方：右上角是窗口控制、最上面一条是拖拽区，整页只剩左上角。
+ * ★ 绝对定位而不进栅格：左栏那一片（渐变底 + 品牌信息）是**垂直居中**的一整块，
+ *   多一个布局元素就会把它整体推下去，而这一颗本来就该浮在角落上。
+ */
+.login-back {
+  position: absolute;
+  top: 16px;
+  left: 18px;
+  z-index: 1;
 }
 
 .login-brand {
@@ -3368,15 +3393,57 @@ html[data-mini='true'] .toasts {
   flex: none;
 }
 
+/*
+ * 右侧表单列：**自己纵向滚**。
+ *
+ * 一列「登录过的服务器」长了、或者窗口矮了，表单就会超出窗口；不滚的话下半截永远够不着
+ * （送不出去也点不到「登录」）。
+ *
+ * ★ 居中靠 .login-form 自己的 `margin: auto`，不是这里的 align-items: center：内容一旦比
+ *   容器高，居中的 flex 项会朝**上**溢出，而滚动容器到不了负方向 —— 顶上那截表单就再也
+ *   露不出来。auto 外边距没有这个问题：有余量时照旧居中，没余量时它自己退成 0。
+ * ★ `scrollbar-gutter: stable both-edges`：滚动槽**一直留着**（滚动条显不显形都不再改变
+ *   内容宽度），两侧都留是为了让居中的表单不被它推偏 —— 只留一侧的话表单会整体左移半条槽宽。
+ */
 .login-form-wrap {
   display: flex;
-  align-items: center;
-  justify-content: center;
   padding: 46px;
   overflow-y: auto;
+  scrollbar-gutter: stable both-edges;
+}
+
+/*
+ * 这一列的滚动条：**平时不显形**，只在两种时候出来 —— 指针到了右边缘（够得着它了），
+ * 或者这一列刚滚过。两个条件都由 LoginPage 算好写在容器的 data-scrollbar 上，
+ * 样式只有这一份（为什么不能用 `:hover` / `::-webkit-scrollbar-thumb:hover` 表达，
+ * 见 LoginPage 里那两个 handler 与 .sidebar-playlists 那一大段的同一条说明）。
+ *
+ * ★ 默认那档必须**显式**把颜色写回透明：全局那条已经给了 --surface-2（见 base.css），
+ *   不覆盖的话它默认就是显形的。
+ * ★ 只写 background-color（长写）而不是 background（简写）：简写会把全局那条设的
+ *   background-clip: padding-box 重置回 border-box，透明边框就兜不住背景了 ——
+ *   滑块会铺满整条槽。
+ * ★ transition 写在基础那条上：滚动条伪元素能不能跑过渡由引擎决定（Chromium 的滚动条
+ *   由合成器绘制，有可能直接跳变）。写了不亏，不支持时它就当没看见。
+ */
+.login-form-wrap::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  transition: background-color var(--dur-2) var(--ease);
+}
+
+.login-form-wrap[data-scrollbar='true']::-webkit-scrollbar-thumb {
+  background-color: var(--surface-3);
+}
+
+/* 直接压在滑块上（就是要拖它）：再提亮一档。到右边缘时 data-scrollbar 已经是 true，
+   所以这条只需要管颜色 */
+.login-form-wrap[data-scrollbar='true']::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-4);
 }
 
 .login-form {
+  /* 居中，且内容比容器高时两端都滚得到（见 .login-form-wrap 那段说明） */
+  margin: auto;
   width: min(390px, 100%);
   display: flex;
   flex-direction: column;

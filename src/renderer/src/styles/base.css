@@ -202,9 +202,16 @@ html[data-mini='true'] .mini-player {
 }
 
 /* 未登录 / 启动中的单栏占用：标题栏仍在最外层（拖拽区与窗口控制要一直在），
-   这里只负责把剩下的整行交给登录页或启动占位。 */
+   这里只负责把剩下的整行交给登录页或启动占位。
+
+   ★ 那一行**必须钉死**（minmax(0, 1fr)），不能留给 auto：grid 的 auto 行是按内容算的，
+   于是里面那块「占满整窗高」的东西（登录页 .login）会反过来把自己撑到内容那么高 ——
+   `height: 100%` 在这种情况下解不出东西（父级那一行正等着它的内容来定尺寸，循环），
+   表现为「右栏明明写着 overflow-y: auto 却永远滚不动，底部那截被 .shell-solo 裁掉」。
+   钉住之后这一行就是「剩下的整窗高」，里面各栏才拿得到确定的容器高。 */
 .shell-solo {
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }

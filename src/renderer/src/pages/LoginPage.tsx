@@ -1,6 +1,11 @@
 /**
  * 登录 / 选择服务器。
  *
+ * ★ 它是**一个目的地**，不是没登录时的默认落点：没有会话时默认进的是免登录的主界面
+ *   （见 useAuth.guest 与 App 的 screen 判断）。所以这一页多了一颗「返回」—— 用户是自己
+ *   走进来的（侧栏「连接服务器」/ 设置里的「切换账号」/ 退出登录），也得能自己走出去。
+ *   免登录那条路（只听本机文件）不再摆在这一页上：它现在是**默认形态**，不再需要被选。
+ *
  * 桌面端相对移动端多出来的三件事：
  *   1. **服务器地址是一等公民** —— songloft 后端不是云服务，地址必须手填；
  *   2. **探测按钮**：填完地址先点一下，能立刻分出「地址错了」「服务没起来」
@@ -9,30 +14,33 @@
  *      点一条就用本机凭据直接进去 —— 多台 NAS 之间切换，不该每次重敲地址与密码。
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import type { ServerEntry, ServerProbeResult } from '@shared/ipc'
 import {
   IconAlert,
   IconCheck,
-  IconFolderOpen,
+  IconChevronLeft,
   IconLoader,
-  IconMusic,
   IconServer,
   IconSparkle,
   IconTrash
 } from '@/components/Icons'
 import { Switch } from '@/components/primitives'
 import { useAuth } from '@/state/useAuth'
-import { pickLocalFiles } from '@/state/useLocalFiles'
 import { useSettings } from '@/state/useSettings'
 import { useToasts } from '@/state/useToasts'
-import { useUi } from '@/state/useUi'
 
 const DEFAULT_URL = 'http://localhost:58091'
 
+/** 指针离右边缘多近算「到了右边缘」（px）：滚动条本身 10px 宽，再留一点余量 */
+const SCROLL_EDGE = 24
+
+/** 滚完再留多久才把滚动条收回去（ms）：太短则一次滚轮就把它闪没了 */
+const SCROLLBAR_LINGER = 700
+
 const FEATURES = [
-  '双击本机音频文件即播，不必登录',
+  '双击本机音频文件即播',
   '本地 / 网络 / 电台三类曲库统一管理',
   '逐字高亮歌词，点击任意一行直接跳转',
   '封面取色驱动全界面强调色',
@@ -40,10 +48,25 @@ const FEATURES = [
 ]
 
 export function LoginPage(): React.JSX.Element {
-  const { servers, busy, error, probe, login, switchServer, forgetServer, enterGuest } = useAuth()
+  const { servers, busy, error, probe, login, switchServer, forgetServer, closeLogin } = useAuth()
   const { settings, patch } = useSettings()
   const push = useToasts((s) => s.push)
-  const navigate = useUi((s) => s.navigate)
+  /**
+   * 右侧表单列那根滚动条什么时候显形（样式见 components.css 的 .login-form-wrap）。
+   *
+   * ★ 两个触发条件都得自己算：`::-webkit-scrollbar` 只认自己所在元素的伪类，而「指针到了
+   *   右边缘」与「刚滚过」都写不进那层伪类 —— `::-webkit-scrollbar:hover::-webkit-scrollbar-thumb`
+   *   这种写法 Chromium 根本不认（选择器非法，整条规则连声明一起被丢掉）。于是算在容器的
+   *   mousemove / scroll 上，结果落到一个 data 属性：两种触发合成同一个「显示」。
+   * ★ 寿命不同：到右缘是对**位置**的回答，指针离开就收起；滚动是对**动作**的回答，
+   *   滚完再留一小会儿（见 SCROLLBAR_LINGER）。
+   */
+  const [atEdge, setAtEdge] = useState(false)
+  const [scrolling, setScrolling] = useState(false)
+  const hideTimer = useRef<number | undefined>(undefined)
+
+  // 离开这一页（登录成功、或按返回）时把定时器收掉，别让它再去动一个已经卸下的组件
+  useEffect(() => () => window.clearTimeout(hideTimer.current), [])
 
   const [url, setUrl] = useState(servers[0]?.url ?? DEFAULT_URL)
   const [name, setName] = useState('')
@@ -135,8 +158,36 @@ export function LoginPage(): React.JSX.Element {
 
   const message = localError ?? error
 
+  /**
+   * 指针到右边缘没有。`clientX` 与 `rect.right` 都算窗口内的绝对坐标，与页面滚到哪儿无关；
+   * 而滚动条就在容器的右边界上（getBoundingClientRect 算的是边框盒，含滚动槽）。
+   */
+  const trackEdge = (event: React.MouseEvent<HTMLDivElement>): void => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    setAtEdge(rect.right - event.clientX <= SCROLL_EDGE)
+  }
+
+  /** 滚动期间把滚动条留住（见上面的状态说明） */
+  const trackScroll = (event: React.UIEvent<HTMLDivElement>): void => {
+    const el = event.currentTarget
+    // 内容没超出就没有滚动条可显形，连状态都不必动
+    if (el.scrollHeight <= el.clientHeight) return
+    setScrolling(true)
+    window.clearTimeout(hideTimer.current)
+    hideTimer.current = window.setTimeout(() => setScrolling(false), SCROLLBAR_LINGER)
+  }
+
   return (
     <div className="login">
+      {/*
+        返回：回主界面（免登录形态，见 useAuth.closeLogin）。这一页是自己走进来的，
+        所以要能走出去 —— 右上角是窗口控制、正上方是拖拽区，整页只剩左上角这块空处。
+      */}
+      <button type="button" className="btn login-back" data-variant="ghost" onClick={closeLogin}>
+        <IconChevronLeft size={15} />
+        返回
+      </button>
+
       <div className="login-brand">
         <img
           src="./icon.png"
@@ -146,8 +197,8 @@ export function LoginPage(): React.JSX.Element {
         <div>
           <h1>Songloft</h1>
           <p>
-            自托管音乐库的桌面客户端。连上你自己的 songloft 后端，
-            本地文件、网络歌曲与电台都在一个曲库里管；只听本机文件的话，不登录也能用。
+            自托管音乐库的桌面客户端。连上你自己的 songloft
+            后端，本地文件、网络歌曲与电台都在一个曲库里管。
           </p>
         </div>
         <div className="login-features">
@@ -160,7 +211,15 @@ export function LoginPage(): React.JSX.Element {
         </div>
       </div>
 
-      <div className="login-form-wrap">
+      {/* 表单这一列自己纵向滚（滚动条平时不显形，见 components.css 那一段：
+          到右边缘或刚滚过才出来）。两个触发条件由上面那两个 handler 算成 data-scrollbar */}
+      <div
+        className="login-form-wrap"
+        data-scrollbar={atEdge || scrolling ? 'true' : undefined}
+        onMouseMove={trackEdge}
+        onMouseLeave={() => setAtEdge(false)}
+        onScroll={trackScroll}
+      >
         <form className="login-form" onSubmit={handleSubmit}>
           <h2>连接到服务器</h2>
           <div className="sub">填后端地址与账号，凭据只保存在本机</div>
@@ -286,42 +345,6 @@ export function LoginPage(): React.JSX.Element {
             {busy ? <IconLoader size={16} /> : null}
             {busy ? '正在登录…' : '登录'}
           </button>
-
-          {/*
-            免登录出口。★ 放在登录按钮**下面**而不是并排：它是「不连服务器」那条路，
-            与上面那个主按钮是二选一 —— 并排摆着，第一眼看起来会像「登录」的一个附加选项。
-          */}
-          <div className="divider" />
-          <div className="field">
-            <div className="field-label">只听本机的文件？</div>
-            <div className="field-hint">
-              播放本地音频不需要登录：挑几个文件，或者在系统里直接双击它们（文件关联到本应用）。
-              曲库、歌单、收藏与搜索才需要连接服务器。
-            </div>
-            <div className="row" style={{ gap: 8, marginTop: 10 }}>
-              <button
-                type="button"
-                className="btn"
-                data-variant="primary"
-                onClick={() => void pickLocalFiles()}
-              >
-                <IconFolderOpen size={15} />
-                打开本地文件…
-              </button>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  // 进去之后落在「本地文件」那一页：免登录模式下它是唯一真有内容的去处
-                  enterGuest()
-                  navigate({ name: 'local' })
-                }}
-              >
-                <IconMusic size={15} />
-                免登录使用
-              </button>
-            </div>
-          </div>
 
           {servers.length > 0 ? (
             <>

@@ -6,8 +6,13 @@
  *   * 凭据（谁是当前用户）—— 落主进程，按服务器 URL 隔离（walletKey 语义）
  *   * 媒体 URL 的基准地址（302 解析后的真实 origin）
  *
- * 启动流程刻意做成「先读磁盘 → 校验一次轻量认证请求 → 才进主界面」：
- * 直接把用户丢进主界面再弹一个「登录失效」是最难受的路径。
+ * 启动流程刻意做成「先读磁盘 → 校验一次轻量认证请求 → 才决定进哪一层」，
+ * 而不是直接把用户丢进主界面再弹一个「登录失效」。
+ *
+ * ★ 落点由 `guest` 一位决定（默认 true，也就是**免登录是默认形态**）：没会话就进主界面
+ *   （只听本机文件，曲库那几页自己让开），**登录页只在用户自己要去时出现**
+ *   —— 侧栏那颗「连接服务器」、设置里的「切换账号」、退出登录，以及「存着的凭据已失效」
+ *   这一种需要人就地补密码的情况（见 bootstrap）。
  */
 
 import { create } from 'zustand'
@@ -22,14 +27,16 @@ export type AuthStatus = 'booting' | 'unauthenticated' | 'authenticated'
 interface AuthState {
   status: AuthStatus
   /**
-   * 免登录模式：不连任何服务器，只听本地文件。
+   * 免登录形态：不连任何服务器，只听本地文件。**这是默认形态**（没有会话时默认进主界面，
+   * 不必先点一个「免登录使用」）。
    *
    * ★ 为什么是独立的一位、而不是往 status 里再加一档：status 答的是「与服务器现在是什么
    *   关系」（还在恢复 / 没登录 / 已登录），而「免登录用一用」与它**正交** —— 免登录进来
-   *   之后照样可以再登录，那时这一位自然失去意义。于是「能不能进主界面」这件事在 App 里
-   *   只有一处判断：`status === 'authenticated' || guest`。
+   *   之后照样可以再登录，那时这一位自然失去意义。
+   * ★ 它管的只有一件事：**没有会话时进主界面还是进登录页**（true = 主界面）。有会话时它
+   *   一律是 false（见 bootstrap / login），而登录页正是靠它浮出来的 —— 于是 App 里只有
+   *   一处判断（`status === 'authenticated' ? 主界面 : guest ? 主界面 : 登录页`）。
    * ★ 播放本身**不依赖**它：播放器读的是本地文件与（有会话时的）后端，从不问「登没登录」。
-   *   这一位管的只是「把人放进主界面」，而本地文件的播放权限从来就不需要登录。
    */
   guest: boolean
   client: ApiClient | null
@@ -70,12 +77,15 @@ interface AuthState {
   probe: (url: string) => Promise<ServerProbeResult>
   login: (url: string, username: string, password: string, serverName?: string) => Promise<void>
   logout: () => Promise<void>
-  /** 只把界面交还给登录页，不动凭据（「切换账号」用） */
+  /**
+   * 去登录页（侧栏那颗「连接服务器」、设置里的「切换账号」、退出登录都走它）。
+   *
+   * ★ 登录页现在是**一个目的地**，不是没登录时的默认落点 —— 默认落点是免登录的主界面。
+   *   所以这一趟除 openLogin 之外没有别的入口，回主界面靠 closeLogin（登录页左上角那颗返回）。
+   */
   openLogin: () => void
-  /** 进免登录模式（登录页的「免登录使用」、以及「打开本地文件」都走它） */
-  enterGuest: () => void
-  /** 从免登录模式退回登录页（侧栏那个「连接服务器」入口） */
-  leaveGuest: () => void
+  /** 从登录页回主界面（那颗返回键、以及「来了本地文件」这条路都走它） */
+  closeLogin: () => void
   /** 迷你窗专用：接收主窗口喂来的资源上下文（见 mirroredMedia 的说明） */
   setMirroredMedia: (media: ResourceContext | null) => void
   switchServer: (url: string) => Promise<void>
@@ -127,7 +137,8 @@ async function verifySession(client: ApiClient): Promise<boolean> {
 
 export const useAuth = create<AuthState>((set, get) => ({
   status: 'booting',
-  guest: false,
+  // 免登录是**默认形态**：没会话时进的是主界面（见字段说明）。有会话时 bootstrap 会把它压回 false
+  guest: true,
   client: null,
   baseUrl: null,
   serverName: null,
@@ -171,15 +182,27 @@ export const useAuth = create<AuthState>((set, get) => ({
     })
     set({ accessToken: stored.accessToken })
 
+    /*
+     * ★ 下面两条「凭据失效」是**唯二**会把界面推向登录页的启动路径（把 guest 压成 false）：
+     *   本机明明存着一份凭据、它却用不了了，用户需要知道这件事（原因就写在登录页那条错误里），
+     *   也需要就地补一次密码。反过来说，「没有凭据」（上面那两条早退）与「网络不通」
+     *   （verifySession 放行）都不该拦人 —— 前者正是免登录的默认形态，后者有会话在手。
+     *   不想看这一页的人按左上角那颗返回即可，界面照旧是免登录的主界面。
+     */
     // 本地推算已过期就先刷新，省掉一次注定 401 的请求
     const expired = stored.savedAt + stored.expiresIn * 1000 < Date.now() + 30_000
     if (expired && !(await client.refreshTokens())) {
-      set({ status: 'unauthenticated', error: '登录状态已过期，请重新登录', accessToken: '' })
+      set({
+        status: 'unauthenticated',
+        guest: false,
+        error: '登录状态已过期，请重新登录',
+        accessToken: ''
+      })
       return
     }
 
     if (!(await verifySession(client))) {
-      set({ status: 'unauthenticated', error: '登录状态已失效，请重新登录' })
+      set({ status: 'unauthenticated', guest: false, error: '登录状态已失效，请重新登录' })
       return
     }
 
@@ -261,19 +284,21 @@ export const useAuth = create<AuthState>((set, get) => ({
     }
     if (baseUrl) await window.songloft.credentials.clear(baseUrl)
     client?.setTokens(null)
-    set({ status: 'unauthenticated', error: null, username: null, accessToken: '' })
+    /*
+     * 退出登录是**明确要断开**：界面交还给登录页（guest: false），而不是就地落回免登录的主界面。
+     * 想看本机文件的人按那颗返回即可 —— 那条路一直都在，只是不该是「退出」的默认落点。
+     */
+    set({ status: 'unauthenticated', guest: false, error: null, username: null, accessToken: '' })
   },
 
   openLogin: () => {
     // 刻意不清凭据、不吊销令牌：用户可能只是想换台服务器 / 换个账号，
-    // 也可能只是点错了 —— 后者回登录页再点一次「直接进入」就能拿回原会话。
+    // 也可能只是点错了 —— 后者按返回（closeLogin）就回主界面，凭据原样还在。
     // 真正要抹掉本机凭据的是 logout。
-    set({ status: 'unauthenticated', error: null })
+    set({ status: 'unauthenticated', guest: false, error: null })
   },
 
-  enterGuest: () => set({ guest: true, error: null }),
-
-  leaveGuest: () => set({ guest: false }),
+  closeLogin: () => set({ guest: true, error: null }),
 
   setMirroredMedia: (mirroredMedia) => set({ mirroredMedia }),
 

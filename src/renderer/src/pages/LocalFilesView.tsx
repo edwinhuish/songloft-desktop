@@ -35,7 +35,7 @@ export function LocalFilesView(): React.JSX.Element {
   const remove = useLocalFiles((s) => s.remove)
   const clear = useLocalFiles((s) => s.clear)
   const guest = useAuth((s) => s.guest)
-  const leaveGuest = useAuth((s) => s.leaveGuest)
+  const openLogin = useAuth((s) => s.openLogin)
   const currentId = usePlayer((s) =>
     s.cursor >= 0 && s.cursor < s.order.length ? (s.queue[s.order[s.cursor]]?.id ?? null) : null
   )
@@ -104,7 +104,7 @@ export function LocalFilesView(): React.JSX.Element {
           <span>
             当前是免登录模式：曲库、歌单、收藏与搜索都需要连接服务器，本地文件的播放不受影响。
           </span>
-          <button type="button" className="btn" data-size="sm" onClick={leaveGuest}>
+          <button type="button" className="btn" data-size="sm" onClick={openLogin}>
             <IconServer size={15} />
             连接服务器
           </button>

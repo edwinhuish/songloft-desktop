@@ -120,6 +120,14 @@ interface UiState {
 
   navigate: (route: Route) => void
   /**
+   * 直接把原生面钉在某一页上，**不进历史、不切面**。
+   *
+   * ★ 只给「启动时决定默认落点」用（见 App 的启动编排：没会话就落在「本地文件」那一页）。
+   *   那不是用户走的一步 —— 走 navigate 的话，Alt+← 会退回到默认那一页（首页），
+   *   而那一页在没有会话时读不了任何数据（`requireClient()` 同步抛，见 hooks/useAsync）。
+   */
+  setNativeRoute: (route: NativeRoute) => void
+  /**
    * 只换面，两份路由都不动。
    *
    * 标题栏那两个入口的主点击用它（Songloft / 扩展）——「回到那一面」而不是「回到某一页」，
@@ -192,6 +200,9 @@ export const useUi = create<UiState>((set, get) => ({
       selectionAnchor: null
     })
   },
+
+  // 启动时的默认落点（见接口上的说明）：只改路由，不动面、不记历史
+  setNativeRoute: (nativeRoute) => set({ nativeRoute }),
 
   // 只换脸。这就是「切回来还是离开时的样子」的全部实现 —— 没有别的机关
   showSurface: (surface) => {
