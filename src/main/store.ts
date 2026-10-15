@@ -7,6 +7,8 @@
  *      这份映射需要一个稳定、可原子写的地方。
  *
  * 写盘一律「临时文件 + rename」，避免掉电/崩溃留下半截 JSON 把配置读挂。
+ * 而每次写盘之前会**从磁盘现读一份**（见 mutate）：应用允许多实例（双击音频文件会另起一个
+ * 只有迷你播放器的实例），各自持一份启动时的快照、整份写回的话，两边会互相抹除对方的改动。
  */
 
 import { app } from 'electron'
@@ -128,20 +130,42 @@ export class ConfigStore {
     renameSync(tmp, this.file)
   }
 
+  /**
+   * 现读现改：把**磁盘上那一份**读回来、交给 `mutate` 改、再整份写回去。
+   *
+   * ★ 为什么不是直接改内存里这份（以前就是这么写的）：**应用允许多实例** —— 双击音频文件会
+   *   另起一个只有迷你播放器的实例，而各实例共享同一个 userData 目录（见 AGENTS.md 的
+   *   「本地文件会话」）。于是「各自持一份启动时的快照 + 整份写回」等于「后写的把先写的抹掉」：
+   *   那边刚存下的播放队列 / 音量 / 面板高度，会被这边一次毫不相干的写入打回旧值 ——
+   *   症状是「我明明拖高了面板，过一会儿它自己变回去了」，而两次写入之间看不出任何关系。
+   *   每次写都从磁盘重读一次，这种互相抹除就不存在了。
+   * ★ 代价可以忽略：这些写入都是用户动作（改设置、存凭据、拖窗口）或退出时的收尾，
+   *   不是每帧一次；文件本身也只有几 KB。
+   * ★ 读回来那一份会**替换**内存里这份，顺带让本进程看到别的实例刚写下的值。
+   */
+  private mutate(change: (data: ConfigFile) => void): void {
+    const next = this.load()
+    change(next)
+    this.data = next
+    this.persist()
+  }
+
   // ── settings ───────────────────────────────────────────────────────────
   getSettings(): AppSettings {
     return { ...this.data.settings }
   }
 
   patchSettings(patch: Partial<AppSettings>): AppSettings {
-    this.data.settings = { ...this.data.settings, ...patch }
-    this.persist()
+    this.mutate((data) => {
+      data.settings = { ...data.settings, ...patch }
+    })
     return this.getSettings()
   }
 
   resetSettings(): AppSettings {
-    this.data.settings = { ...DEFAULT_SETTINGS }
-    this.persist()
+    this.mutate((data) => {
+      data.settings = { ...DEFAULT_SETTINGS }
+    })
     return this.getSettings()
   }
 
@@ -152,18 +176,19 @@ export class ConfigStore {
 
   upsertServer(entry: ServerEntry): ServerEntry[] {
     const key = walletKeyFor(entry.url)
-    const next = this.data.servers.filter((s) => walletKeyFor(s.url) !== key)
-    next.unshift({ ...entry, url: key })
-    this.data.servers = next
-    this.persist()
+    this.mutate((data) => {
+      const rest = data.servers.filter((s) => walletKeyFor(s.url) !== key)
+      data.servers = [{ ...entry, url: key }, ...rest]
+    })
     return this.listServers()
   }
 
   removeServer(url: string): ServerEntry[] {
     const key = walletKeyFor(url)
-    this.data.servers = this.data.servers.filter((s) => walletKeyFor(s.url) !== key)
-    delete this.data.credentials[key]
-    this.persist()
+    this.mutate((data) => {
+      data.servers = data.servers.filter((s) => walletKeyFor(s.url) !== key)
+      delete data.credentials[key]
+    })
     return this.listServers()
   }
 
@@ -174,15 +199,18 @@ export class ConfigStore {
 
   setCredentials(url: string, creds: Omit<StoredCredentials, 'savedAt'>): void {
     const key = walletKeyFor(url)
-    // 合并而不是整条覆盖：token 静默刷新时只带 token 三件套，
-    // 覆盖写会把登录时记下的 username 抹掉（界面上的账号名就没了）。
-    this.data.credentials[key] = { ...this.data.credentials[key], ...creds, savedAt: Date.now() }
-    this.persist()
+    this.mutate((data) => {
+      // 合并而不是整条覆盖：token 静默刷新时只带 token 三件套，
+      // 覆盖写会把登录时记下的 username 抹掉（界面上的账号名就没了）。
+      data.credentials[key] = { ...data.credentials[key], ...creds, savedAt: Date.now() }
+    })
   }
 
   clearCredentials(url: string): void {
-    delete this.data.credentials[walletKeyFor(url)]
-    this.persist()
+    const key = walletKeyFor(url)
+    this.mutate((data) => {
+      delete data.credentials[key]
+    })
   }
 
   /**
@@ -205,7 +233,8 @@ export class ConfigStore {
   }
 
   saveWindowBounds(bounds: Partial<WindowBounds>): void {
-    this.data.window = { ...this.data.window, ...bounds }
-    this.persist()
+    this.mutate((data) => {
+      data.window = { ...data.window, ...bounds }
+    })
   }
 }

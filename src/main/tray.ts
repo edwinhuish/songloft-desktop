@@ -34,10 +34,20 @@ function resolveIconPath(): string | null {
 }
 
 export interface TrayDeps {
+  /** 播放控制（播放/暂停、上一首、下一首、收藏）：由调用方转给**当宿主的那一个窗口** */
   onCommand: (command: MediaCommand) => void
-  onToggleWindow: () => void
+  /** 点托盘图标（左键）：把本趟会话的窗口叫回来 */
+  onActivate: () => void
+  /**
+   * 「显示 / 隐藏……」那一项。返回 null 就**整项不出现**。
+   *
+   * ★ 为什么由调用方给、而不是在这里读窗口：**本地文件会话**里没有主窗口（迷你条自己就是
+   *   全部界面，见 main/index.ts 的 localSession）—— 那一趟摆一项「显示主窗口」只会把人引到
+   *   一个永远不会出现的窗口上。标签也由调用方算：它才知道哪个窗口算数、
+   *   而菜单是每次推送播放状态时重建的，所以每次读到的都是此刻的可见性。
+   */
+  windowItem: () => { label: string; click: () => void } | null
   onQuit: () => void
-  isWindowVisible: () => boolean
 }
 
 export function createTray(deps: TrayDeps): Tray | null {
@@ -55,7 +65,7 @@ export function createTray(deps: TrayDeps): Tray | null {
     tray = new Tray(image.resize({ width: 22, height: 22 }))
     tray.setToolTip('Songloft Desktop')
     render(deps, { title: null, artist: null, playing: false, favorite: false })
-    tray.on('click', () => deps.onToggleWindow())
+    tray.on('click', () => deps.onActivate())
     return tray
   } catch (error) {
     console.warn('[tray] 创建失败（GNOME 下需要 AppIndicator 扩展），继续运行', error)
@@ -70,32 +80,33 @@ export function render(deps: TrayDeps, snapshot: TraySnapshot): void {
     : 'Songloft Desktop'
   tray.setToolTip(label)
 
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      {
-        label: snapshot.title ? `${snapshot.title}` : '未在播放',
-        enabled: false
-      },
-      { type: 'separator' },
-      {
-        label: snapshot.playing ? '暂停' : '播放',
-        click: () => deps.onCommand({ kind: 'play-pause' })
-      },
-      { label: '上一首', click: () => deps.onCommand({ kind: 'previous' }) },
-      { label: '下一首', click: () => deps.onCommand({ kind: 'next' }) },
-      { type: 'separator' },
-      {
-        label: snapshot.favorite ? '取消收藏' : '收藏',
-        click: () => deps.onCommand({ kind: 'toggle-favorite' })
-      },
-      {
-        label: deps.isWindowVisible() ? '隐藏主窗口' : '显示主窗口',
-        click: () => deps.onToggleWindow()
-      },
-      { type: 'separator' },
-      { label: '退出', click: () => deps.onQuit() }
-    ])
-  )
+  const items: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: snapshot.title ? `${snapshot.title}` : '未在播放',
+      enabled: false
+    },
+    { type: 'separator' },
+    {
+      label: snapshot.playing ? '暂停' : '播放',
+      click: () => deps.onCommand({ kind: 'play-pause' })
+    },
+    { label: '上一首', click: () => deps.onCommand({ kind: 'previous' }) },
+    { label: '下一首', click: () => deps.onCommand({ kind: 'next' }) },
+    { type: 'separator' },
+    {
+      label: snapshot.favorite ? '取消收藏' : '收藏',
+      click: () => deps.onCommand({ kind: 'toggle-favorite' })
+    }
+  ]
+
+  /* 本地文件会话里没有这一项（见 TrayDeps.windowItem 的说明） */
+  const windowItem = deps.windowItem()
+  if (windowItem) {
+    items.push({ label: windowItem.label, click: windowItem.click }, { type: 'separator' })
+  }
+
+  items.push({ label: '退出', click: () => deps.onQuit() })
+  tray.setContextMenu(Menu.buildFromTemplate(items))
 }
 
 export function destroyTray(): void {

@@ -42,14 +42,17 @@ import {
   handleMiniResize,
   installMiniWindow,
   isMiniWindowOpen,
+  openMiniWindow,
   sendMiniSnapshot,
-  setMiniWindowOpen
+  sendToMiniWindow,
+  setMiniWindowOpen,
+  showMiniWindow
 } from './mini-window'
 import { fetchCoverBytes, probeServer } from './probe'
 import { LOCAL_FILE_SCHEME } from '@shared/local-file'
 import { PLUGIN_PARTITION } from '@shared/plugin'
 import { ConfigStore } from './store'
-import { createTray, destroyTray, render as renderTray } from './tray'
+import { createTray, destroyTray, render as renderTray, type TrayDeps } from './tray'
 import { applyWindowOnTop, createMainWindow } from './windows'
 
 /**
@@ -135,8 +138,21 @@ function usesNativeWayland(): boolean {
   return process.env.XDG_SESSION_TYPE === 'wayland' || Boolean(process.env.WAYLAND_DISPLAY)
 }
 
-// 只允许一个实例：第二次启动就把已有窗口顶到前面，而不是再开一个播放器。
-const gotTheLock = app.requestSingleInstanceLock()
+/**
+ * 这一次启动是不是「双击音频文件」叫起来的（Windows / Linux 的文件关联把路径追加在 argv 里）。
+ *
+ * ★ 它必须在**抢锁之前**算出来：本地文件会话刻意不抢单实例锁 —— 要的就是「双击一个文件就
+ *   另起一个只有迷你播放器的实例」，而不是把文件塞给已经在跑的那个主界面（见下面 localSession）。
+ */
+const launchFiles = pathsFromArgv(process.argv.slice(1))
+
+/** macOS：`open-file` 在 `ready` **之前**到达（双击关联文件启动那一趟就是这样，见下面 localSession） */
+let openedByFileBeforeReady = false
+/** `whenReady` 跑过了没有（用来认「这个 open-file 是启动那一下，还是应用开着时又双击的」） */
+let startupDone = false
+
+// 普通启动只允许一个实例：第二次启动就把已有窗口顶到前面，而不是再开一个播放器。
+const gotTheLock = launchFiles.length > 0 || app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
 }
@@ -145,17 +161,17 @@ if (!gotTheLock) {
  * 本地文件的三个来源里，有两个**可能早于窗口**（见 local-files.ts）：先把它们收下排进队，
  * 渲染层就绪后会自己来取（它开机就来取一次）。
  *
- * 只在拿到锁的这个实例里做：没拿到锁的那个进程马上就会退出，它 argv 里的文件由
- * `second-instance` 那条路交给真正在跑的这个实例。
+ * 没拿到锁的那个进程马上就会退出，它 argv 里的文件由 `second-instance` 那条路交给真正在跑的
+ * 这个实例 —— 那条路只有**普通启动**才有（本地文件会话不抢锁，也就没有「转交」这回事）。
  */
 if (gotTheLock) {
   // macOS：双击关联文件启动、或应用已开着时再双击一个
   app.on('open-file', (event, path) => {
     event.preventDefault()
+    if (!startupDone) openedByFileBeforeReady = true
     announceLocalFiles([path])
   })
-  // Windows / Linux：文件关联把路径追加在 argv 里
-  announceLocalFiles(pathsFromArgv(process.argv.slice(1)))
+  announceLocalFiles(launchFiles)
 }
 
 const store = new ConfigStore()
@@ -167,6 +183,19 @@ applyLocalCacheLimit(store.getSettings().localCacheMaxSize)
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
 let disposeMediaKeys: (() => void) | null = null
+
+/**
+ * 这一趟会话是**本地文件会话**吗（双击音频文件起的那一趟）。
+ *
+ * ★ 判据在 `whenReady` 里才落定（那时才知道 macOS 那份 `open-file` 来没来），此后全程不变。
+ *   它同时决定四件事，缺一样都会露馅：
+ *     · **不创建主窗口**，只开一个宿主身份的迷你窗（见 mini-window.ts 的 role）；
+ *     · 托盘里**没有**「显示 / 隐藏主窗口」那一项 —— 没有那个窗口，迷你条就是全部界面；
+ *     · 关掉迷你条就退出应用（那一趟里它是唯一的界面，留着只剩一个看不见的进程）；
+ *     · 主进程要往渲染层送的东西（本地文件的摇铃、托盘与媒体键的命令）一律送给**迷你窗**。
+ *   「主播放器保持关闭状态且不可打开」这条需求，落到实现上就是上面这四句。
+ */
+let localSession = false
 
 /** 自签证书开关：只作用于本应用的默认会话，不动系统设置。 */
 function applyTlsPolicy(allowInsecure: boolean): void {
@@ -293,6 +322,21 @@ function sendToRenderer(channel: string, payload: unknown): void {
 }
 
 /**
+ * 送给**正在播放的那个窗口**（见 renderer 的 state/usePlayer 分流）。
+ *
+ * 两个窗口都可能是宿主：普通会话里是主窗口，本地文件会话里是迷你窗。凡是有明确「主人」的
+ * 推送都走这一句 —— 各自写 sendToRenderer 的话，本地会话里那些东西（第二个双击的文件、
+ * 托盘上按下的播放键）会静默地掉进一个不存在的窗口里，症状是「点了没反应，也没有报错」。
+ */
+function sendToHost(channel: string, payload: unknown): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, payload)
+    return
+  }
+  sendToMiniWindow(channel, payload)
+}
+
+/**
  * 这条 IPC 是哪个窗口发来的。
  *
  * ★ 几颗窗口钮（最小化 / 最大化 / 关闭）一律作用于**它自己**：迷你窗那颗关闭只该关掉迷你条，
@@ -317,8 +361,14 @@ function broadcastSettings(settings: AppSettings, from: Electron.WebContents): v
   }
 }
 
+/**
+ * 托盘菜单与全局媒体键的命令：送给**当宿主的那一个窗口**执行。
+ *
+ * ★ 不能写死主窗口：本地文件会话里播放器在迷你窗手里（见 renderer 的 local-session），
+ *   送给不存在的窗口 = 托盘按了没反应。
+ */
 function broadcastMediaCommand(command: MediaCommand): void {
-  sendToRenderer(IPC.onMediaCommand, command)
+  sendToHost(IPC.onMediaCommand, command)
 }
 
 /**
@@ -339,6 +389,13 @@ function collapseWindow(window: BrowserWindow): void {
   else window.hide()
 }
 
+/**
+ * 托盘那颗图标 / 托盘菜单里那一项：把主窗口收起来或叫回来。
+ *
+ * ★ 只作用于**主窗口**：本地文件会话里压根没有它（`mainWindow` 一直是 null），这一句于是
+ *   什么都不做 —— 「主播放器不可打开」是这么落地的（那一趟的托盘里也没有这一项，
+ *   见下面 trayDeps 的 windowItem）。
+ */
 function toggleWindowVisibility(): void {
   if (!mainWindow) return
   if (mainWindow.isVisible() && !mainWindow.isMinimized()) {
@@ -544,60 +601,123 @@ function registerIpcHandlers(): void {
 }
 
 // ───────────────────────────── 托盘依赖（提前声明）─────────────────────────────
-const trayDeps = {
+const trayDeps: TrayDeps = {
   onCommand: (command: MediaCommand) => broadcastMediaCommand(command),
-  onToggleWindow: () => toggleWindowVisibility(),
+  /*
+   * 点托盘图标：本地文件会话里把迷你条唤回来（那是那一趟唯一的窗口），其余照旧切主窗口。
+   * ★ 迷你条关掉就退出应用（见下面 whenReady 里 onOpenChanged 那一段），所以这条路上不会
+   *   留下「窗口关掉了、托盘还在，却没有任何界面」的僵尸。
+   */
+  onActivate: () => (localSession ? showMiniWindow() : toggleWindowVisibility()),
+  windowItem: () =>
+    localSession
+      ? null
+      : {
+          label: mainWindow?.isVisible() ? '隐藏主窗口' : '显示主窗口',
+          click: () => toggleWindowVisibility()
+        },
   onQuit: () => {
     isQuitting = true
     app.quit()
-  },
-  isWindowVisible: () => Boolean(mainWindow?.isVisible())
+  }
 }
 
 // ─────────────────────────────── 生命周期 ───────────────────────────────
 if (gotTheLock) {
-  app.on('second-instance', (_event, argv, workingDirectory) => {
-    /*
-     * 第二次启动被拦下了，但它命令行里的东西不能丢：`songloft-desktop song.mp3` 在应用
-     * 已开着时正是「再加一首放进去」。相对路径按**那个进程**的目录解（见 pathsFromArgv）。
-     */
-    announceLocalFiles(pathsFromArgv(argv, workingDirectory))
+  /*
+   * ★ 本地文件会话没有这一条：它**刻意不抢单实例锁**（双击一个音频文件就该另起一个只有
+   *   迷你播放器的实例，而不是把文件塞给在跑的那个主界面），没抢锁的进程收不到
+   *   `second-instance`，也就没有「转交」这回事。
+   */
+  if (launchFiles.length === 0) {
+    app.on('second-instance', (_event, argv, workingDirectory) => {
+      /*
+       * 第二次启动被拦下了，但它命令行里的东西不能丢：`songloft-desktop song.mp3` 在应用
+       * 已开着时正是「再加一首放进去」。相对路径按**那个进程**的目录解（见 pathsFromArgv）。
+       */
+      announceLocalFiles(pathsFromArgv(argv, workingDirectory))
 
-    if (!mainWindow) return
-    if (mainWindow.isMinimized()) mainWindow.restore()
-    mainWindow.show()
-    mainWindow.focus()
-  })
+      if (!mainWindow) return
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.show()
+      mainWindow.focus()
+    })
+  }
 
   app.whenReady().then(() => {
+    /*
+     * ★ 先落定「这一趟是不是本地文件会话」，再建任何窗口 —— 它决定建**哪一个**窗口。
+     *   两个来源：启动参数里有音频文件（Windows / Linux 的文件关联把路径追加在 argv 里），
+     *   或 macOS 那份 `open-file` 赶在 ready 之前就到了（双击关联文件启动那一趟正是如此）。
+     * ★ startupDone 同时在这里置位：此后到达的 open-file 都算「应用开着时又双击了一个文件」，
+     *   那一条走的是普通会话（拖进已开着的界面），不该把这一趟变成本地会话。
+     */
+    localSession = launchFiles.length > 0 || openedByFileBeforeReady
+    startupDone = true
+
     applyTlsPolicy(store.getSettings().allowInsecureTls)
     applyCsp()
     // 本地文件的播放地址由它来读（必须在页面开始请求之前装好）
     installLocalFileProtocol()
-    // 「又有本地文件要打开」推到主窗口：渲染层收到后回来 takePendingPaths()
-    setLocalFilesNotifier(() => sendToRenderer(IPC.onLocalFilesPending, null))
+    // 「又有本地文件要打开」送到**当宿主的那一个窗口**：渲染层收到后回来 takePendingPaths()
+    setLocalFilesNotifier(() => sendToHost(IPC.onLocalFilesPending, null))
     // 必须早于任何 webview 挂载：它注册的 web-contents-created 只在创建时生效一次
     hardenPluginSession()
     registerIpcHandlers()
     installAppMenu(() => mainWindow)
 
-    mainWindow = createMainWindow(store)
-    attachWindowHandlers(mainWindow)
-
     /*
-     * 迷你窗的接线：它要的三样东西分别是「通知主窗口开/关」「问主窗口要一份状态」
+     * 迷你窗的接线：跟随时它要的三样东西分别是「通知主窗口开/关」「问主窗口要一份状态」
      * 「把遥控命令交给主窗口执行」—— 全是转发，主进程自己一个播放状态都不持有。
+     * ★ 必须**早于**下面开窗那两句：本地会话里 openMiniWindow 当场就会问它要第一份状态
+     *   （见 onRequestSnapshot），接线晚一步那一窗只能等 1.5 秒的兜底才露面。
      */
     installMiniWindow(store, {
-      onOpenChanged: (open) => sendToRenderer(IPC.onMiniOpen, open),
-      onRequestSnapshot: () => sendToRenderer(IPC.onMiniRequest, null),
+      onOpenChanged: (open) => {
+        sendToRenderer(IPC.onMiniOpen, open)
+        /*
+         * ★ 本地文件会话里「关掉迷你条」= 退出应用：那一趟只有这一个界面，留着它只剩一个
+         *   看不见的进程（音频照放、托盘之外没有任何入口）。普通会话不这么做 —— 迷你条只是
+         *   主界面旁边的一条挂件，关掉它不该把整个应用带走（那是 closeToTray 的事）。
+         */
+        if (!open && localSession) app.quit()
+      },
+      onRequestSnapshot: () => {
+        /*
+         * 迷你窗在要第一份状态：普通会话转问主窗口 —— 主窗口推回来，窗口随之露面。
+         * ★ 本地会话里**没有人在推**（那一窗自己就是播放器），所以直接让它露面，
+         *   别让它干等 handleMiniReady 那 1.5 秒的兜底。
+         */
+        if (mainWindow) sendToRenderer(IPC.onMiniRequest, null)
+        else showMiniWindow()
+      },
       onCommand: (command) => sendToRenderer(IPC.onMiniCommand, command)
     })
+
+    /*
+     * 两个窗口只会有**一个**：
+     *   · 普通启动 → 主窗口（完整界面），迷你窗按需由它开出来（跟随者身份）；
+     *   · 本地文件会话 → **只有**迷你窗，而且是宿主身份 —— 它自己就是播放器（音频、队列、
+     *     歌词都在它手里），主窗口压根不创建。这就是「仅启动迷你播放器，主播放器保持关闭
+     *     状态且不可打开」：没有那个窗口，也就没有「打开」这回事（托盘里那一项也随之撤掉，
+     *     见上面 trayDeps 的 windowItem）。
+     */
+    if (localSession) {
+      openMiniWindow('mini-host')
+    } else {
+      mainWindow = createMainWindow(store)
+      attachWindowHandlers(mainWindow)
+    }
 
     createTray(trayDeps)
     disposeMediaKeys = registerMediaKeys(broadcastMediaCommand)
 
     app.on('activate', () => {
+      // 本地会话：唯一那个窗口就是迷你条，唤回它（它关掉就等于退出，见上面那一段）
+      if (localSession) {
+        openMiniWindow('mini-host')
+        return
+      }
       if (BrowserWindow.getAllWindows().length === 0) {
         mainWindow = createMainWindow(store)
         // ★ 重建的窗口也要挂上监听，否则 closeToTray 与 mainWindow 置空就只对首个窗口有效

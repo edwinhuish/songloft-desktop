@@ -10,12 +10,17 @@
  *
  * ★ 播放本地文件**不需要登录**：`guest` 那一位在这里只负责「把人放进主界面」，播放本身
  *   从头到尾不问登录状态（见 useAuth 的说明）。
+ *
+ * ★ 双入口：这条线在**两个窗口**里都装（主窗口的免登录模式，以及本地文件会话里的迷你宿主窗
+ *   —— 双击关联文件起的那一趟里没有主窗口，见 main/index.ts）。两处装的是同一份实现，
+ *   取走即清的语义也因此只有一处。
  */
 
 import { create } from 'zustand'
 
 import { songFromLocalFile } from '@shared/local-file'
 import type { Song } from '@shared/types'
+import { isMiniWindow } from '@/lib/window-role'
 import { useAuth } from './useAuth'
 import { usePlayer } from './usePlayer'
 import { useUi } from './useUi'
@@ -87,8 +92,12 @@ export function playLocalFiles(paths: readonly string[]): void {
  *
  * ★ 已经登录（或已经在免登录模式里）就什么都不做：此刻用户多半正看着别的页面，
  *   为一个后台到达的文件把他拽走是打扰。
+ *
+ * ★ 迷你宿主窗（本地文件会话）里这两件事都无处可做：它没有页面（那是主窗口的路由），也没有
+ *   会话与登录页 —— 那一趟要的只是「打开就出声」，所以直接让开（见 @shared/window-role）。
  */
 function enterGuestIfNeeded(): void {
+  if (isMiniWindow()) return
   const auth = useAuth.getState()
   if (auth.status === 'authenticated' || auth.guest) return
   auth.enterGuest()

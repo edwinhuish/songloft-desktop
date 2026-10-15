@@ -6,12 +6,20 @@
  *   主窗口一缩，里面的列表、扩展 webview、正在出声的页面全都被迫按 380px 重排一次，
  *   用户想同时看曲库与迷你条更是无从谈起。独立窗口之后，两边各是一棵独立的界面树。
  *
- * ★ 代价是**状态要过桥**：两个渲染层之间没有直接通道，而播放的唯一事实源在主窗口那边
- *   （音频元素、队列、歌词都在它手里，见 renderer/state/usePlayer）。所以：
+ * ★★ 同一个窗口有两种**身份**（由渲染层的 hash 定，见 @shared/window-role）：
+ *     · 跟随者（`#mini`）—— 普通会话里的一条播放条：主窗口在旁边持着播放，它只显示镜像，
+ *       把遥控命令发回主窗口执行；
+ *     · 宿主（`#mini-host`）—— **本地文件会话**：双击音频文件起的那一趟里没有主窗口，
+ *       这一窗自己就是播放器（见 main/index.ts 的 localOnly）。
+ *   两种身份下，本文件做的事完全一样（开窗、算几何、转发），所以只有加载地址那一处分岔。
+ *
+ * ★ 代价是**状态要过桥**（跟随者那一侧才有这座桥）：两个渲染层之间没有直接通道，而播放的
+ *   事实源在主窗口那边（音频元素、队列、歌词都在它手里，见 renderer/state/usePlayer）。所以：
  *     · 主窗口把「播放状态快照」推给主进程 → 主进程转给迷你窗；
  *     · 迷你窗把「遥控命令」发给主进程 → 主进程转给主窗口执行。
  *   本文件只做**转发与窗口几何**，一个播放状态都不持有（谁也别在这里缓存播放数据：
  *   两份状态迟早不一致，而「迷你条显示的与在放的不是同一首歌」是最难查的那种不一致）。
+ *   宿主那一侧不走这座桥：它自己就是那份状态，快照与命令都无处可去（也不必去）。
  *
  * ★ 几何（宽度固定、高度按布局算）为什么在主进程：面板高度是用户拖出来的（渲染层知道），
  *   但「真窗口有多高」只能在这里改；而且屏幕工作区的钳制也只有这里做得到。
@@ -32,6 +40,7 @@ import {
   type MiniPlayerSnapshot,
   type MiniWindowLayout
 } from '@shared/ipc'
+import { hashForRole, type WindowRole } from '@shared/window-role'
 import { loadAppIcon } from './app-icon'
 import type { ConfigStore } from './store'
 import { DEV_SERVER_URL } from './windows'
@@ -44,6 +53,18 @@ const MARGIN = 16
  * 取值只是「比一次 IPC 来回长得多、又短到用户察觉不到」—— 正常路上它永远不会被用到。
  */
 const SHOW_FALLBACK_MS = 1500
+
+/**
+ * 「渲染层迟迟不报 ready」的兜底时限（见 openMiniWindow 末尾那一段）。
+ *
+ * 比 SHOW_FALLBACK_MS 宽得多：那条管的是「ready 报到了、状态还没来」这一小段时间差，
+ * 而这条管的是**页面压根没加载起来**（加载失败、渲染进程起来就崩）—— 真出错时也要给
+ * 重载与慢机器留够时间，否则每次开机都先亮一下空窗。
+ */
+const LOAD_FALLBACK_MS = 8000
+
+/** 迷你窗的两种身份（见 @shared/window-role 的 WindowRole） */
+type MiniRole = Extract<WindowRole, 'mini' | 'mini-host'>
 
 export interface MiniWindowBridge {
   /** 迷你窗开 / 关了：告诉主窗口（按钮高亮、要不要继续推状态都看它） */
@@ -66,6 +87,15 @@ let miniWindow: BrowserWindow | null = null
  * 先空着出现（见 sendMiniSnapshot / handleMiniReady）。
  */
 let rendererReady = false
+
+/** 「渲染层迟迟没报 ready」那个兜底定时器（见 LOAD_FALLBACK_MS） */
+let loadFallback: NodeJS.Timeout | null = null
+
+function clearLoadFallback(): void {
+  if (!loadFallback) return
+  clearTimeout(loadFallback)
+  loadFallback = null
+}
 
 /** 迷你窗口开着没有（主窗口那颗按钮的高亮、推送的开关都看它） */
 export function isMiniWindowOpen(): boolean {
@@ -151,10 +181,14 @@ export function applyMiniWindowOnTop(): void {
  * ★ skipTaskbar: 它是挂在屏幕角上的挂件，不该在任务栏里再占一格（主窗口那格管着整个应用）。
  *   从屏幕上看不见它时要靠托盘唤回主界面 —— 那条路本来就有。
  */
-export function openMiniWindow(): void {
+export function openMiniWindow(role: MiniRole = 'mini'): void {
   if (isMiniWindowOpen()) {
-    // 已经开着：再点一次是「把它唤回来」（可能被最小化了，或压在别的窗口下面）
-    miniWindow?.show()
+    /*
+     * 已经开着：再点一次是「把它唤回来」（可能被最小化了，或压在别的窗口下面）。
+     * role 在这一路上无关紧要：窗口的身份在**加载那一刻**就定了，而且一个进程里只会有
+     * 一种身份（主窗口与本地文件会话互斥，见 index.ts 的 localOnly）。
+     */
+    showMiniWindow()
     return
   }
   if (!store) return
@@ -236,22 +270,37 @@ export function openMiniWindow(): void {
   win.on('closed', () => {
     if (miniWindow === win) miniWindow = null
     rendererReady = false
+    clearLoadFallback()
     bridge?.onOpenChanged(false)
   })
 
   applyMiniWindowOnTop()
 
   /*
-   * 界面靠 hash 分流（见 renderer/src/main.tsx）：同一个入口文件，迷你窗用 #mini。
-   * 不另做一份 html 入口是因为两者共用全部样式与组件 —— 多一个入口就等于多一处要同步。
+   * 界面靠 hash 分流（见 renderer/src/main.tsx）：同一个入口文件，迷你窗取自己那一段。
+   * 不另做一份 html 入口是因为几者共用全部样式与组件 —— 多一个入口就等于多一处要同步。
+   * ★ 跟随者与宿主的差别**只在这一段 hash 上**（见 @shared/window-role）。
    */
+  const hash = hashForRole(role)
   if (DEV_SERVER_URL) {
-    void win.loadURL(`${DEV_SERVER_URL}#mini`)
+    void win.loadURL(`${DEV_SERVER_URL}#${hash}`)
   } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'mini' })
+    void win.loadFile(join(__dirname, '../renderer/index.html'), { hash })
   }
 
   bridge?.onOpenChanged(true)
+
+  /*
+   * ★ 兜底（只在「加载失败」这条路上生效）：渲染层要是压根没报 ready，窗口会一直停在
+   *   show: false 上。普通会话里那还只是「迷你条没出来，底栏那颗按钮再点一次」；
+   *   而**本地文件会话里这一窗是唯一的界面** —— 藏起来就成了「双击了文件，什么都没有」，
+   *   连主窗口都不存在。所以到点无论如何先亮出来：空白条至少看得见、也关得掉（关掉即退出）。
+   */
+  clearLoadFallback()
+  loadFallback = setTimeout(() => {
+    loadFallback = null
+    showMiniWindow()
+  }, LOAD_FALLBACK_MS)
 }
 
 /** 关掉迷你窗（点它的关闭钮、或主窗口那颗按钮再点一次） */
@@ -268,16 +317,38 @@ export function setMiniWindowOpen(open: boolean): void {
 }
 
 /**
- * 把主窗口推来的播放状态转给迷你窗。
+ * 让迷你窗露面。
+ *
+ * 两条路进来：第一份快照到了（跟随者，见 sendMiniSnapshot）；以及**宿主**那一边 ——
+ * 它没有主窗口给推快照，报到 ready 之后就该直接露面（见 index.ts 的 onRequestSnapshot）。
+ */
+export function showMiniWindow(): void {
+  const win = miniWindow
+  if (!win || win.isDestroyed() || win.isVisible()) return
+  win.show()
+}
+
+/**
+ * 给迷你窗发一条消息。
+ *
+ * 主进程手上能跟它说话的地方不止转发快照一处（本地文件的摇铃、媒体命令都要送到**正在播放
+ * 的那个窗口**，见 index.ts 的 sendToHost），所以开一个通用的口子，别让每处各自去拿窗口。
+ */
+export function sendToMiniWindow(channel: string, payload: unknown): void {
+  const win = miniWindow
+  if (!win || win.isDestroyed()) return
+  win.webContents.send(channel, payload)
+}
+
+/**
+ * 把主窗口推来的播放状态转给迷你窗（**只有跟随者那一侧会收到**）。
  *
  * ★ 第一份快照顺带**把窗口显示出来**（见 handleMiniReady 里为什么先露面）。这样用户看到的
  *   第一帧就带着歌名 / 歌词，而不是先闪一下「未在播放」再换过来。
  */
 export function sendMiniSnapshot(snapshot: MiniPlayerSnapshot): void {
-  const win = miniWindow
-  if (!win || win.isDestroyed()) return
-  win.webContents.send(IPC.onMiniState, snapshot)
-  if (rendererReady && !win.isVisible()) win.show()
+  sendToMiniWindow(IPC.onMiniState, snapshot)
+  if (rendererReady) showMiniWindow()
 }
 
 /**
@@ -302,6 +373,7 @@ export function handleMiniResize(layout: MiniWindowLayout): void {
 export function handleMiniReady(): void {
   const win = miniWindow
   if (!win || win.isDestroyed()) return
+  clearLoadFallback()
   rendererReady = true
   bridge?.onRequestSnapshot()
 
@@ -318,6 +390,7 @@ export function installMiniWindow(config: ConfigStore, handlers: MiniWindowBridg
 
 /** 应用退出前清引用（避免销毁过程中的事件再往一个死窗口上写） */
 export function disposeMiniWindow(): void {
+  clearLoadFallback()
   bridge = null
   store = null
   miniWindow = null
