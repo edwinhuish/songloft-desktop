@@ -1,11 +1,13 @@
 /**
  * HTTP 客户端。
  *
- * 只做三件事，但每件都必须做对：
+ * 只做四件事，但每件都必须做对：
  *   1. 统一的 query 序列化与错误包装（后端错误体是 `{error: "..."}`，直接抛字符串会丢信息）
  *   2. 401 → 单飞刷新 token → 重放原请求（并发 10 个请求同时 401 只刷新一次）
  *   3. 记录「302 重定向后的真实地址」—— 播放/封面 URL 由播放器内核直接请求，
  *      走不了这里的重定向，得拿真实地址去拼（songloft-org/songloft-player#22）。
+ *   4. 统一的超时（默认 15s，可用 timeoutMs 按接口放宽）—— 悬着的请求比失败更难处理，
+ *      见 DEFAULT_REQUEST_TIMEOUT_MS。**唯一没有超时的是 upload**：上传大包本来就慢。
  */
 
 export interface TokenPair {
@@ -40,6 +42,17 @@ export class ApiError extends Error {
 
 export type QueryValue = string | number | boolean | null | undefined
 
+/**
+ * 单次请求的默认超时（ms）。
+ *
+ * ★ 为什么必须有一条：自建后端可能挂着（端口通、进程假死）、可能被反代吞掉，也可能
+ *   在转码一首歌时卡住 —— 没有超时的话 `fetch` 会一直悬着，界面就停在「加载中」上，
+ *   而它连「失败了」都算不上，用户没有任何可操作的东西。宁可超时报错再由调用方降级。
+ * ★ 15s 是按最慢的**正常**请求定的：曲库首屏、指纹列表、扫描进度这些都是毫秒级；
+ *   真正慢的是「找重复」（后端跑几十秒，那个函数自己放宽，见 findDuplicates 的说明）。
+ */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000
+
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
   query?: Record<string, QueryValue>
@@ -49,6 +62,11 @@ export interface RequestOptions {
   signal?: AbortSignal
   /** 跳过认证与刷新逻辑（登录、探测等） */
   anonymous?: boolean
+  /**
+   * 这一次请求的超时（ms）。不传走 DEFAULT_REQUEST_TIMEOUT_MS；传 0 表示不设超时。
+   * 与 `signal` 同时给出时以 `signal` 为准（调用方自己掐的表更懂这次请求）。
+   */
+  timeoutMs?: number
 }
 
 /** XHR 回来的东西。fetch 那份 Response 没法在回调里留住，所以只取这两样 */
@@ -84,6 +102,31 @@ function extractMessage(payload: unknown, status: number): string {
   if (status === 404) return '接口不存在（可能是后端版本过旧）'
   if (status >= 500) return `服务端错误（HTTP ${status}）`
   return `请求失败（HTTP ${status}）`
+}
+
+/**
+ * 这一次请求用哪个 signal。
+ *
+ * ★ `AbortSignal.timeout` 抛的是 `TimeoutError`、调用方自己取消抛的是 `AbortError`，
+ *   两者不能混为一谈（一个是「服务端没动静」，一个是「我们要它别等了」）——
+ *   所以下面 describeRequestError 分开接，而 AbortError 仍由调用方原样接住。
+ */
+function requestSignal(options: RequestOptions): AbortSignal | undefined {
+  if (options.signal) return options.signal
+  const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+  return timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined
+}
+
+/** 把 fetch 抛出来的东西翻成一句能给人看的话 */
+function describeRequestError(error: unknown, options: RequestOptions): string {
+  if (error instanceof DOMException && error.name === 'TimeoutError') {
+    const seconds = Math.round((options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS) / 1000)
+    return `请求超时（${seconds} 秒未响应）`
+  }
+  if (error instanceof TypeError) {
+    return '无法连接到服务器，请检查地址、服务是否在运行，以及网络是否可达'
+  }
+  return error instanceof Error ? error.message : String(error)
 }
 
 export interface ApiClientHooks {
@@ -233,19 +276,13 @@ export class ApiClient {
         method: options.method ?? 'GET',
         headers,
         body,
-        signal: options.signal
+        signal: requestSignal(options)
       })
       this.noteResolved(response.url || url)
       return response
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') throw error
-      const message =
-        error instanceof TypeError
-          ? '无法连接到服务器，请检查地址、服务是否在运行，以及网络是否可达'
-          : error instanceof Error
-            ? error.message
-            : String(error)
-      throw new ApiError(message, 0, path, null)
+      throw new ApiError(describeRequestError(error, options), 0, path, null)
     }
   }
 
@@ -285,7 +322,9 @@ export class ApiClient {
         const response = await fetch(`${this.baseUrl}${API_PREFIX}/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ refresh_token: refreshToken })
+          body: JSON.stringify({ refresh_token: refreshToken }),
+          // 刷新也要有超时：它挂在**每一个** 401 的请求前面，卡住的话整批请求一起悬着
+          signal: AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS)
         })
         if (!response.ok) return false
         const data = (await response.json()) as {

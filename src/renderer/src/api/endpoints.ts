@@ -118,8 +118,18 @@ export function getSongIds(client: ApiClient, query: SongQuery): Promise<number[
     .then((res) => res.ids ?? [])
 }
 
-export function getSong(client: ApiClient, id: number): Promise<Song> {
-  return client.request<Song>(`/songs/${id}`)
+/**
+ * 取一首歌的最新数据。
+ *
+ * `timeoutMs` 开放出来是给**后台补齐**用的（见 state/song-metadata.ts）：那边宁可早点放弃、
+ * 由服务端那条路兜底，也不想让一个悬着的请求一直占着「正在获取歌曲信息」这个提示。
+ */
+export function getSong(
+  client: ApiClient,
+  id: number,
+  options: { timeoutMs?: number } = {}
+): Promise<Song> {
+  return client.request<Song>(`/songs/${id}`, { timeoutMs: options.timeoutMs })
 }
 
 export function getFolders(
@@ -517,11 +527,13 @@ export function cleanMissingSongs(client: ApiClient): Promise<CleanResult> {
 
 /** 基于音频指纹找重复歌曲（后端可能跑几十秒，客户端要放宽超时） */
 export function findDuplicates(client: ApiClient): Promise<DuplicatesResult> {
-  return client.request<Partial<DuplicatesResult>>('/songs/duplicates').then((res) => ({
-    groups: res.groups ?? [],
-    total_groups: res.total_groups ?? 0,
-    total_duplicates: res.total_duplicates ?? 0
-  }))
+  return client
+    .request<Partial<DuplicatesResult>>('/songs/duplicates', { timeoutMs: 120_000 })
+    .then((res) => ({
+      groups: res.groups ?? [],
+      total_groups: res.total_groups ?? 0,
+      total_duplicates: res.total_duplicates ?? 0
+    }))
 }
 
 export function getFingerprintStatus(client: ApiClient): Promise<FingerprintStatus> {
@@ -627,7 +639,7 @@ export function updateCacheConfig(client: ApiClient, config: CacheConfigInput): 
 
 /** 清空已落盘的音乐缓存（同步接口，缓存大时会等几秒） */
 export function cleanCache(client: ApiClient): Promise<void> {
-  return client.request<void>('/cache-manage/clean', { method: 'POST' })
+  return client.request<void>('/cache-manage/clean', { method: 'POST', timeoutMs: 60_000 })
 }
 
 export function validateCacheDir(client: ApiClient, path: string): Promise<CacheDirCheck> {
@@ -846,7 +858,8 @@ export function setLogLevel(client: ApiClient, level: LogLevel): Promise<LogLeve
  *   响应体会原样返回字符串（见 client.ts 的 parseBody）。
  */
 export function exportServerLogs(client: ApiClient): Promise<string> {
-  return client.request<string>('/logs/export')
+  // 最多 10 MiB 正文，走默认那 15s 在慢链路上会假超时
+  return client.request<string>('/logs/export', { timeoutMs: 60_000 })
 }
 
 export function getHlsProxyEnabled(client: ApiClient): Promise<boolean> {
