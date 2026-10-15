@@ -11,9 +11,12 @@
  *   就直接跳走，选择也一起丢了；要退出选择点「取消选择」。
  *   内置收藏歌单（我喜欢的音乐 / 电台收藏）后端不给删，所以它们连勾选框都没有，
  *   「全选」也只圈可删的那些（口径只有 isDeletablePlaylist 一份）。
+ *
+ * ★ 数据来自 usePlaylists（含侧栏、命令面板共用的那一份），所以它的新鲜度由本页盯：
+ *   重新被看见时静默刷新一次，条件与三条底线见下面那个 effect 与 state/usePlaylists 的 load。
  */
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Playlist } from '@shared/types'
 import {
@@ -33,6 +36,7 @@ import { CardGridSkeleton, Cover, EmptyState, SongRowsSkeleton } from '@/compone
 import { openMenuFromEvent, type MenuItem } from '@/components/ContextMenu'
 import { Modal } from '@/components/Modal'
 import { SelectionBarShell } from '@/components/SelectionBar'
+import { usePageActive } from '@/hooks/usePageActive'
 import { isDeletablePlaylist, usePlaylists, FAVORITE_PLAYLIST_ID } from '@/state/usePlaylists'
 import { useSettings } from '@/state/useSettings'
 import { useUi } from '@/state/useUi'
@@ -42,7 +46,9 @@ type Filter = 'normal' | 'radio' | 'all'
 
 export function PlaylistsPage(): React.JSX.Element {
   const navigate = useUi((s) => s.navigate)
-  const { playlists, loading, load } = usePlaylists()
+  /** 这一槽现在是不是看得见的那一页（见 hooks/usePageActive）：下面那个 effect 靠它判「切回来了」 */
+  const active = usePageActive()
+  const { playlists, loading, error, load } = usePlaylists()
   const view = useSettings((s) => s.settings.playlistView)
   const patchSettings = useSettings((s) => s.patch)
   const [filter, setFilter] = useState<Filter>('normal')
@@ -70,6 +76,26 @@ export function PlaylistsPage(): React.JSX.Element {
   const allPicked = selectable.length > 0 && picked.length === selectable.length
 
   const reload = useCallback(() => void load({ includeHidden: showHidden }), [load, showHidden])
+
+  /**
+   * 重新被看见时静默刷新一次。
+   *
+   * ★ 触发条件只有「由藏变显」这一跳，但它把两件事一起覆盖了：从别的页切回来（页面槽常驻，
+   *   见 App 的 NativePages）、以及从扩展面切回原生面（那时这一槽同样失活，见 App 的 PageSlot）。
+   *   窗口重新聚焦**不算** —— 与 useAsync / useSongList / usePlaylistSongs 同一口径，
+   *   不给这一页开特例（每次 Alt+Tab 回来都重取一轮并不划算）。
+   * ★ 首次挂载也算一跳（ref 的初值是 false）：这一页可能开机很久之后才第一次被打开，
+   *   而 store 里那份是启动编排取的，早该对一遍了。切页面时本页一直挂着，不会再挂第二次。
+   * ★ 带着**本页当前那个「显示隐藏的歌单」条件**去取（那颗开关由本页自己说，不由 store 猜）：
+   *   不传的话静默刷新会把隐藏歌单从列表里抹掉，而开关还亮着 —— 看起来就像刷新把数据弄丢了。
+   * ★ 静默：不显示加载态，取回来与手头一致时连 set 都不做（见 state/usePlaylists 的 load），
+   *   于是滚动位置、勾选、筛选都还是离开时的样子；失败也不冒泡（手头这份还能用）。
+   */
+  const wasActive = useRef(false)
+  useEffect(() => {
+    if (active && !wasActive.current) void load({ silent: true, includeHidden: showHidden })
+    wasActive.current = active
+  }, [active, load, showHidden])
 
   const clearSelection = useCallback(() => {
     setPickedIds([])
@@ -319,13 +345,27 @@ export function PlaylistsPage(): React.JSX.Element {
         </div>
       </div>
 
+      {/*
+        取数失败：把原因与出口一起摆出来（与搜索页那条同款）。它只可能来自**明着**加载的那几趟
+        —— 手动刷新、切条件、启动编排；切回本页那一趟是静默的，失败了不往这里冒泡
+        （手头这份还能用，见 state/usePlaylists 的 load）。
+      */}
+      {error ? (
+        <div className="probe-result" data-state="error" style={{ marginBottom: 14 }}>
+          <span>{error}</span>
+          <button type="button" className="btn" data-size="sm" onClick={reload}>
+            重试
+          </button>
+        </div>
+      ) : null}
+
       {loading && playlists.length === 0 ? (
         view === 'list' ? (
           <SongRowsSkeleton rows={8} columns={4} />
         ) : (
           <CardGridSkeleton cards={10} />
         )
-      ) : visible.length === 0 ? (
+      ) : error && playlists.length === 0 ? null : visible.length === 0 ? (
         <EmptyState
           icon={<IconPlus size={26} />}
           title="这里还没有歌单"

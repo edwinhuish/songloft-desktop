@@ -4,10 +4,16 @@
  * 收藏在原实现里就是内置歌单（`AppConstants.favoritePlaylistId = '1'`），
  * 所以这里不另造一套：收藏 = 往 playlist 1 加歌 / 从 playlist 1 移除，
  * 本地维护一份 id 集合用于「已收藏」高亮。
+ *
+ * ★ 这份列表的新鲜度由「谁在看」决定：歌单页重新被看见时自己静默刷新一次
+ *   （见 hooks/usePageActive 与 pages/PlaylistsPage）。这个 store 负责的是那一趟的
+ *   三条底线 —— **不重复发**（同条件在途就搭车）、**不覆盖更新的结果**（旧响应作废）、
+ *   **内容没变就一个字都不改**（不重渲染、不留加载态、不冒泡错误）。见 load。
  */
 
 import { create } from 'zustand'
 
+import { sameData } from '@shared/data'
 import { applyPlaylistOrder, sortPinnedFirst } from '@shared/playlist'
 import type { Playlist, PlaylistType, Song } from '@shared/types'
 import {
@@ -72,24 +78,111 @@ interface PlaylistState {
   setFavorite: (songId: number, favorited: boolean) => Promise<void>
 }
 
+/**
+ * 在途的取数，按「条件」分格（见 load）：同一个条件正在路上时，后来者搭车。
+ *
+ * ★ 为什么要去重：`load()` 的调用点有七八处 —— 启动编排、侧栏挂载、歌单页切回来、
+ *   好几处增删改之后的补齐，任意两处都可能在同一个瞬间叫出来。它们要的是同一份结果，
+ *   发两趟纯属白跑（而且两趟各自 set 一次，界面还平白多渲染一轮）。
+ * ★ 只去重**网络那一趟**，提交与否仍由每个调用方自己定（见 load 的 try 块）——
+ *   若连提交也一起搭车，两个调用点各自的 silent / loading 口径就被搅在一起了
+ *   （比如非静默的那次会因为车里本来是个静默请求而收不掉「正在读取…」）。
+ */
+const inFlight = new Map<string, { id: number; promise: Promise<Playlist[]> }>()
+let fetchId = 0
+
+/** 取歌单列表。条件 = 要不要含隐藏歌单：那是两份不同的结果，谁也不能替谁 */
+function fetchPlaylists(key: string, includeHidden?: boolean): Promise<Playlist[]> {
+  const pending = inFlight.get(key)
+  if (pending) return pending.promise
+
+  const id = ++fetchId
+  const promise = getPlaylists(requireClient(), {
+    limit: 200,
+    // 默认由后端筛掉隐藏歌单；歌单页打开「显示隐藏」时才要全量
+    excludeLabels: includeHidden ? 'none' : undefined
+  })
+    // 置顶优先，其余按后端给出的顺序（后端已按 position 排好）
+    .then((res) => sortPinnedFirst(res.playlists))
+
+  // 收工后清掉自己那一格。只清自己：中途被顶掉时，那一格已经属于新请求了
+  const release = (): void => {
+    if (inFlight.get(key)?.id === id) inFlight.delete(key)
+  }
+  inFlight.set(key, { id, promise })
+  // 成功失败都要清（第二个参数是失败分支）：漏了失败那条，这一格会一直堵着
+  void promise.then(release, release)
+  return promise
+}
+
+/**
+ * 最近一次**取回来**的条件（要不要含隐藏歌单）。
+ *
+ * ★ 为什么要有它：`load()` 有一半调用点对条件没有意见（新建 / 隐藏之后的顺手补齐、
+ *   后台任务结束后的 invalidate、启动编排），它们原来一律按「不含隐藏」去取 ——
+ *   而歌单页当时可能正开着「显示隐藏的歌单」，于是一次新建就让隐藏歌单从列表里消失了，
+ *   而那颗开关还亮着，看起来就像刷新把数据弄丢了。记住它、没明说就沿用：取数的条件
+ *   跟着用户最后选的那一份走（歌单页那颗开关自己会明说，这条只兜住没说的人）。
+ * ★ 只在**取回来**时才记：失败与作废的都不算 —— 这份列表是哪份条件取的，就记哪一份。
+ */
+let condition = false
+
+/**
+ * 全局请求序号（见 load）。
+ *
+ * 响应回来的顺序不一定与发出去的一致（先发的可能后到），而只有**最后**发出去的那一次
+ * 代表用户现在要的东西。旧的一律不许再往 store 里写 —— 否则在歌单页来回切「显示隐藏的
+ * 歌单」时，慢的那条回来会把界面盖成上一次的筛选结果。
+ */
+let sequence = 0
+
 export const usePlaylists = create<PlaylistState>((set, get) => ({
   playlists: [],
   favoriteIds: new Set<number>(),
   loading: false,
   error: null,
 
+  /**
+   * @param options.silent 静默刷新（切回歌单页时走这条）：不显示加载态，**内容没变就一个字
+   *   都不改**，失败也不往界面上冒泡 —— 与 useAsync / useSongList / usePlaylistSongs 同一条口径。
+   * @param options.includeHidden 要不要含隐藏歌单。歌单页那颗「显示隐藏」开关由它自己明说；
+   *   别的调用点不说就沿用上一次取回来的那一份（见 condition），免得把当前列表换成另一份条件的。
+   */
   load: async (options = {}) => {
-    if (!options.silent) set({ loading: true })
+    const silent = options.silent === true
+    const includeHidden = options.includeHidden ?? condition
+    /** 条件指纹：去重与「作废旧响应」都按它分格 */
+    const key = includeHidden ? 'all' : 'default'
+    const mine = ++sequence
+    if (!silent) set({ loading: true })
     try {
-      // 默认由后端筛掉隐藏歌单；歌单页打开「显示隐藏」时才要全量
-      const res = await getPlaylists(requireClient(), {
-        limit: 200,
-        excludeLabels: options.includeHidden ? 'none' : undefined
-      })
-      // 置顶优先，其余按后端给出的顺序（后端已按 position 排好）
-      set({ playlists: sortPinnedFirst(res.playlists), loading: false, error: null })
+      const next = await fetchPlaylists(key, includeHidden)
+      // 已经有更新的一次出发了（多为又切了一次条件）：这份结果作废，别覆盖它
+      if (mine !== sequence) return
+      const state = get()
+      /*
+       * 静默刷新 + 内容一模一样 + 此前没留下错误：**一个字都不改**。
+       * 这正是「切回来还是离开时的样子」要的那一下：列表、滚动位置、页内筛选、勾选全留着，
+       * 连一次多余的渲染都没有。有错误残留时反而要提交 —— 数据是好的，那条红字不该继续挂着。
+       */
+      if (silent && state.error === null && sameData(state.playlists, next)) {
+        condition = includeHidden
+        return
+      }
+      condition = includeHidden
+      set({ playlists: next, loading: false, error: null })
     } catch (error) {
+      if (mine !== sequence) return
+      // 静默刷新失败不冒泡：手头这份还能用，下次切回来再试（不该为一次后台动作弹红字）
+      if (silent) return
       set({ loading: false, error: error instanceof Error ? error.message : '歌单加载失败' })
+    } finally {
+      /*
+       * 「正在读取」的收口：手上已经没有在途请求了，就不该还挂着它。
+       * 需要这一条是因为加载态由**发起的那一趟**点亮，而它可能被后来的静默一趟顶掉 ——
+       * 静默那趟自己从不点亮它，于是没人收，界面会一直停在「正在读取…」。
+       */
+      if (inFlight.size === 0 && get().loading) set({ loading: false })
     }
   },
 
