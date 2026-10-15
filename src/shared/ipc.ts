@@ -113,12 +113,12 @@ export interface WindowState {
  * ★ 宽度 380 这一档实测（拿一首长歌名 + 时长 1:02:05 的歌压中栏）：中栏 174px、悬浮那一层
  *   的音量条 84px，五颗控件与右上角那颗窗口钮的右边缘都正好落在 380 上 —— 一个不裁。
  *   再往下调就是中栏与音量条互相让位（两者都是可收缩的 flex 项），歌名那头先开始看不见字。
- * ★ MINI_MENU_HEIGHT 是为什么存在：菜单（components/ContextMenu 那一份，几根不透明度旋钮
- *   就挂在它上面）是页面里的 DOM，**画不出窗口** —— 而条自己只有 64px 高，一份「两根滑块」的
- *   菜单压不进去：它三行加起来一百多像素，而 .context-menu 的 max-height 是 60vh，窗口只有
- *   64px 时 60% × 64 = 38px，菜单当场变成一条带滚动条的缝。所以菜单一开就把窗口临时加高到
- *   这一档（面板展开的那一档本来就比它高，不必再让）。菜单里加减内容时要回来看看够不够 ——
- *   这一档是为**三根滑块**算的（整窗浓度 + 歌词面板 + 队列面板），再多一行就不够了。
+ * ★ MINI_MENU_HEIGHT 是为什么存在：菜单（components/ContextMenu 那一份，那几根滑块就挂在它
+ *   上面）是页面里的 DOM，**画不出窗口** —— 而条自己只有 64px 高，一份「几根滑块」的菜单压不
+ *   进去：它几行加起来两百来像素，而 .context-menu 的 max-height 是 60vh，窗口只有 64px 时
+ *   60% × 64 = 38px，菜单当场变成一条带滚动条的缝。所以菜单一开就把窗口临时加高到这一档
+ *   （面板展开的那一档本来就比它高，不必再让）。菜单里加减内容时要回来看看够不够 ——
+ *   这一档是为**四根滑块**算的（整窗浓度 + 两块面板的浓度 + 歌词字号），再多一行就不够了。
  */
 export const MINI_BAR_HEIGHT = 64
 /** 播放条（与面板）自己的宽度 —— **窗口**比它宽，两侧多出来的那圈留给阴影，见 MINI_SHADOW_EDGE */
@@ -128,20 +128,20 @@ export const MINI_WIDTH = 380
  * 加高的是**窗口**，不是播放器：条永远 64px、面板永远是自己那个高度，多出来的全落在
  * .mini-slack 那块透明容器里（见 MiniWindowLayout.menu）。
  *
- * ★ 300 是**三根滑块**那一档（整窗浓度 + 歌词面板 + 队列面板，见 MiniPlayer 的 opacityMenu）：
- *   两道约束都得过，取**下限更高**的那一方 —— 括号里是在真 Chromium 里量出来的数：
+ * ★ 380 是**四根滑块**那一档（整窗浓度 + 歌词面板 + 队列面板 + 歌词字号，见 MiniPlayer 的
+ *   displayMenu）：两道约束都得过，取**下限更高**的那一方 —— 括号里是在真 Chromium 里量出来的数：
  *   1. **菜单要有地方画**：一行 51px（标题 + 一条 range，见 components.css 的 .menu-slider），
- *      三行加菜单自身的内边距与描边是 164px；菜单顶端在**那颗钮的下缘再往下 6px** 处
- *      （见 MiniPlayer 的 toggleOpacityMenu），而那颗钮落在条顶部那条空隙里、下缘在窗口顶部
- *      往下 29px —— 于是菜单下缘落在 199px，再留出下边那圈阴影边距（MINI_SHADOW_EDGE）→ 209。
+ *      四行加菜单自身的内边距与描边是 215px；菜单顶端在**那颗钮的下缘再往下 6px** 处
+ *      （见 MiniPlayer 的 toggleMenu），而那颗钮落在条顶部那条空隙里、下缘在窗口顶部
+ *      往下 29px —— 于是菜单下缘落在 250px，再留出下边那圈阴影边距（MINI_SHADOW_EDGE）→ 260。
  *      窗口比它矮，菜单就被窗口下边缘**裁掉**（HTML 画不出窗口之外）。
- *   2. **.context-menu 自己的 `max-height: 60vh`**：要放得下 164px 就得 274px 以上（164 / 0.6）
+ *   2. **.context-menu 自己的 `max-height: 60vh`**：要放得下 215px 就得 359px 以上（215 / 0.6）
  *      —— 这一条才是真正卡住下限的（低于它菜单会变成一条带滚动条的缝）。
- *   300 给这两道各留了一点余量。
+ *   380 给这两道各留了一点余量。
  * ★ 菜单里**加减内容时回来核这一档**：它不跟着菜单一起长，少了就是「菜单被裁 / 出滚动条」。
  *   核法就是把那份菜单放进一个这一档高的页面里量一次 offsetHeight，与 `60vh` 比谁大。
  */
-export const MINI_MENU_HEIGHT = 300
+export const MINI_MENU_HEIGHT = 380
 /**
  * 窗口四周留给**窗口阴影**的透明边距（每边这么多）。
  *
@@ -159,6 +159,15 @@ export const MINI_WINDOW_WIDTH = MINI_WIDTH + MINI_SHADOW_EDGE * 2
 export const MINI_PANEL_MIN_HEIGHT = 180
 /** 两块面板的默认高度（首次打开 / 这块还没拖过时用；两块可以各自拖成不一样高） */
 export const MINI_PANEL_DEFAULT_HEIGHT = 416
+/**
+ * 歌词字号的取值范围（px）。
+ *
+ * ★ 放在这里是因为它有**两处**入口：设置页「歌词」那一栏，与迷你窗右上角那颗钮那份菜单
+ *   （见 MiniPlayer 的 displayMenu）。两处必须是同一档 —— 一个量的下限在两处不同，用户会
+ *   先以为某一边「拖不动了」。DRY 在这一项上是硬要求，不是整洁癖。
+ */
+export const LYRIC_FONT_SIZE_MIN = 16
+export const LYRIC_FONT_SIZE_MAX = 48
 
 /**
  * 迷你窗此刻的布局。
@@ -178,7 +187,7 @@ export interface MiniWindowLayout {
   expanded: boolean
   /** **开着的那一块**面板希望的高度（px；展开时才有意义，下限见 MINI_PANEL_MIN_HEIGHT） */
   panelHeight: number
-  /** 窗口里正开着菜单（上部那颗钮拉出来的不透明度菜单） */
+  /** 窗口里正开着菜单（上部那颗钮拉出来的显示设置菜单） */
   menu: boolean
 }
 

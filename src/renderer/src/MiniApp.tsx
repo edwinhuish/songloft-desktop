@@ -92,7 +92,7 @@ export function MiniApp(): React.JSX.Element {
   return (
     <>
       <MiniPlayer />
-      {/* 菜单（不透明度那两个旋钮）就挂在这里：它是**共享的**那一份下拉，见 components/ContextMenu */}
+      {/* 菜单（那几根显示滑块）就挂在这里：它是**共享的**那一份下拉，见 components/ContextMenu */}
       <ContextMenuHost />
       {/*
         ★ 这里**不挂** TooltipHost：迷你窗整窗只有 64px 高的条（展开也只多一块面板），

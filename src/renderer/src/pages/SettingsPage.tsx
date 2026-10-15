@@ -8,7 +8,13 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 
-import type { AppInfo, ClientUpdateCheck, ServerProbeResult } from '@shared/ipc'
+import {
+  LYRIC_FONT_SIZE_MAX,
+  LYRIC_FONT_SIZE_MIN,
+  type AppInfo,
+  type ClientUpdateCheck,
+  type ServerProbeResult
+} from '@shared/ipc'
 import { REPO_RELEASES_URL, REPO_URL, UPSTREAM_URL } from '@shared/links'
 import type {
   AutoScanSetting,
@@ -635,11 +641,13 @@ function PlaybackSettings(): React.JSX.Element {
       </Card>
 
       <Card title="歌词">
+        {/* 上下限取自 shared/ipc.ts：迷你窗那份菜单里有同一个量的另一根滑块（见 MiniPlayer
+            的 displayMenu），两处必须同一档，否则会出现「这边拖得动、那边拖到头了」。 */}
         <Row title="歌词字号" desc={`${settings.lyricFontSize}px（歌词面板与抽屉同步）`}>
           <input
             type="range"
-            min={16}
-            max={48}
+            min={LYRIC_FONT_SIZE_MIN}
+            max={LYRIC_FONT_SIZE_MAX}
             value={settings.lyricFontSize}
             aria-label="歌词字号"
             onChange={(event) => void patch({ lyricFontSize: Number(event.target.value) })}

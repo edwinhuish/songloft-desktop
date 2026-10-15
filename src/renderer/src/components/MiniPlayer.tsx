@@ -39,13 +39,13 @@
  *     ★ 这一组是放行面（样式表 .mini-controls）：它收得到事件（悬浮换层、点钮）而**不拖窗口**。
  *       右键一律**不开应用菜单** —— 与落在中栏两行 / 钮间那几条 2px 缝 / 进度线 / 窗口钮间那道
  *       缝上一样，由条上那句否决统一处理（见 suppressContextMenu）。
- *   · 右上角：**不透明度那颗 + 关闭**。**没有「退出迷你模式」** —— 那颗钮的语义（把窗口换回
+ *   · 右上角：**显示设置那颗 + 关闭**。**没有「退出迷你模式」** —— 那颗钮的语义（把窗口换回
  *     原样）在独立窗口下不存在了：迷你窗关掉就是关掉，主窗口一直好好的。最小化那颗也已去掉：
  *     迷你窗的用处正是「一直摆在那儿」，缩进任务栏就等于看不见了（系统那一侧的最小化仍在，
  *     从底栏那颗按钮或托盘再点一下就唤回来，见 main/mini-window.ts 的 openMiniWindow）。
  *     ★ 那颗钮（从右数第二个）开出来的就是**共享的那份菜单**（components/ContextMenu，全条唯一
- *       入口）：三根滑块 —— 整窗浓度，加歌词 / 队列**两块面板各自**的浓度（常驻三行，理由见
- *       下面 opacityMenu）。它长在窗口
+ *       入口）：四根滑块 —— 整窗浓度，歌词 / 队列**两块面板各自**的浓度，加**歌词字号**（常驻
+ *       四行，理由见下面 displayMenu）。它长在窗口
  *       **内部**、条下面那块透明容器让出来的地方 —— HTML 画不出窗口之外，而 Wayland 下又没法给
  *       新建的弹窗定位，所以菜单要地方，只能是窗口自己让出一段（加高的是窗口，不是播放器，
  *       见 shared/ipc.ts 的 MINI_MENU_HEIGHT）。
@@ -65,6 +65,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
+  LYRIC_FONT_SIZE_MAX,
+  LYRIC_FONT_SIZE_MIN,
   MINI_BAR_HEIGHT,
   MINI_PANEL_MIN_HEIGHT,
   MINI_SHADOW_EDGE,
@@ -102,7 +104,7 @@ const ICON_NAV = 17
 /**
  * 条上的右键一律**否决**：不弹应用菜单，也不放行 Chromium 那份默认菜单。
  *
- * ★ 本组件的自定义菜单（不透明度那两个旋钮）**只有一个入口** —— 右上角从右数第二个按钮（那颗
+ * ★ 本组件的自定义菜单（那几根显示滑块）**只有一个入口** —— 右上角从右数第二个按钮（那颗
  *   .win-btn，见下面 .mini-window-actions 那一段）。条上其余任何落点都不开菜单。
  * ★ 挂在**整条**（.mini-bar）上，不是挂在交互带上：条上收得到页面事件的地方不止带子一处（还有
  *   进度线与右上角那颗钮那一组，见样式表那份总表），挂带上的话那两处就得各自再写一遍。一处否决
@@ -136,9 +138,11 @@ export function MiniPlayer(): React.JSX.Element {
   /* 两块面板各自的浓度：菜单里那一行只给**开着的那一块**用，所以两个值都得在手边 */
   const lyricsPanelOpacity = useSettings((s) => s.settings.miniLyricsPanelOpacity)
   const queuePanelOpacity = useSettings((s) => s.settings.miniQueuePanelOpacity)
+  /* 歌词字号：与设置页「歌词」那一栏同一个量（迷你窗里歌词按它的 0.85 倍显示，见 LyricsView） */
+  const lyricFontSize = useSettings((s) => s.settings.lyricFontSize)
   const patchSettings = useSettings((s) => s.patch)
   /** 那颗下拉钮（右上角从右数第二个）。既是菜单的入口，也是「再点一次收起」的判据（见 menuOpen） */
-  const opacityBtnRef = useRef<HTMLButtonElement>(null)
+  const menuBtnRef = useRef<HTMLButtonElement>(null)
   /**
    * 这一份菜单开着没有。**本组件之外**那件事（窗口临时加高到放得下菜单）由 MiniApp 报给主进程，
    * 这里只用它给那颗钮一个 aria-expanded。
@@ -148,7 +152,7 @@ export function MiniPlayer(): React.JSX.Element {
    *   anchor）。只认 `s.open` 的话，那个菜单开着时这颗钮会谎报 aria-expanded=true。
    * ★ 也不另存一份「我开着」的本地 state：宿主的 anchor 就是那份事实，抄一份只会多一个会漂的副本。
    */
-  const menuOpen = useContextMenu((s) => s.open && s.anchor === opacityBtnRef.current)
+  const menuOpen = useContextMenu((s) => s.open && s.anchor === menuBtnRef.current)
   /**
    * 整棵迷你树**不接受焦点**（Tab、鼠标、程序化三条路都堵掉 —— 见 hooks/useUnfocusable）。
    *
@@ -173,19 +177,19 @@ export function MiniPlayer(): React.JSX.Element {
   const position = scrub ?? player.currentTime
 
   /**
-   * 迷你窗的窗口菜单：**三根滑块** —— 「播放器不透明度」「歌词面板不透明度」「队列面板不透明度」。
-   * **全条唯一的入口是右上角从右数第二个按钮**（那颗 .win-btn）—— 交互带的右键已撤、封面右键
-   * 让给系统，条上别处一律不开应用菜单（见 suppressContextMenu）。
+   * 迷你窗的显示设置菜单：**四根滑块** —— 「播放器不透明度」「歌词面板不透明度」「队列面板不
+   * 透明度」「歌词字号」。**全条唯一的入口是右上角从右数第二个按钮**（那颗 .win-btn）—— 交互带
+   * 的右键已撤、封面右键让给系统，条上别处一律不开应用菜单（见 suppressContextMenu）。
    *
    * ★ 封面右键不再开这一份：拖拽区（= 非客户区）的右键由**系统**弹窗口菜单（Electron 文档那条），
-   *   旋钮改由按钮独占。挂在按钮上本来也是最稳的那条路 —— 它在窗口钮组里、整组标着 no-drag，
+   *   滑块改由按钮独占。挂在按钮上本来也是最稳的那条路 —— 它在窗口钮组里、整组标着 no-drag，
    *   一定收得到。
-   * ★★ 三根**常驻**：面板开没开、开着哪一块，菜单都是这三行。理由有两条 ——
-   *   ① 菜单里少一行多一行是**看得见**的（内容一变，窗口高度也跟着变一次），而那两根滑块本来就是
+   * ★★ 四根**常驻**：面板开没开、开着哪一块，菜单都是这四行。理由有两条 ——
+   *   ① 菜单里少一行多一行是**看得见**的（内容一变，窗口高度也跟着变一次），而这几根滑块本来就是
    *      「随时可能想调」的东西，不该要人先把对的那块面板开出来才找得到；
    *   ② 两块面板的浓度是**各存一份**的（见 shared/ipc.ts），标题里把「哪一块」写清，比按当前
    *      面板换标题更不容易看错。
-   *   ★ 代价：MINI_MENU_HEIGHT 是按**三行**重算的（见 shared/ipc.ts 那一段）—— 菜单里再加减内容，
+   *   ★ 代价：MINI_MENU_HEIGHT 是按**四行**重算的（见 shared/ipc.ts 那一段）—— 菜单里再加减内容，
    *     要回去核那一档，否则菜单会被窗口下边缘裁掉或被迫出滚动条。
    * ★ 两根面板滑块调的都是**那一块自己**的浓度：拖「歌词面板」那根，队列那份一个像素都不动。
    *   面板收起时拖它照样生效（下次展开就是那个浓度）。
@@ -193,10 +197,15 @@ export function MiniPlayer(): React.JSX.Element {
    *   不必分两套默认值；它顺带牵动**窗口那圈阴影**（面板调淡时，围着「条 + 面板」那一圈跟着淡出、
    *   围着播放条自己那一圈按互补比例淡入，见样式表 .mini-surface 与 .mini-player::before），
    *   这里不必额外做什么。
-   * ★ 做成**函数**而不是模块级常量：三个 value 与 onChange 要取「点开这一刻」的设置值，
+   * ★ 歌词字号与设置页「歌词」那一栏是**同一个量**（lyricFontSize，上下限也从 shared/ipc.ts 取，
+   *   两处共用一个档）：迷你窗的歌词只是按它的 0.85 倍显示（见 LyricsView 的 compact），显示出来
+   *   的字号与滑块上的数不是一比一 —— 但两处调的必须是同一个数，否则「这里 30、那里 25.5」没处说理。
+   *   ★ 它**不随歌词面板**显示或隐藏：菜单是「想调什么就在哪儿」，而歌词字号正是那种「看一眼觉得
+   *     小了、当场拖一下」的量 —— 面板关着时拖它，下次展开就是新字号（与面板浓度那两根同理）。
+   * ★ 做成**函数**而不是模块级常量：四个 value 与 onChange 要取「点开这一刻」的设置值，
    *   常量数组会把它们钉死在首次渲染那一份上。
    */
-  const opacityMenu = (): MenuItem[] => [
+  const displayMenu = (): MenuItem[] => [
     {
       key: 'mini-opacity',
       label: '播放器不透明度',
@@ -226,6 +235,18 @@ export function MiniPlayer(): React.JSX.Element {
         value: queuePanelOpacity,
         onChange: (value) => void patchSettings({ miniQueuePanelOpacity: value })
       }
+    },
+    {
+      key: 'lyric-font-size',
+      label: '歌词字号',
+      slider: {
+        min: LYRIC_FONT_SIZE_MIN,
+        max: LYRIC_FONT_SIZE_MAX,
+        value: lyricFontSize,
+        // 单位是 px —— 菜单里那个后缀默认是 %
+        suffix: 'px',
+        onChange: (value) => void patchSettings({ lyricFontSize: value })
+      }
     }
   ]
 
@@ -237,13 +258,13 @@ export function MiniPlayer(): React.JSX.Element {
    *   打开」看起来像点不掉（见 ContextMenu 的 onPointerDown）。放行之后，「再点一次」到底是
    *   收起还是重新展开，宿主不再管，判断权交回按钮 —— 也就是这个函数。
    * ★ 读 `getState()` 而不是读 menuOpen 那个布尔量：后者是**渲染那一刻**的快照，而收起与展开
-   *   之间隔着一次窗口尺寸变化（主进程为放下菜单把迷你窗临时加高，见 MiniApp 的 MINI_MENU_SIZE），
-   *   重渲染不一定赶得上这一次点击。与 SettingSelect 同款。
+   *   之间隔着一次窗口尺寸变化（主进程为放下菜单把迷你窗临时加高，见 shared/ipc.ts 的
+   *   MINI_MENU_HEIGHT），重渲染不一定赶得上这一次点击。与 SettingSelect 同款。
    * ★ 判据要写成 `open && anchor === 这一颗`，不能只写 `open`：迷你窗里队列歌曲的右键菜单是
    *   第二个来源（不带 anchor）。它开着时点这颗钮应当是**换一份菜单**，而不是把别人的收掉 ——
    *   那种情况下宿主的捕获监听已经先把那份关掉了（点的是别处），这里读到 false，自然走展开分支。
    */
-  const toggleOpacityMenu = (event: React.MouseEvent<HTMLButtonElement>): void => {
+  const toggleMenu = (event: React.MouseEvent<HTMLButtonElement>): void => {
     const menu = useContextMenu.getState()
     if (menu.open && menu.anchor === event.currentTarget) {
       menu.hide()
@@ -251,7 +272,7 @@ export function MiniPlayer(): React.JSX.Element {
     }
     const rect = event.currentTarget.getBoundingClientRect()
     // 右对齐：触发器就贴着窗口右缘，左对齐会让面板整块探到窗外去
-    menu.show(rect.left, rect.bottom + 6, opacityMenu(), {
+    menu.show(rect.left, rect.bottom + 6, displayMenu(), {
       anchor: event.currentTarget,
       align: 'right',
       anchorRect: rect
@@ -457,7 +478,7 @@ export function MiniPlayer(): React.JSX.Element {
           ★ 下拉那颗（从右数第二个）是那份菜单**全条唯一的入口** —— 条上别处一律不开应用菜单
             （见 suppressContextMenu）：封面右键让给了系统窗口菜单，交互带也不再开自绘菜单。
             这一组在样式表里整组标着 no-drag（见 .mini-window-actions），所以两颗钮都点得动。
-          ★ 它是个**开关**：开着时再点一次收起（见 toggleOpacityMenu）。收起逻辑必须由按钮自己给
+          ★ 它是个**开关**：开着时再点一次收起（见 toggleMenu）。收起逻辑必须由按钮自己给
             —— 宿主那条「点别处关」的捕获监听刻意放行触发器，判断权交回按钮。
           ★ 原先这里还有一颗最小化，已去掉 —— 理由见文件头那一段（系统那一侧的最小化还在，
             从底栏那颗按钮或托盘再点一下就唤回来）。
@@ -468,13 +489,16 @@ export function MiniPlayer(): React.JSX.Element {
         */}
           <div className="mini-window-actions">
             <button
-              ref={opacityBtnRef}
+              ref={menuBtnRef}
               type="button"
               className="win-btn"
-              aria-label="不透明度"
+              /* 标签是「显示设置」而不是「不透明度」：那份菜单里除了三根浓度滑块，还有歌词字号
+                 —— 叫「不透明度」会让最后那一行看着像放错了地方（e2e 也点名断言这一颗的文案，
+                 见 scripts/e2e/drive.mjs 的 miniWinButtons）。 */
+              aria-label="显示设置"
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              onClick={toggleOpacityMenu}
+              onClick={toggleMenu}
             >
               <IconChevronDown size={11} />
             </button>
