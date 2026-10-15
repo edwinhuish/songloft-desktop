@@ -108,6 +108,8 @@ src/
 │  ├─ cache.ts        本机磁盘缓存（Chromium 会话缓存）的占用 / 清理 / 启动上限
 │  ├─ files.ts        导出 / 导入的文本文件对话框（读入限 32MB）
 │  ├─ probe.ts        后端探测（本地 Blob 解码，避免为它关掉 webSecurity）
+│  ├─ local-files.ts  本地文件的收件口：启动参数 / macOS open-file / 文件对话框（排队 + 摇铃）
+│  ├─ media-protocol.ts 本地文件的媒体协议 songloft-media://（按 Range 读字节；见 §8.16）
 │  ├─ tray.ts         托盘图标与菜单
 │  └─ app-menu.ts     应用菜单（窗口无边框、看不到菜单栏，但它提供全局加速键）
 ├─ preload/        contextBridge 白名单 —— 渲染层唯一的对外通道（window.songloft）
@@ -118,6 +120,7 @@ src/
 │  ├─ bridge-types.ts 桥接层的小类型
 │  ├─ lyric.ts        歌词四路合并 + 解析 + 当前行/逐字定位
 │  ├─ plugin.ts       JS 插件模型 / 排序纯函数 / 扩展页 URL 拼接 / PLUGIN_PARTITION
+│  ├─ local-file.ts   本地文件播放：路径 ↔ 可播放地址 ↔ Song 的换算 + Range 解析（§8.16）
 │  ├─ data.ts         两份数据快照是否等价（页面切回时的**静默刷新**靠它判断「要不要动界面」）
 │  ├─ metadata.ts     元数据缺口判定 / 「只补缺失」的合并 / 封面与标题的降级口径
 │  ├─ version.ts      版本号比较（认不出来的写法一律判「不比它新」，宁可少提示一次更新）
@@ -126,12 +129,15 @@ src/
    ├─ api/           client.ts（fetch 封装）/ endpoints.ts（端点清单，来自上游 Flutter 实现）/
    │                 plugins.ts（JS 插件：列表 / 启停 / 卸载 / 顺序 / 商店）
    ├─ state/         useAuth / usePlayer / usePlaylists / useSettings / useUi / useToasts /
+   │                 useLocalFiles（本地文件的收件箱：路径 → 队列，免登录也能用，见 §8.16）/
    │                 usePlugins（已装扩展 + 顺序 + 运行时音频状态，唯一事实源）/
    │                 useLibrary（曲库数据的版本号 + 后台任务守望，见 §5.7）/
    │                 song-metadata（起播时按缺口补齐元数据：只补缺失 / 超时 / 缓存 / 请服务端补齐）
-   ├─ pages/         10 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
-   │                 Recent / Search / Settings / Login / Extensions（+ 同目录的 PluginStore）
-   │                 （「文件夹」不是独立页面，是 LibraryPage 里的一个标签，见 FoldersView）
+   ├─ pages/         11 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
+   │                 Recent / Search / Settings / Login / Extensions / LocalFiles
+   │                 （+ 同目录的 PluginStore）
+   │                 （「文件夹」不是独立页面，是 LibraryPage 里的一个标签，见 FoldersView；
+   │                  LocalFiles 是唯一不需要登录的一页，见 §8.16）
    ├─ components/    Sidebar / TitleBar / SongTable / PlayerBar / LyricsView / CommandPalette /
    │                 Panel / ContextMenu / Modal / Toasts / SelectionBar /
    │                 FullPlayer（满窗播放：盖在原生面上的浮层）/
@@ -609,6 +615,51 @@ guest 自己的背景不透明，那块也永远透不出来。
 * 附带一条防呆：整个队列轮一遍都是 0 成功时**停下自动跳过**（`consecutiveFailures`）——
   否则「后端不可达」会表现为界面自己跳个不停，把错误也一起刷掉。
 
+### 8.16 本地文件即播：必须走自定义协议，且「免登录」是与 `status` 正交的一位
+
+「双击一个音频文件就能放」在桌面端有三个来源，而它们到达的时刻都很随意：启动参数（Windows /
+Linux 的文件关联把路径追加在 argv 里）、macOS 的 `open-file` 事件、用户自己从菜单或「本地文件」
+页挑的。链路：`main/local-files.ts`（收件口：排队 + 摇铃）→ `IPC.localFilesTakePending`（取走）→
+`renderer/state/useLocalFiles`（收件箱 → 队列）→ `main/media-protocol.ts`（把地址读成字节）。
+
+* **播放地址必须是自定义协议 `songloft-media://`，不能是 `file://`。** Chromium 不允许 http(s)
+  页面加载 `file://` 子资源，而开发态的页面正是 `http://localhost:5173` —— 写成 `file://`
+  的结果是**开发态一首也放不出来、打包态却一切正常**（最坏的一种不一致）。登记要在
+  `app ready` **之前**，且必须带 `stream: true`：不加它 Chromium 会把整份响应缓冲完才交给
+  `<audio>`（几十 MB 的 FLAC 要等读完才出声）。打包态的 CSP 还要在 `media-src` 里放行这个
+  scheme —— 漏掉只在控制台报一句，界面上就是「点了没反应」。
+* **`Range` 是主路，不是支线。** Chromium 的媒体栈**第一个请求就带** `Range: bytes=0-`（实测），
+  所以协议处理器的 206 分支每次本地播放都会走：`Content-Range` / `Content-Length` 写错，症状是
+  「放不出来」或「时长显示不出来」，而**不是**「只有拖进度条才有问题」。区间解析是纯函数
+  `shared/local-file.parseByteRange`（有单测）。
+* **交付路径是「排队 + 来取」，不能只靠推。** 前两个来源可能早于渲染层就绪（双击文件启动时
+  Chromium 还在加载页面），此刻推过去的消息直接消失 —— 用户双击了文件却什么都没发生、也没有
+  任何报错。所以主进程排队（`queuePaths`），渲染层开机取一次（`installLocalFileIntake` 里那次
+  `takePending`）、之后每次收到摇铃再取；取走即清空，于是「早到晚到都只处理一次」。与
+  `miniIsOpen` 同一条理由。第二次启动的 argv 走 `second-instance`（单实例锁会拦下它）。
+* **「免登录」是独立的一位 `useAuth.guest`，不要往 `AuthStatus` 里再加一档。** status 答的是
+  「与服务器现在是什么关系」，「不连服务器、只听本机文件」与它正交 —— 免登录进来之后照样可以
+  再登录。于是「能不能进主界面」只在一处判断：`status === 'authenticated' || guest`（`App.tsx`）。
+  **播放本身从不问登录状态**：本地文件读磁盘，只有曲库那几页要会话；免登录时侧栏与标题栏下拉
+  只留「本地文件 + 设置」（其余每一项点进去都是一页「尚未登录」，摆着不如不摆），命令面板与
+  工具栏搜索也一并收起来。
+* **本地文件的 id 是路径散列取负**（`localSongId`）：服务端 id 全是正整数，负数永远撞不上
+  （撞上的后果是收藏 / 播放上报落到曲库里另一首歌头上）。所有要走服务端的动作都得让开：
+  播放上报与「最近播放」、歌词、多音轨探测、元数据补齐（`song-metadata` 会请服务端跑一次
+  **全库**刷新）、收藏（`usePlaylists.setFavorite`）、歌曲右键菜单（`songMenu`）。
+  **队列持久化也要按留下的那一份重算游标** —— 直接写 `queue` 里的下标，一旦前面有本地文件
+  被筛掉，恢复出来的位置就整体前移（表现是「开机后停在了别的歌上」）。
+* 打包侧在 `electron-builder.yml` 的 `fileAssociations`（三平台各一份落地），只列 Chromium
+  **真能解码**的格式：认领了却放不出来（wma / ape / dsf 这类）比不认领更糟 —— 用户双击之后只
+  得到一句「无法解码」，而系统里那份关联已经被我们抢走了。Linux 那份的 MIME 由 electron-builder
+  拼进 `.desktop` 的 `MimeType`，所以 `desktop.entry.MimeType` **不能再显式写**（会被整个覆盖），
+  原有的 URL 协议那条挪去了 `linux.mimeTypes`；改完照旧要 `pnpm run pack:linux` +
+  `pnpm run verify:package`（后者已断言条目里带 `audio/mpeg`）。
+* 这条链**不在 `pnpm run e2e` 里**（e2e 里没有可双击的文件）。要端到端验一遍，最省事的做法是
+  把它当启动参数递进去：`SONGLOFT_USER_DATA=$(mktemp -d) electron . --no-sandbox <某个音频文件>`
+  —— 应当免登录直接落在「本地文件」页并出声；再用同一个 userData 起第二个进程带另一个文件，
+  应当转交给在跑的那个实例并接着播。
+
 ---
 
 ## 9. 不要做
@@ -640,6 +691,12 @@ guest 自己的背景不透明，那块也永远透不出来。
   也就是「点一下插件管理，音乐就断了」（§8.12）。
 * 不要在标题栏的扩展下拉里塞管理动作（停用 / 卸载）：那一份菜单只做跳转，管理在「插件管理」
   那一栏；真要再加入口就复用 `lib/plugin-actions`（§8.12）。
+* 不要把本地文件的播放地址写成 `file://`：开发态上网页面在 http:// 上，Chromium 会直接拒掉，
+  且**一声不响**（见 8.16）。一律走 `localFileUrl()`。
+* 不要让「未登录」挡住播放：曲库那几页需要会话，播放与本地文件不需要（见 8.16）。也不要给
+  免登录再往 `AuthStatus` 里加一档 —— 它是与 status 正交的一位。
+* 不要只靠 `onPending` 推来接手本地文件：那条通知可能早于渲染层就绪，文件会静默丢掉
+  （见 8.16 的「排队 + 来取」）。
 
 ---
 
@@ -647,6 +704,10 @@ guest 自己的背景不透明，那块也永远透不出来。
 
 已对齐：曲库浏览（类型 / 分面 / 排序 / 无限滚动）、歌单增删改与拖拽重排、收藏、最近播放、
 文件夹浏览、逐字歌词与点击跳转、播放队列、命令面板、扫描与重复检测、设置项。
+
+**本地文件即播（桌面端独有）**：双击本机的音频文件（或菜单 / 「本地文件」页里挑）就开始放，
+**不需要登录、也不进曲库** —— 上游只有「后端扫描入库的本地文件」这一条路。装了包之后系统里
+「用 Songloft Desktop 打开」也归它（`fileAssociations`，见 §8.16）。
 
 **JS 插件（扩展）**：已实现「列表 / 启用停用 / 卸载 / 上传 zip / 从商店安装 / 调整顺序 /
 批量更新 / 单插件更新（检查 + 下载）/ 常驻运行 / 清理残留数据」与「扩展主框架（插件商店 +
