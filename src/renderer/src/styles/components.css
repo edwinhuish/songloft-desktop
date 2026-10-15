@@ -2242,6 +2242,25 @@ html[data-mini='true'] .lyric-line {
   font-size: inherit;
 }
 
+/*
+ * 迷你窗的**当前行**（正在播放那一行）垫一层半透明灰底。
+ *
+ * ★ 为什么值得加：这一块是浮在桌面角上的小挂件，前后几行都是同样的字，光靠「当前行最亮」
+ *   在一屏十来行里不够抓眼；垫一条底之后「在唱哪一句」是余光就能看见的。
+ * ★★ 那层灰的浓度**写死**（--mini-lyric-active-bg），**不跟「歌词面板不透明度」走**：
+ *   那条滑块调的是面板自己那层底色（--mini-panel-tint，会透出桌面），而这个灰底是「正在播放」
+ *   这个标记本身 —— 跟着一起淡，就等于「面板调得越透明，越看不出在唱哪句」。
+ *   ⚠ 别把它写成 color-mix(... var(--mini-panel-opacity) ...)：那是让它跟着变的那种写法。
+ * ★ 通铺整行（与队列里「正在播放」那一条 .queue-item[data-current] 同一个口径）：行本身已有
+ *   9px 的上下内边距，两侧 26px 是文字自己的留白，再加横向内缩只会让文字在切行时左右跳。
+ *   行上那点 scale(1.045)（见 .lyric-line[data-active]）会让底略微出血，由 .mini-panel 的
+ *   overflow: hidden 收掉 —— 正是通铺该有的样子。
+ * ★ 只管迷你窗：主窗口那三处歌词不加底色（大屏上靠字色层次已经够，再压一条色带反而吵）。
+ */
+html[data-mini='true'] .lyric-line[data-active='true'] {
+  background: var(--mini-lyric-active-bg);
+}
+
 .lyric-line:hover {
   color: color-mix(
     in srgb,
