@@ -45,6 +45,13 @@ export type ExtensionRoute =
 export type NativeRoute =
   | { name: 'home' }
   | { name: 'library' }
+  /**
+   * 本地文件（双击打开 / 菜单挑的那些）。
+   *
+   * ★ 它是**唯一一页不需要登录**的内容页：曲库、歌单、收藏、搜索都得有会话，而这一页读的是
+   *   本机磁盘上的文件（见 state/useLocalFiles）。免登录模式进来就落在这里。
+   */
+  | { name: 'local' }
   | { name: 'favorites' }
   | { name: 'recent' }
   | { name: 'search'; keyword: string }

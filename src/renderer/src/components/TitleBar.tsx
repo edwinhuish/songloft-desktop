@@ -39,6 +39,7 @@ import {
   IconListMusic,
   IconMaximize,
   IconMinimize,
+  IconMusic,
   IconPin,
   IconPuzzle,
   IconRestore,
@@ -50,6 +51,7 @@ import {
 import { openMenuFromEvent, useContextMenu, type MenuItem } from './ContextMenu'
 import { PluginIcon } from './PluginIcon'
 import { Cover } from './primitives'
+import { useAuth } from '@/state/useAuth'
 import { useSettings } from '@/state/useSettings'
 import { useUi } from '@/state/useUi'
 import { regularPlaylists, usePlaylists } from '@/state/usePlaylists'
@@ -76,6 +78,13 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
   const myPlaylists = regularPlaylists(playlists)
   // 扩展下拉与扩展侧栏同源：两处列出来的扩展因此永远是同一批
   const extensions = useDisplayablePlugins()
+  /**
+   * 免登录模式：搜索与扩展这两处入口都要收起来。
+   *
+   * 两者都要会话：命令面板里那几项问的是曲库，扩展那一面（商店 / 管理 / 某个扩展页）全都要后端
+   * 报数据。留着它们，点进去只会得到一片「尚未登录」—— 而这两颗钮旁边没有任何文字说得出这一点。
+   */
+  const guest = useAuth((s) => s.guest)
   // 只为在标签后面缀一句「播放中」：菜单项的文字是字符串，没有别的地方能挂这个状态
   const runtime = usePlugins((s) => s.runtime)
 
@@ -143,68 +152,93 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
    * Songloft 下拉的菜单项：按「浏览 → 收藏与历史 → 设置」排，只放「去哪儿」不放管理动作。
    * 「文件夹」不单列 —— 它是曲库页里的一个标签；「扩展」也不在这里 —— 它有自己那颗按钮与下拉。
    */
-  const navMenuItems = (): MenuItem[] => [
-    {
-      key: 'home',
-      label: '首页',
-      icon: <IconHome size={16} />,
-      onClick: () => navigate({ name: 'home' })
-    },
-    {
-      key: 'library',
-      label: '曲库',
-      icon: <IconLibrary size={16} />,
-      onClick: () => navigate({ name: 'library' })
-    },
-
-    {
-      key: 'playlists',
-      label: '歌单',
-      icon: <IconListMusic size={16} />,
-      /**
-       * 「双面」项：悬浮列出歌单名单（跳到某个歌单的捷径），单击进歌单列表页 ——
-       * 想直奔某个歌单还是想先看总览，两种意图都不必再绕一步。
-       * 名单为空时给一条不可点的说明，而不是弹一个空框 —— 空框会让人以为是坏了。
-       */
-      onClick: () => navigate({ name: 'playlists' }),
-      children: myPlaylists.length
-        ? myPlaylists.map((playlist) => ({
-            key: `playlist-${playlist.id}`,
-            label: playlist.name,
-            icon: (
-              <Cover
-                coverUrl={playlist.cover_url}
-                width={48}
-                size={20}
-                radius={4}
-                kind="playlist"
-              />
-            ),
-            onClick: () => navigate({ name: 'playlist', id: playlist.id })
-          }))
-        : [{ key: 'playlists-empty', label: '还没有歌单', disabled: true }]
-    },
-    {
-      key: 'favorites',
-      label: '我喜欢',
-      icon: <IconHeart size={16} />,
-      onClick: () => navigate({ name: 'favorites' })
-    },
-    {
-      key: 'recent',
-      label: '最近播放',
-      icon: <IconClock size={16} />,
-      onClick: () => navigate({ name: 'recent' })
-    },
-    // 设置与上面那串「去哪儿」不是一类：分割线把这一段单独划出来
-    { key: 'sep-manage', label: '', separator: true },
-    {
-      key: 'settings',
-      label: '设置',
-      icon: <IconSettings size={16} />,
-      onClick: () => navigate({ name: 'settings', section: 'appearance' })
+  const navMenuItems = (): MenuItem[] => {
+    /*
+     * 免登录模式（见 useAuth）：这份菜单只留「本地文件 + 设置」。
+     * 其余每一项点下去都是一页「尚未登录」（它们全都要会话），摆着不如不摆 —— 与侧栏同一口径。
+     * 设置留着，是因为登录 / 切服务器那个入口就在它里面。
+     */
+    if (guest) {
+      return [
+        {
+          key: 'local',
+          label: '本地文件',
+          icon: <IconMusic size={16} />,
+          onClick: () => navigate({ name: 'local' })
+        },
+        { key: 'sep-manage', label: '', separator: true },
+        {
+          key: 'settings',
+          label: '设置',
+          icon: <IconSettings size={16} />,
+          onClick: () => navigate({ name: 'settings', section: 'account' })
+        }
+      ]
     }
-  ]
+
+    return [
+      {
+        key: 'home',
+        label: '首页',
+        icon: <IconHome size={16} />,
+        onClick: () => navigate({ name: 'home' })
+      },
+      {
+        key: 'library',
+        label: '曲库',
+        icon: <IconLibrary size={16} />,
+        onClick: () => navigate({ name: 'library' })
+      },
+
+      {
+        key: 'playlists',
+        label: '歌单',
+        icon: <IconListMusic size={16} />,
+        /**
+         * 「双面」项：悬浮列出歌单名单（跳到某个歌单的捷径），单击进歌单列表页 ——
+         * 想直奔某个歌单还是想先看总览，两种意图都不必再绕一步。
+         * 名单为空时给一条不可点的说明，而不是弹一个空框 —— 空框会让人以为是坏了。
+         */
+        onClick: () => navigate({ name: 'playlists' }),
+        children: myPlaylists.length
+          ? myPlaylists.map((playlist) => ({
+              key: `playlist-${playlist.id}`,
+              label: playlist.name,
+              icon: (
+                <Cover
+                  coverUrl={playlist.cover_url}
+                  width={48}
+                  size={20}
+                  radius={4}
+                  kind="playlist"
+                />
+              ),
+              onClick: () => navigate({ name: 'playlist', id: playlist.id })
+            }))
+          : [{ key: 'playlists-empty', label: '还没有歌单', disabled: true }]
+      },
+      {
+        key: 'favorites',
+        label: '我喜欢',
+        icon: <IconHeart size={16} />,
+        onClick: () => navigate({ name: 'favorites' })
+      },
+      {
+        key: 'recent',
+        label: '最近播放',
+        icon: <IconClock size={16} />,
+        onClick: () => navigate({ name: 'recent' })
+      },
+      // 设置与上面那串「去哪儿」不是一类：分割线把这一段单独划出来
+      { key: 'sep-manage', label: '', separator: true },
+      {
+        key: 'settings',
+        label: '设置',
+        icon: <IconSettings size={16} />,
+        onClick: () => navigate({ name: 'settings', section: 'appearance' })
+      }
+    ]
+  }
 
   /**
    * 扩展下拉的内容：**两条固定入口 → 分割线 → 已开启的扩展**。
@@ -325,7 +359,7 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
         </div>
       </div>
 
-      {!solo ? (
+      {!solo && !guest ? (
         /**
          * 扩展入口。同样是一颗拆分按钮：左半进扩展主框架（落上次那一栏），右半列出
          * 已开启的扩展。
@@ -367,7 +401,7 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
 
       {/* 右端固定在右缘：左侧那几项都是 flex:none，中间空出来的就是拖拽区 */}
       <div className="titlebar-actions">
-        {!solo ? (
+        {!solo && !guest ? (
           <button
             type="button"
             className="win-btn"

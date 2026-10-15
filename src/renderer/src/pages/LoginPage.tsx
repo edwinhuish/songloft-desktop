@@ -15,19 +15,24 @@ import type { ServerEntry, ServerProbeResult } from '@shared/ipc'
 import {
   IconAlert,
   IconCheck,
+  IconFolderOpen,
   IconLoader,
+  IconMusic,
   IconServer,
   IconSparkle,
   IconTrash
 } from '@/components/Icons'
 import { Switch } from '@/components/primitives'
 import { useAuth } from '@/state/useAuth'
+import { pickLocalFiles } from '@/state/useLocalFiles'
 import { useSettings } from '@/state/useSettings'
 import { useToasts } from '@/state/useToasts'
+import { useUi } from '@/state/useUi'
 
 const DEFAULT_URL = 'http://localhost:58091'
 
 const FEATURES = [
+  '双击本机音频文件即播，不必登录',
   '本地 / 网络 / 电台三类曲库统一管理',
   '逐字高亮歌词，点击任意一行直接跳转',
   '封面取色驱动全界面强调色',
@@ -35,9 +40,10 @@ const FEATURES = [
 ]
 
 export function LoginPage(): React.JSX.Element {
-  const { servers, busy, error, probe, login, switchServer, forgetServer } = useAuth()
+  const { servers, busy, error, probe, login, switchServer, forgetServer, enterGuest } = useAuth()
   const { settings, patch } = useSettings()
   const push = useToasts((s) => s.push)
+  const navigate = useUi((s) => s.navigate)
 
   const [url, setUrl] = useState(servers[0]?.url ?? DEFAULT_URL)
   const [name, setName] = useState('')
@@ -141,7 +147,7 @@ export function LoginPage(): React.JSX.Element {
           <h1>Songloft</h1>
           <p>
             自托管音乐库的桌面客户端。连上你自己的 songloft 后端，
-            本地文件、网络歌曲与电台都在一个曲库里管。
+            本地文件、网络歌曲与电台都在一个曲库里管；只听本机文件的话，不登录也能用。
           </p>
         </div>
         <div className="login-features">
@@ -280,6 +286,42 @@ export function LoginPage(): React.JSX.Element {
             {busy ? <IconLoader size={16} /> : null}
             {busy ? '正在登录…' : '登录'}
           </button>
+
+          {/*
+            免登录出口。★ 放在登录按钮**下面**而不是并排：它是「不连服务器」那条路，
+            与上面那个主按钮是二选一 —— 并排摆着，第一眼看起来会像「登录」的一个附加选项。
+          */}
+          <div className="divider" />
+          <div className="field">
+            <div className="field-label">只听本机的文件？</div>
+            <div className="field-hint">
+              播放本地音频不需要登录：挑几个文件，或者在系统里直接双击它们（文件关联到本应用）。
+              曲库、歌单、收藏与搜索才需要连接服务器。
+            </div>
+            <div className="row" style={{ gap: 8, marginTop: 10 }}>
+              <button
+                type="button"
+                className="btn"
+                data-variant="primary"
+                onClick={() => void pickLocalFiles()}
+              >
+                <IconFolderOpen size={15} />
+                打开本地文件…
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  // 进去之后落在「本地文件」那一页：免登录模式下它是唯一真有内容的去处
+                  enterGuest()
+                  navigate({ name: 'local' })
+                }}
+              >
+                <IconMusic size={15} />
+                免登录使用
+              </button>
+            </div>
+          </div>
 
           {servers.length > 0 ? (
             <>

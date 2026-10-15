@@ -34,7 +34,7 @@ import { parseLyrics, type ParsedLyric } from '@shared/lyric'
 import { songCoverUrl } from '@shared/metadata'
 import { buildCoverUrl, buildSongUrl } from '@/lib/url'
 import { displayArtist } from '@/lib/format'
-import { requireClient, resourceContext } from './useAuth'
+import { resourceContext, useAuth } from './useAuth'
 import { useSettings } from './useSettings'
 
 const EMPTY_LYRIC: ParsedLyric = { lines: [], synced: false, meta: {}, offset: 0 }
@@ -124,11 +124,21 @@ async function loadLyrics(song: Song): Promise<{ parsed: ParsedLyric; failed: bo
   const cached = lyricCache.get(key)
   if (cached) return { parsed: cached, failed: false }
 
-  const hasLyric = Boolean(song.lyric_url) || song.type === 'local'
+  /*
+   * 有没有歌词来源：有 lyric_url，或者它是**曲库里的**本地文件（后端扫描入库的本地文件
+   * 一样有歌词可给）。
+   * ★ 双击打开的那种本地文件（id 为负，见 shared/local-file）不在曲库里，问后端只会白跑
+   *   一趟失败的请求；直接跳过，界面也就不会先闪一下「加载中」再变成空。
+   */
+  const hasLyric = Boolean(song.lyric_url) || (song.type === 'local' && song.id > 0)
   if (!hasLyric) return { parsed: EMPTY_LYRIC, failed: false }
 
+  // 免登录（只听本地文件）时也在这一条上：拿不到 client 就不问，而不是让 requireClient 抛
+  const client = useAuth.getState().client
+  if (!client) return { parsed: EMPTY_LYRIC, failed: false }
+
   try {
-    const payload = await getLyric(requireClient(), song.id)
+    const payload = await getLyric(client, song.id)
     const parsed = parseLyrics({
       lyric: payload.lyric ?? '',
       tlyric: payload.tlyric ?? '',
@@ -355,23 +365,32 @@ export const localPlayer = create<PlayerState>((set, get) => {
     /*
      * 播放成功后才记账 —— 且一次收听只记一次：首次失败、重试才出声时，成功的是第二次调用，
      * 账要记在这一次上；反过来，能出声之后又重试（不该发生，但真发生了也别重复报）。
+     *
+     * ★ 「记账」这一整块只对**曲库里的歌**成立，两个条件缺一不可：
+     *   · 有会话（没登录时后端不认识我们，也没必要为此拦下播放）；
+     *   · id 为正（本地文件的 id 是负的，见 shared/local-file —— 拿负数去问后端只会 404）。
+     *   「最近播放」同理不算本地文件：那个列表是靠 id 反查曲库的，放进去只会得到一行
+     *   「已从曲库删除」。
      */
+    const client = useAuth.getState().client
     if (accountedSong !== song.id) {
       accountedSong = song.id
       // 真出声了就说明这一轮不是「整条路都断了」，连续失败的计数重新开始
       consecutiveFailures = 0
-      void reportPlayed(requireClient(), song.id, { type: 'play', context: ctx }).catch(
-        () => undefined
-      )
-      rememberRecent(song.id)
+      if (client && song.id > 0) {
+        void reportPlayed(client, song.id, { type: 'play', context: ctx }).catch(() => undefined)
+        rememberRecent(song.id)
+      }
     }
 
-    // 封面主色 → 整页强调色
+    // 封面主色 → 整页强调色（本地文件没有封面可取，只有从曲库那边凑得出地址时才去取）
     if (settings.accentFromCover) {
       const coverAbsolute = buildCoverUrl(songCoverUrl(song), resourceContext(), 96)
-      void fetchCoverAccentFor(coverAbsolute).then((hex) => {
-        if (hex && get().currentSong()?.id === song.id) useSettings.getState().setCoverAccent(hex)
-      })
+      if (coverAbsolute) {
+        void fetchCoverAccentFor(coverAbsolute).then((hex) => {
+          if (hex && get().currentSong()?.id === song.id) useSettings.getState().setCoverAccent(hex)
+        })
+      }
     }
 
     void loadLyrics(song).then(({ parsed, failed }) => {
@@ -379,30 +398,32 @@ export const localPlayer = create<PlayerState>((set, get) => {
       set({ lyrics: parsed, lyricsLoading: false, lyricFailed: failed })
     })
 
-    // 原伴唱多音轨探测（失败静默：绝大多数歌都是单轨）
-    void requireClient()
-      .request<{ tracks: { index: number; title: string | null; language: string | null }[] }>(
-        `/songs/${song.id}/audio-tracks`
-      )
-      .then((res) => {
-        if (get().currentSong()?.id !== song.id) return
-        const tracks = res.tracks ?? []
-        /*
-         * 「此刻在放哪一条轨」：用户点过切轨就以他选的为准（重试路径上尤其重要 ——
-         * 否则界面会跳回原唱，而声音还在伴奏上）。没点过才取第一条可用轨。
-         */
-        const preferred =
-          requestedTrack != null && tracks.some((t) => t.index === requestedTrack)
-            ? requestedTrack
-            : tracks.length > 1
-              ? tracks[0].index
-              : -1
-        set({
-          tracks: tracks.map((t) => ({ index: t.index, title: t.title, language: t.language })),
-          activeTrack: preferred
+    // 原伴唱多音轨探测（失败静默：绝大多数歌都是单轨；本地文件与未登录时不探）
+    if (client && song.id > 0) {
+      void client
+        .request<{ tracks: { index: number; title: string | null; language: string | null }[] }>(
+          `/songs/${song.id}/audio-tracks`
+        )
+        .then((res) => {
+          if (get().currentSong()?.id !== song.id) return
+          const tracks = res.tracks ?? []
+          /*
+           * 「此刻在放哪一条轨」：用户点过切轨就以他选的为准（重试路径上尤其重要 ——
+           * 否则界面会跳回原唱，而声音还在伴奏上）。没点过才取第一条可用轨。
+           */
+          const preferred =
+            requestedTrack != null && tracks.some((t) => t.index === requestedTrack)
+              ? requestedTrack
+              : tracks.length > 1
+                ? tracks[0].index
+                : -1
+          set({
+            tracks: tracks.map((t) => ({ index: t.index, title: t.title, language: t.language })),
+            activeTrack: preferred
+          })
         })
-      })
-      .catch(() => set({ tracks: [], activeTrack: -1 }))
+        .catch(() => set({ tracks: [], activeTrack: -1 }))
+    }
   }
 
   /**
@@ -627,9 +648,12 @@ export const localPlayer = create<PlayerState>((set, get) => {
 
     refreshCurrentSong: async () => {
       const song = get().currentSong()
-      if (!song) return
+      // 本地文件（id 为负）不在曲库里，没有「再取一次」这回事
+      if (!song || song.id <= 0) return
+      const client = useAuth.getState().client
+      if (!client) return
       try {
-        const fresh = await getSong(requireClient(), song.id)
+        const fresh = await getSong(client, song.id)
         /*
          * 只换队列里那一个对象，别的一律不动：
          *   · 不碰 audio —— 变的是元数据（标题/封面/时长），正在播的那一轨不该被打断；
@@ -792,8 +816,10 @@ export const localPlayer = create<PlayerState>((set, get) => {
     restoreLastQueue: async () => {
       const { settings } = useSettings.getState()
       if (settings.lastQueue.length === 0) return
+      const client = useAuth.getState().client
+      // 队列里存的都是曲库 id，没有会话就取不回来（免登录时开机照常不恢复，不是错误）
+      if (!client) return
       try {
-        const client = requireClient()
         const songs = await Promise.all(
           settings.lastQueue.map((id) => client.request<Song>(`/songs/${id}`).catch(() => null))
         )
@@ -846,9 +872,17 @@ localPlayer.subscribe(() => {
   persistTimer = window.setTimeout(() => {
     persistTimer = null
     const { queue, order, cursor, context } = localPlayer.getState()
+    /*
+     * 只记曲库里的歌：本地文件（id 为负）重启之后是取不回来的，写进去只会在下次开机时
+     * 白跑一批注定失败的请求。
+     * ★ 落盘的游标要按**留下来的那一份**重算：直接写 queue 里的下标，一旦前面有本地文件
+     *   被筛掉，恢复出来的位置就整体前移了（表现是「开机后队列停在了别的歌上」）。
+     */
+    const persisted = queue.filter((song) => song.id > 0).slice(0, 500)
+    const current = cursor >= 0 && cursor < order.length ? queue[order[cursor]] : undefined
     void useSettings.getState().patch({
-      lastQueue: queue.map((s) => s.id).slice(0, 500),
-      lastQueueIndex: cursor >= 0 && cursor < order.length ? order[cursor] : -1,
+      lastQueue: persisted.map((song) => song.id),
+      lastQueueIndex: current && current.id > 0 ? persisted.indexOf(current) : -1,
       lastQueueContext: context
     })
   }, 1500)

@@ -229,6 +229,12 @@ export const usePlaylists = create<PlaylistState>((set, get) => ({
   isFavorite: (songId) => get().favoriteIds.has(songId),
 
   setFavorite: async (songId, favorited) => {
+    /*
+     * 本地文件不在曲库里（id 为负，见 shared/local-file）：拿它去问后端只会 404。
+     * 界面上这些动作本来也不会为它出现（见 buildSongMenuItems），这里再拦一道 —— 键盘的
+     * `f`、播放条与托盘那几处入口都只拿得到一个 id，防不住「某一处漏了判断」。
+     */
+    if (songId <= 0) return
     const id = FAVORITE_PLAYLIST_ID
     const before = get().favoriteIds.has(songId)
     if (before === favorited) return

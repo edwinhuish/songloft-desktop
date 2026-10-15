@@ -5,6 +5,7 @@
  * 各写一份必然漂移（比如某一处忘了「加入队列」）。
  */
 
+import { isLocalFileSong } from '@shared/local-file'
 import type { Song } from '@shared/types'
 import type { MenuItem } from './ContextMenu'
 import {
@@ -45,6 +46,14 @@ export function buildSongMenuItems(songs: Song[], options: SongMenuOptions = {})
   const allFavorited = songs.every((s) => playlistsStore.isFavorite(s.id))
   const itemLabel = multi ? `已选 ${songs.length} 首` : first.title
 
+  /**
+   * 全是「双击打开的那种本地文件」吗（id 为负，见 shared/local-file）。
+   *
+   * ★ 这批歌的菜单要短一截：加入歌单、收藏、从曲库删除**都要经后端**，而它们根本不在曲库里
+   *   —— 点下去只会得到一条失败提示。菜单里少几项，好过摆一堆点不动的。
+   */
+  const localOnly = songs.every(isLocalFileSong)
+
   const items: MenuItem[] = [
     { key: 'header', label: itemLabel, header: true },
     {
@@ -70,27 +79,32 @@ export function buildSongMenuItems(songs: Song[], options: SongMenuOptions = {})
         player.addToQueue(songs)
         toast(`已加入队列 ${songs.length} 首`, 'success')
       }
-    },
-    { key: 'sep-1', label: '', separator: true },
-    {
-      key: 'playlist',
-      label: '加入歌单…',
-      icon: <IconListMusic size={15} />,
-      onClick: () => ui.setAddToPlaylistTarget(ids)
-    },
-    {
-      key: 'favorite',
-      label: allFavorited ? '取消收藏' : '收藏',
-      icon: <IconHeart size={15} filled={allFavorited} />,
-      onClick: () => {
-        // 语义是「整批切到相反状态」：全已收藏 → 全取消；否则 → 全收藏
-        const target = !allFavorited
-        for (const song of songs) void usePlaylists.getState().setFavorite(song.id, target)
-      }
     }
   ]
 
-  if (!multi) {
+  if (!localOnly) {
+    items.push(
+      { key: 'sep-1', label: '', separator: true },
+      {
+        key: 'playlist',
+        label: '加入歌单…',
+        icon: <IconListMusic size={15} />,
+        onClick: () => ui.setAddToPlaylistTarget(ids)
+      },
+      {
+        key: 'favorite',
+        label: allFavorited ? '取消收藏' : '收藏',
+        icon: <IconHeart size={15} filled={allFavorited} />,
+        onClick: () => {
+          // 语义是「整批切到相反状态」：全已收藏 → 全取消；否则 → 全收藏
+          const target = !allFavorited
+          for (const song of songs) void usePlaylists.getState().setFavorite(song.id, target)
+        }
+      }
+    )
+  }
+
+  if (!multi && !localOnly) {
     if (first.artist) {
       items.push({
         key: 'artist',
@@ -115,6 +129,11 @@ export function buildSongMenuItems(songs: Song[], options: SongMenuOptions = {})
         onClick: () => void window.songloft.shell.openExternal(first.url ?? '')
       })
     }
+  }
+
+  if (localOnly) {
+    // 本地文件既不进歌单也不进曲库，那两条尾巴都无处可落；菜单到此为止
+    return items
   }
 
   if (options.playlistId != null) {

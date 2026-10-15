@@ -21,6 +21,17 @@ export type AuthStatus = 'booting' | 'unauthenticated' | 'authenticated'
 
 interface AuthState {
   status: AuthStatus
+  /**
+   * 免登录模式：不连任何服务器，只听本地文件。
+   *
+   * ★ 为什么是独立的一位、而不是往 status 里再加一档：status 答的是「与服务器现在是什么
+   *   关系」（还在恢复 / 没登录 / 已登录），而「免登录用一用」与它**正交** —— 免登录进来
+   *   之后照样可以再登录，那时这一位自然失去意义。于是「能不能进主界面」这件事在 App 里
+   *   只有一处判断：`status === 'authenticated' || guest`。
+   * ★ 播放本身**不依赖**它：播放器读的是本地文件与（有会话时的）后端，从不问「登没登录」。
+   *   这一位管的只是「把人放进主界面」，而本地文件的播放权限从来就不需要登录。
+   */
+  guest: boolean
   client: ApiClient | null
   baseUrl: string | null
   serverName: string | null
@@ -61,6 +72,10 @@ interface AuthState {
   logout: () => Promise<void>
   /** 只把界面交还给登录页，不动凭据（「切换账号」用） */
   openLogin: () => void
+  /** 进免登录模式（登录页的「免登录使用」、以及「打开本地文件」都走它） */
+  enterGuest: () => void
+  /** 从免登录模式退回登录页（侧栏那个「连接服务器」入口） */
+  leaveGuest: () => void
   /** 迷你窗专用：接收主窗口喂来的资源上下文（见 mirroredMedia 的说明） */
   setMirroredMedia: (media: ResourceContext | null) => void
   switchServer: (url: string) => Promise<void>
@@ -112,6 +127,7 @@ async function verifySession(client: ApiClient): Promise<boolean> {
 
 export const useAuth = create<AuthState>((set, get) => ({
   status: 'booting',
+  guest: false,
   client: null,
   baseUrl: null,
   serverName: null,
@@ -167,7 +183,8 @@ export const useAuth = create<AuthState>((set, get) => ({
       return
     }
 
-    set({ status: 'authenticated', error: null })
+    // 有会话就不必再待在免登录模式里（双击本地文件进来的那一趟可能比这里更早）
+    set({ status: 'authenticated', guest: false, error: null })
     void get()
       .client!.request<{ version?: string }>('/version', { anonymous: true })
       .then((res) => set({ backendVersion: res.version ?? null }))
@@ -210,6 +227,7 @@ export const useAuth = create<AuthState>((set, get) => ({
         serverName: servers.find((s) => s.url === normalized)?.name ?? null,
         username: account,
         servers,
+        guest: false,
         status: 'authenticated',
         busy: false,
         error: null,
@@ -252,6 +270,10 @@ export const useAuth = create<AuthState>((set, get) => ({
     // 真正要抹掉本机凭据的是 logout。
     set({ status: 'unauthenticated', error: null })
   },
+
+  enterGuest: () => set({ guest: true, error: null }),
+
+  leaveGuest: () => set({ guest: false }),
 
   setMirroredMedia: (mirroredMedia) => set({ mirroredMedia }),
 

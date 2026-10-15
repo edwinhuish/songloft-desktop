@@ -145,6 +145,13 @@ function requestServerRefresh(song: Song): boolean {
  * 服务端刷新过之后（updated_at 变了）会自然重新问一次，不必手动作废。
  */
 export async function ensureSongMetadata(song: Song): Promise<void> {
+  /*
+   * 双击打开的本地文件不入曲库（id 为负，见 shared/local-file）：它的元数据只能从文件名来。
+   * ★ 必须在这里让开 —— 否则下面那段兜底会去请服务端跑一次「全库刷新元数据」：那是个
+   *   服务端全局任务（读一遍所有音频文件、动辄几分钟），为一首本机文件触发它，代价完全不成比例。
+   */
+  if (song.id <= 0) return
+
   // 没有缺口 = 一个请求都不发（「网络查询只针对缺失字段」的第一道闸）
   if (!findMetadataGaps(song).any) return
 

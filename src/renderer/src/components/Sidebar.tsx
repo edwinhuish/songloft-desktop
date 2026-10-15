@@ -17,9 +17,12 @@ import {
   IconHome,
   IconLibrary,
   IconListMusic,
-  IconPlus
+  IconMusic,
+  IconPlus,
+  IconServer
 } from './Icons'
 import { openMenuFromEvent } from './ContextMenu'
+import { useAuth } from '@/state/useAuth'
 import { regularPlaylists, usePlaylists } from '@/state/usePlaylists'
 import { useSettings } from '@/state/useSettings'
 import { useUi } from '@/state/useUi'
@@ -44,10 +47,20 @@ export function Sidebar(): React.JSX.Element {
   const { patch } = useSettings()
   const push = useToasts((s) => s.push)
   const [dropTarget, setDropTarget] = useState<number | null>(null)
+  /**
+   * 免登录模式（见 useAuth）：这一栏只留「本地文件」一个入口。
+   *
+   * ★ 不是「把不能点的灰掉」，而是不摆出来：首页/曲库/歌单/我喜欢/最近播放**读了才知道**
+   *   要会话，点进去只会得到一页「尚未登录」。此处留下的那个入口，是这时唯一真有内容的去处。
+   */
+  const guest = useAuth((s) => s.guest)
+  const leaveGuest = useAuth((s) => s.leaveGuest)
 
   useEffect(() => {
+    // 免登录模式下没有会话，歌单列表拉不回来 —— 不发这个注定失败的请求
+    if (guest) return
     void load()
-  }, [load])
+  }, [guest, load])
 
   const regular = regularPlaylists(playlists)
   const count = playlists.length
@@ -67,160 +80,198 @@ export function Sidebar(): React.JSX.Element {
       {/* 顺序与左上角折叠菜单一致（浏览在前、收藏与历史居中）。
           ★ 侧栏刻意**没有**设置项：设置只在折叠菜单里，两处各留一份入口只会漂移 */}
       <div className="nav-group">
+        {guest ? null : (
+          <>
+            <button
+              type="button"
+              className="nav-item"
+              aria-current={isActive('home')}
+              onClick={() => navigate({ name: 'home' })}
+              {...tip('首页')}
+            >
+              <IconHome size={18} />
+              <span className="nav-text">首页</span>
+            </button>
+
+            {/* 「文件夹」是曲库页里的一个标签（不是独立入口），所以进文件夹模式时这里照样高亮 */}
+            <button
+              type="button"
+              className="nav-item"
+              aria-current={isActive('library', (r) => r.name === 'folders')}
+              onClick={() => navigate({ name: 'library' })}
+              {...tip('曲库')}
+            >
+              <IconLibrary size={18} />
+              <span className="nav-text">曲库</span>
+            </button>
+          </>
+        )}
+
+        {/* 本地文件：唯一不需要登录的一页（读本机磁盘，不读后端） */}
         <button
           type="button"
           className="nav-item"
-          aria-current={isActive('home')}
-          onClick={() => navigate({ name: 'home' })}
-          {...tip('首页')}
+          aria-current={isActive('local')}
+          onClick={() => navigate({ name: 'local' })}
+          {...tip('本地文件')}
         >
-          <IconHome size={18} />
-          <span className="nav-text">首页</span>
+          <IconMusic size={18} />
+          <span className="nav-text">本地文件</span>
         </button>
 
-        {/* 「文件夹」是曲库页里的一个标签（不是独立入口），所以进文件夹模式时这里照样高亮 */}
-        <button
-          type="button"
-          className="nav-item"
-          aria-current={isActive('library', (r) => r.name === 'folders')}
-          onClick={() => navigate({ name: 'library' })}
-          {...tip('曲库')}
-        >
-          <IconLibrary size={18} />
-          <span className="nav-text">曲库</span>
-        </button>
+        {guest ? null : (
+          <>
+            <button
+              type="button"
+              className="nav-item"
+              aria-current={isActive('playlists', (r) => r.name === 'playlist')}
+              onClick={() => navigate({ name: 'playlists' })}
+              {...tip('歌单')}
+            >
+              <IconListMusic size={18} />
+              <span className="nav-text">歌单</span>
+              <span className="nav-count">{count || ''}</span>
+            </button>
 
-        <button
-          type="button"
-          className="nav-item"
-          aria-current={isActive('playlists', (r) => r.name === 'playlist')}
-          onClick={() => navigate({ name: 'playlists' })}
-          {...tip('歌单')}
-        >
-          <IconListMusic size={18} />
-          <span className="nav-text">歌单</span>
-          <span className="nav-count">{count || ''}</span>
-        </button>
+            <button
+              type="button"
+              className="nav-item"
+              aria-current={isActive('favorites')}
+              onClick={() => navigate({ name: 'favorites' })}
+              {...tip('我喜欢')}
+            >
+              <IconHeart size={18} filled={route.name === 'favorites'} />
+              <span className="nav-text">我喜欢</span>
+            </button>
 
-        <button
-          type="button"
-          className="nav-item"
-          aria-current={isActive('favorites')}
-          onClick={() => navigate({ name: 'favorites' })}
-          {...tip('我喜欢')}
-        >
-          <IconHeart size={18} filled={route.name === 'favorites'} />
-          <span className="nav-text">我喜欢</span>
-        </button>
-
-        <button
-          type="button"
-          className="nav-item"
-          aria-current={isActive('recent')}
-          onClick={() => navigate({ name: 'recent' })}
-          {...tip('最近播放')}
-        >
-          <IconClock size={18} />
-          <span className="nav-text">最近播放</span>
-        </button>
+            <button
+              type="button"
+              className="nav-item"
+              aria-current={isActive('recent')}
+              onClick={() => navigate({ name: 'recent' })}
+              {...tip('最近播放')}
+            >
+              <IconClock size={18} />
+              <span className="nav-text">最近播放</span>
+            </button>
+          </>
+        )}
       </div>
 
       <div className="nav-group">
-        {/* 标题与「+」始终渲染，由 CSS 在折叠态淡出：条件渲染的话它们会在列宽
-            还没收完时先一步消失，「弹一下」的观感正是这么来的 */}
-        <div className="nav-section-head">
-          <span className="nav-label">我的歌单</span>
-          <button
-            type="button"
-            className="icon-btn nav-section-add"
-            {...tip('新建歌单')}
-            aria-label="新建歌单"
-            onClick={() => void handleCreate()}
-          >
-            <IconPlus size={15} />
-          </button>
-        </div>
-
-        <div className="sidebar-playlists">
-          {regular.length === 0 ? (
+        {guest ? (
+          <>
+            {/* 免登录模式下这一区没有歌单可列，改成「怎么回到服务器」那一句 ——
+                它与上面的歌单区占同一块会伸缩的空间，所以在两种模式下侧栏的版式一致 */}
             <div className="nav-empty">
-              还没有歌单
+              免登录模式
               <br />
-              点右上角 + 新建
+              曲库、歌单与收藏需要连接服务器
             </div>
-          ) : null}
-
-          {regular.map((playlist) => (
-            <button
-              key={playlist.id}
-              type="button"
-              className="nav-item"
-              aria-current={route.name === 'playlist' && route.id === playlist.id}
-              data-drop={dropTarget === playlist.id}
-              {...tip(playlist.name)}
-              onClick={() => navigate({ name: 'playlist', id: playlist.id })}
-              onContextMenu={(event) =>
-                openMenuFromEvent(event, [
-                  {
-                    key: 'open',
-                    label: '打开歌单',
-                    onClick: () => navigate({ name: 'playlist', id: playlist.id })
-                  },
-                  {
-                    key: 'pin',
-                    label: playlist.pinned_at ? '取消置顶' : '置顶',
-                    onClick: () =>
-                      void usePlaylists.getState().setPinned(playlist.id, !playlist.pinned_at)
-                  }
-                ])
-              }
-              onDragOver={(event) => {
-                // 只有从歌曲行拖来的数据才接受，否则内部拖动会误触
-                if (!event.dataTransfer.types.includes('application/x-songloft-songs')) return
-                event.preventDefault()
-                event.dataTransfer.dropEffect = 'copy'
-                setDropTarget(playlist.id)
-              }}
-              onDragLeave={() =>
-                setDropTarget((current) => (current === playlist.id ? null : current))
-              }
-              onDrop={(event) => {
-                const raw = event.dataTransfer.getData('application/x-songloft-songs')
-                setDropTarget(null)
-                if (!raw) return
-                event.preventDefault()
-                try {
-                  const ids = JSON.parse(raw) as number[]
-                  void usePlaylists
-                    .getState()
-                    .addSongs(playlist.id, ids)
-                    .then((result) => {
-                      push(
-                        result.skipped > 0
-                          ? `已加入「${playlist.name}」${result.added} 首，跳过 ${result.skipped} 首`
-                          : `已加入「${playlist.name}」${result.added} 首`,
-                        'success'
-                      )
-                    })
-                    .catch(() => push('加入歌单失败', 'error'))
-                } catch {
-                  push('无法解析拖拽内容', 'error')
-                }
-              }}
-            >
-              <Cover
-                coverUrl={playlist.cover_url}
-                width={48}
-                size={26}
-                radius={6}
-                kind="playlist"
-                className="nav-cover"
-              />
-              <span className="nav-text truncate grow">{playlist.name}</span>
-              <span className="nav-count">{playlist.song_count || ''}</span>
+            <button type="button" className="nav-item" onClick={leaveGuest} {...tip('连接服务器')}>
+              <IconServer size={18} />
+              <span className="nav-text">连接服务器</span>
             </button>
-          ))}
-        </div>
+          </>
+        ) : (
+          <>
+            {/* 标题与「+」始终渲染，由 CSS 在折叠态淡出：条件渲染的话它们会在列宽
+                还没收完时先一步消失，「弹一下」的观感正是这么来的 */}
+            <div className="nav-section-head">
+              <span className="nav-label">我的歌单</span>
+              <button
+                type="button"
+                className="icon-btn nav-section-add"
+                {...tip('新建歌单')}
+                aria-label="新建歌单"
+                onClick={() => void handleCreate()}
+              >
+                <IconPlus size={15} />
+              </button>
+            </div>
+
+            <div className="sidebar-playlists">
+              {regular.length === 0 ? (
+                <div className="nav-empty">
+                  还没有歌单
+                  <br />
+                  点右上角 + 新建
+                </div>
+              ) : null}
+
+              {regular.map((playlist) => (
+                <button
+                  key={playlist.id}
+                  type="button"
+                  className="nav-item"
+                  aria-current={route.name === 'playlist' && route.id === playlist.id}
+                  data-drop={dropTarget === playlist.id}
+                  {...tip(playlist.name)}
+                  onClick={() => navigate({ name: 'playlist', id: playlist.id })}
+                  onContextMenu={(event) =>
+                    openMenuFromEvent(event, [
+                      {
+                        key: 'open',
+                        label: '打开歌单',
+                        onClick: () => navigate({ name: 'playlist', id: playlist.id })
+                      },
+                      {
+                        key: 'pin',
+                        label: playlist.pinned_at ? '取消置顶' : '置顶',
+                        onClick: () =>
+                          void usePlaylists.getState().setPinned(playlist.id, !playlist.pinned_at)
+                      }
+                    ])
+                  }
+                  onDragOver={(event) => {
+                    // 只有从歌曲行拖来的数据才接受，否则内部拖动会误触
+                    if (!event.dataTransfer.types.includes('application/x-songloft-songs')) return
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = 'copy'
+                    setDropTarget(playlist.id)
+                  }}
+                  onDragLeave={() =>
+                    setDropTarget((current) => (current === playlist.id ? null : current))
+                  }
+                  onDrop={(event) => {
+                    const raw = event.dataTransfer.getData('application/x-songloft-songs')
+                    setDropTarget(null)
+                    if (!raw) return
+                    event.preventDefault()
+                    try {
+                      const ids = JSON.parse(raw) as number[]
+                      void usePlaylists
+                        .getState()
+                        .addSongs(playlist.id, ids)
+                        .then((result) => {
+                          push(
+                            result.skipped > 0
+                              ? `已加入「${playlist.name}」${result.added} 首，跳过 ${result.skipped} 首`
+                              : `已加入「${playlist.name}」${result.added} 首`,
+                            'success'
+                          )
+                        })
+                        .catch(() => push('加入歌单失败', 'error'))
+                    } catch {
+                      push('无法解析拖拽内容', 'error')
+                    }
+                  }}
+                >
+                  <Cover
+                    coverUrl={playlist.cover_url}
+                    width={48}
+                    size={26}
+                    radius={6}
+                    kind="playlist"
+                    className="nav-cover"
+                  />
+                  <span className="nav-text truncate grow">{playlist.name}</span>
+                  <span className="nav-count">{playlist.song_count || ''}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* 收起 / 展开。

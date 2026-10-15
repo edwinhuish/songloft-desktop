@@ -48,12 +48,14 @@ import { formatVersion } from './lib/format'
 import { FavoritesPage } from './pages/FavoritesPage'
 import { HomePage } from './pages/HomePage'
 import { LibraryPage } from './pages/LibraryPage'
+import { LocalFilesPage } from './pages/LocalFilesPage'
 import { LoginPage } from './pages/LoginPage'
 import { PlaylistDetailPage } from './pages/PlaylistDetailPage'
 import { PlaylistsPage } from './pages/PlaylistsPage'
 import { RecentPage } from './pages/RecentPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { installLocalFileIntake } from './state/useLocalFiles'
 import { installMiniHost } from './state/mini-host'
 import { installMetadataWatch } from './state/song-metadata'
 import {
@@ -124,6 +126,11 @@ function isTypingTarget(target: EventTarget | null): boolean {
 
 export function App(): React.JSX.Element {
   const status = useAuth((s) => s.status)
+  /**
+   * 免登录模式。与 status 一起决定「能不能进主界面」（见下面那一处判断）：
+   * 曲库那几页确实需要会话，但**播放**不需要，本地文件也不需要。
+   */
+  const guest = useAuth((s) => s.guest)
   const started = useRef(false)
 
   /* ── 窗级订阅：迷你窗那两条 + 窗口状态（可以、也必须反复装卸）────────── */
@@ -149,6 +156,13 @@ export function App(): React.JSX.Element {
    */
   useEffect(() => {
     const disposeHost = installMiniHost()
+    /*
+     * 本地文件的收件线（installLocalFileIntake）：它在这里装上，与上面那条同一个位置与
+     * 同一个理由 —— 双击一个音频文件启动时，主进程**在页面还没加载完**就把文件排好队了，
+     * 而这条线一装上就会去取一次（见 state/useLocalFiles）。放进下面那个带一次性守卫的
+     * 启动编排里就会漏掉「dev 里 HMR 重新挂载」那一轮 —— 取走是幂等的，重装无害。
+     */
+    const disposeLocalFiles = installLocalFileIntake()
     const disposeOpen = window.songloft.mini.onOpen((open) => useUi.getState().setMiniOpen(open))
     const disposeState = window.songloft.on.windowState((state) => {
       const root = document.documentElement
@@ -157,6 +171,7 @@ export function App(): React.JSX.Element {
     })
     return () => {
       disposeHost()
+      disposeLocalFiles()
       disposeOpen()
       disposeState()
     }
@@ -226,9 +241,12 @@ export function App(): React.JSX.Element {
       const ui = useUi.getState()
       const player = usePlayer.getState()
 
-      // 命令面板优先，且在任何输入状态下都能唤起
+      // 命令面板优先，且在任何输入状态下都能唤起。
+      // ★ 免登录模式下不唤起：面板里那几项（搜索曲库、跳去歌单/收藏）全都要会话，
+      //   打开它等于把人引到一串「尚未登录」上。
       if (mod && event.key.toLowerCase() === 'k') {
         event.preventDefault()
+        if (useAuth.getState().guest) return
         ui.setPaletteOpen(!ui.paletteOpen)
         return
       }
@@ -306,13 +324,17 @@ export function App(): React.JSX.Element {
       // 退出登录 / 切服务器都要清干净：留着的话标题栏会继续挂着**上一台服务器**的扩展
       usePlugins.getState().reset()
       /*
-       * 迷你窗也得关掉：登录页在那边没有对应界面（那一窗只有一条播放条 + 一块面板），
-       * 而它显示的播放状态正是这里刚清空的东西 —— 留着就是一个点不动的空条。
+       * ★ 免登录模式下**不复位播放相关的界面**：用户正拿这个应用放本地文件，把迷你窗关掉、
+       *   把满窗播放收起来，等于「你选了免登录，所以我先把界面收了」。只有真的回到登录页
+       *   （未认证且不在免登录模式）才做这两下 —— 那时原生面整块要换成登录页。
+       *
+       *   迷你窗在登录页没有对应界面（那一窗只有一条播放条 + 一块面板），而它显示的播放
+       *   状态正是刚被清空的东西 —— 留着就是一个点不动的空条。满窗播放同理：它挂在原生面上。
        */
-      void window.songloft.mini.setOpen(false)
-      // 满窗播放同样复位：它挂在原生面上，而登录页整块是另一套外壳。
-      // 不复位的话，「开着满窗登出、再登录」会一进门就顶着一张播放器。
-      useUi.getState().setFullPlayer(false)
+      if (!guest) {
+        void window.songloft.mini.setOpen(false)
+        useUi.getState().setFullPlayer(false)
+      }
       return
     }
     void usePlaylists.getState().load()
@@ -329,11 +351,16 @@ export function App(): React.JSX.Element {
       .getState()
       .load()
       .catch(() => undefined)
-  }, [status])
+  }, [status, guest])
 
-  /* 未登录 / 启动中：同样是 frameless 窗口，必须带上标题栏才有拖拽区与窗口控制。
-     少了它，登录页会变成一个既拖不动也关不掉的窗口（只能 Alt+F4）。 */
-  if (status !== 'authenticated') {
+  /*
+   * 未登录 / 启动中：同样是 frameless 窗口，必须带上标题栏才有拖拽区与窗口控制。
+   * 少了它，登录页会变成一个既拖不动也关不掉的窗口（只能 Alt+F4）。
+   *
+   * ★ 免登录模式走的是**主界面**（不是登录页）：那一整页服务的是「连上后端」这件事，
+   *   而免登录的人要的只是放本机的文件（见 state/useLocalFiles 与 pages/LocalFilesPage）。
+   */
+  if (status !== 'authenticated' && !guest) {
     return (
       <div className="shell">
         <TitleBar solo />
@@ -469,6 +496,8 @@ function Toolbar(): React.JSX.Element {
   const route = useUi((s) => s.nativeRoute)
   const navigate = useUi((s) => s.navigate)
   const setPaletteOpen = useUi((s) => s.setPaletteOpen)
+  /** 免登录：搜索与命令面板都读后端，这时把它们收起来（而不是让人搜出一页「尚未登录」） */
+  const guest = useAuth((s) => s.guest)
   const [draft, setDraft] = useState('')
 
   // 已进入搜索页时，输入框直接跟着路由走（改词即时生效，不用再回车一次）
@@ -487,7 +516,12 @@ function Toolbar(): React.JSX.Element {
         <IconSearch size={16} />
         <input
           value={value}
-          placeholder="搜索歌曲、歌手、专辑（Ctrl+K 打开命令面板）"
+          disabled={guest}
+          placeholder={
+            guest
+              ? '免登录模式：连接服务器后即可搜索曲库'
+              : '搜索歌曲、歌手、专辑（Ctrl+K 打开命令面板）'
+          }
           spellCheck={false}
           onChange={(event) => {
             const next = event.target.value
@@ -495,7 +529,7 @@ function Toolbar(): React.JSX.Element {
             if (isSearch && next.trim()) navigate({ name: 'search', keyword: next })
           }}
         />
-        {value ? (
+        {value && !guest ? (
           <button
             type="button"
             className="search-clear"
@@ -512,10 +546,12 @@ function Toolbar(): React.JSX.Element {
 
       <div className="grow" />
 
-      <button type="button" className="btn" data-size="sm" onClick={() => setPaletteOpen(true)}>
-        命令面板
-        <span className="badge">Ctrl K</span>
-      </button>
+      {guest ? null : (
+        <button type="button" className="btn" data-size="sm" onClick={() => setPaletteOpen(true)}>
+          命令面板
+          <span className="badge">Ctrl K</span>
+        </button>
+      )}
     </div>
   )
 }
@@ -535,6 +571,7 @@ const PAGE_SLOTS: readonly PageSlotName[] = [
   'home',
   'library',
   'folders',
+  'local',
   'favorites',
   'recent',
   'search',
@@ -629,6 +666,9 @@ function renderRoute(route: NativeRoute): React.JSX.Element {
     case 'library':
     case 'folders':
       return <LibraryPage route={route} />
+    // 唯一不需要登录的一页（读本机磁盘，不读后端），免登录模式进来就落在这儿
+    case 'local':
+      return <LocalFilesPage />
     case 'favorites':
       return <FavoritesPage />
     case 'recent':
