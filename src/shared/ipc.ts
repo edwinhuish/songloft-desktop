@@ -160,14 +160,16 @@ export const MINI_PANEL_MIN_HEIGHT = 180
 /** 两块面板的默认高度（首次打开 / 这块还没拖过时用；两块可以各自拖成不一样高） */
 export const MINI_PANEL_DEFAULT_HEIGHT = 416
 /**
- * 歌词字号的取值范围（px）。
+ * 迷你窗歌词字号的取值范围（px，见 AppSettings.miniLyricFontSize）。
  *
- * ★ 放在这里是因为它有**两处**入口：设置页「歌词」那一栏，与迷你窗右上角那颗钮那份菜单
- *   （见 MiniPlayer 的 displayMenu）。两处必须是同一档 —— 一个量的下限在两处不同，用户会
- *   先以为某一边「拖不动了」。DRY 在这一项上是硬要求，不是整洁癖。
+ * ★ 上限比主窗口那一条（设置页里 16–48）低得多：这一块只有 MINI_WIDTH 那么宽（≈380px，
+ *   两侧还要各让出 26px 的内边距），字号越大一行剩的字越少 —— 30px 时一行只剩十来个字，
+ *   再往上就全是折行，不是「看得更清楚」而是「读不成句」了。
+ * ★ 与默认值放在一处（DEFAULT_SETTINGS 里那个 15）：一项设置的「能调到哪儿」与「默认在哪」
+ *   分开写，迟早会出现「默认值在范围之外」这种事。
  */
-export const LYRIC_FONT_SIZE_MIN = 16
-export const LYRIC_FONT_SIZE_MAX = 48
+export const MINI_LYRIC_FONT_SIZE_MIN = 12
+export const MINI_LYRIC_FONT_SIZE_MAX = 30
 
 /**
  * 迷你窗此刻的布局。
@@ -419,6 +421,19 @@ export interface AppSettings {
   miniLyricsPanelHeight: number
   /** 迷你窗播放队列面板的高度 px。与 miniLyricsPanelHeight 同义、各管各的 */
   miniQueuePanelHeight: number
+  /**
+   * 迷你窗歌词面板的字号 px（上下限见 MINI_LYRIC_FONT_SIZE_MIN / MAX）。
+   *
+   * ★ 与 lyricFontSize（设置页「歌词」那一栏）**是两个量，刻意不共用**：
+   *   主窗口那几处歌词（底栏抽屉、满窗播放）在整窗尺度上看，迷你窗那一块只有 380px 宽、
+   *   还是挂在屏幕角上的一个挂件 —— 两处的「合适字号」差着一档。共用一个值的结果是
+   *   「调好抽屉、迷你窗就糊成一片；调好迷你窗、抽屉又小得看不清」。
+   *   所以迷你窗右上角那颗钮里的那根滑块只改这一项（只作用在迷你窗那块面板上）。
+   * ★ 默认 15 不是随手挑的：它正是这一块此前**写死**的那个字号（见 components.css 的
+   *   .lyric-line 与紧随其后的 html[data-mini] 那条）—— 于是装上这条设置之后，谁的字号
+   *   都不会当场变样，只有「拖得动」这件事是新的。
+   */
+  miniLyricFontSize: number
   /** 歌词字号 px */
   lyricFontSize: number
   /**
@@ -515,6 +530,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   // 两块各自一份高度：默认一样，用户拖过之后才分岔
   miniLyricsPanelHeight: MINI_PANEL_DEFAULT_HEIGHT,
   miniQueuePanelHeight: MINI_PANEL_DEFAULT_HEIGHT,
+  // 15 正是迷你窗歌词这块此前写死的那个字号（见 AppSettings.miniLyricFontSize 的说明）
+  miniLyricFontSize: 15,
   lyricFontSize: 30,
   // 默认不铺额外底色：歌词区域透出所在面板的玻璃质感（与改动前一致）
   lyricPanelOpacity: 0,

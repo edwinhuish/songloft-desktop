@@ -65,9 +65,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
-  LYRIC_FONT_SIZE_MAX,
-  LYRIC_FONT_SIZE_MIN,
   MINI_BAR_HEIGHT,
+  MINI_LYRIC_FONT_SIZE_MAX,
+  MINI_LYRIC_FONT_SIZE_MIN,
   MINI_PANEL_MIN_HEIGHT,
   MINI_SHADOW_EDGE,
   type MiniPanel
@@ -138,8 +138,11 @@ export function MiniPlayer(): React.JSX.Element {
   /* 两块面板各自的浓度：菜单里那一行只给**开着的那一块**用，所以两个值都得在手边 */
   const lyricsPanelOpacity = useSettings((s) => s.settings.miniLyricsPanelOpacity)
   const queuePanelOpacity = useSettings((s) => s.settings.miniQueuePanelOpacity)
-  /* 歌词字号：与设置页「歌词」那一栏同一个量（迷你窗里歌词按它的 0.85 倍显示，见 LyricsView） */
-  const lyricFontSize = useSettings((s) => s.settings.lyricFontSize)
+  /**
+   * 歌词字号：**这一块面板自己**那个量（还没拖过时是 15，正是它此前写死的字号）。
+   * ★ 不是设置页「歌词」那一栏的 lyricFontSize —— 那两个量刻意分开，见 shared/ipc.ts。
+   */
+  const miniLyricFontSize = useSettings((s) => s.settings.miniLyricFontSize)
   const patchSettings = useSettings((s) => s.patch)
   /** 那颗下拉钮（右上角从右数第二个）。既是菜单的入口，也是「再点一次收起」的判据（见 menuOpen） */
   const menuBtnRef = useRef<HTMLButtonElement>(null)
@@ -197,11 +200,14 @@ export function MiniPlayer(): React.JSX.Element {
    *   不必分两套默认值；它顺带牵动**窗口那圈阴影**（面板调淡时，围着「条 + 面板」那一圈跟着淡出、
    *   围着播放条自己那一圈按互补比例淡入，见样式表 .mini-surface 与 .mini-player::before），
    *   这里不必额外做什么。
-   * ★ 歌词字号与设置页「歌词」那一栏是**同一个量**（lyricFontSize，上下限也从 shared/ipc.ts 取，
-   *   两处共用一个档）：迷你窗的歌词只是按它的 0.85 倍显示（见 LyricsView 的 compact），显示出来
-   *   的字号与滑块上的数不是一比一 —— 但两处调的必须是同一个数，否则「这里 30、那里 25.5」没处说理。
-   *   ★ 它**不随歌词面板**显示或隐藏：菜单是「想调什么就在哪儿」，而歌词字号正是那种「看一眼觉得
-   *     小了、当场拖一下」的量 —— 面板关着时拖它，下次展开就是新字号（与面板浓度那两根同理）。
+   * ★★ 歌词字号那一根管的是**这一块面板自己**的字号（miniLyricFontSize），与设置页「歌词」那一栏
+   *   的 lyricFontSize **是两个量**：整窗尺度上的抽屉/满窗与挂在屏幕角上、只有 380px 宽的挂件，
+   *   合适字号本来就差着一档。共用的话只会「调好抽屉、迷你窗糊成一片」（见 shared/ipc.ts 那两项
+   *   上的说明）。上下限也是它自己那一档（12–30），比主窗口那条低 —— 理由同样在这一块只有这么宽。
+   *   ★ 面板关着时拖它照样生效（下次展开就是新字号）：菜单是「想调什么就在哪儿」，而字号正是那种
+   *     「看一眼觉得小了、当场拖一下」的量（与那两根面板浓度同理）。
+   *   ★ 它落在行内（.lyrics 的 font-size）上，而样式表里 .lyric-line 有一条写死的 px ——
+   *     迷你窗那一条 html[data-mini] 规则专门为它放开了继承，见 components.css 那两处。
    * ★ 做成**函数**而不是模块级常量：四个 value 与 onChange 要取「点开这一刻」的设置值，
    *   常量数组会把它们钉死在首次渲染那一份上。
    */
@@ -237,15 +243,15 @@ export function MiniPlayer(): React.JSX.Element {
       }
     },
     {
-      key: 'lyric-font-size',
+      key: 'mini-lyric-font-size',
       label: '歌词字号',
       slider: {
-        min: LYRIC_FONT_SIZE_MIN,
-        max: LYRIC_FONT_SIZE_MAX,
-        value: lyricFontSize,
+        min: MINI_LYRIC_FONT_SIZE_MIN,
+        max: MINI_LYRIC_FONT_SIZE_MAX,
+        value: miniLyricFontSize,
         // 单位是 px —— 菜单里那个后缀默认是 %
         suffix: 'px',
-        onChange: (value) => void patchSettings({ lyricFontSize: value })
+        onChange: (value) => void patchSettings({ miniLyricFontSize: value })
       }
     }
   ]

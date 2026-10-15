@@ -29,6 +29,16 @@ export function LyricsView({ compact = false }: { compact?: boolean }): React.JS
   const seek = usePlayer((s) => s.seek)
   const reloadLyrics = usePlayer((s) => s.reloadLyrics)
   const settings = useSettings((s) => s.settings)
+  /**
+   * 这一处歌词的眼下的字号（px）。
+   * ★ 迷你窗那一块用**它自己**那个量（miniLyricFontSize）：那颗滑块只管这一块 —— 整窗尺度上的
+   *   抽屉/满窗与挂在屏幕角上、只有 380px 宽的挂件，合适字号本来就差着一档，共用一个值只会
+   *   「调好一边、另一边难看」（见 shared/ipc.ts 那两项上的说明）。
+   * ★ compact 就是「迷你窗那块面板」：只有 MiniPlayer 传它（见那边 <LyricsView compact />）。
+   * ★ 抽成一个变量而不是在两处各写一遍三元：下面 effect 的依赖数组里必须是**一个可静态检查的
+   *   表达式**（写条件式 eslint 会警告），而且行内样式与依赖一旦各写一份，迟早只改一处。
+   */
+  const fontSize = compact ? settings.miniLyricFontSize : settings.lyricFontSize
 
   /*
    * 滚动容器用**回调 ref**（state）而不是 useRef 对象。
@@ -145,12 +155,14 @@ export function LyricsView({ compact = false }: { compact?: boolean }): React.JS
     /*
      * 三个显示选项也进依赖：改歌词字号、开关翻译/音译都会改行高，当前行的高度一变，
      * 「中部」就不再是它了 —— 而这类改动不触发上面的 activeIndex 变化。
+     * ★ 字号走上面那个 fontSize（两块面板各取各的）：写成其中一个量的话，另一处改完字号就不会
+     *   重新归位（当前行歪在可视区外）。
      */
   }, [
     activeIndex,
     lyrics,
     centerActive,
-    settings.lyricFontSize,
+    fontSize,
     settings.lyricShowTranslation,
     settings.lyricShowRoman
   ])
@@ -223,7 +235,14 @@ export function LyricsView({ compact = false }: { compact?: boolean }): React.JS
     <div
       ref={setContainer}
       className="lyrics"
-      style={{ fontSize: compact ? settings.lyricFontSize * 0.85 : settings.lyricFontSize }}
+      /*
+        字号写在这一层（.lyrics 的行内），行们继承它（见上面那个 fontSize）。
+        ★ 别再乘系数：那个 0.85（「迷你窗总比主窗口小一档」的临时办法）随这一块有了自己的
+          绝对字号而撤掉 —— 留着的话，滑块上的数就不是最终的字号了。
+        ★ 迷你窗那边还有一条 html[data-mini] 规则把 .lyric-line 上写死的 px 放开，
+          否则这份行内字号会被元素自己的声明挡回去（见 components.css 那两处）。
+      */
+      style={{ fontSize }}
     >
       {lyrics.lines.map((line, index) => (
         <LyricRow

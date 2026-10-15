@@ -2203,6 +2203,16 @@ html[data-mini='true'] :focus-visible {
 
 .lyric-line {
   padding: 9px 26px;
+  /*
+   * ★ 这一行 px 是**主窗口那几处歌词**（底栏抽屉、满窗播放）的固定观感；迷你窗那一块另有
+   *   一份字号设置，由紧随其后的 html[data-mini] 那条放开继承（字号写在 .lyrics 的行内，
+   *   行们继承它）。
+   * ⚠ 别在这里改成一个「通用」字号：元素自己的声明**赢过继承**，写在这儿就等于把
+   *   .lyrics 上那份行内字号整条废掉 —— 表现是「拖字号滑块，歌词一个字都不变」。
+   *   注意这个坑**现在仍然踩在 lyricFontSize 那条设置上**（设置页「歌词」那一栏拖了没反应，
+   *   主窗口那几处一直是这 15px）：那是既有缺陷，不在迷你窗这一项的范围内，改之前先想清楚
+   *   「主窗口三处歌词一起变样」是不是想要的（要改就是删掉这一行，让那三处也跟进设置）。
+   */
   font-size: 15px;
   line-height: 1.5;
   /* 各档浓度 = 歌词字色（默认主题文字色，可为任意颜色）的百分之多少 × 字体不透明度。
@@ -2217,6 +2227,19 @@ html[data-mini='true'] :focus-visible {
     transform var(--dur-2) var(--ease);
   transform-origin: left center;
   cursor: pointer;
+}
+
+/*
+ * 迷你窗那一块：放开上面那条 px，让行继承 .lyrics 的行内字号 —— 也就是它**自己**那份设置
+ * （miniLyricFontSize，由 LyricsView 写进行内样式；那颗滑块只管这一块，见 shared/ipc.ts）。
+ * ★ 非放开不可：`.lyric-line` 上的 15px 是元素自己的声明，赢过继承 —— 不放开的话，行内那份
+ *   被它挡回去，滑块拖了等于没拖（这个坑的另一半正踩在主窗口那三处歌词上，见上面那条注释）。
+ * ★ 只管迷你窗（html 上那个 data-mini 由 main.tsx 在挂载前打上）：主窗口的抽屉与满窗播放
+ *   一个字都不动。
+ * ★ 译文 / 罗马音是 em，跟着这里一起缩放 —— 不必（也不该）为它们各写一条。
+ */
+html[data-mini='true'] .lyric-line {
+  font-size: inherit;
 }
 
 .lyric-line:hover {
