@@ -2264,6 +2264,28 @@ html[data-mini='true'] .lyric-line {
   text-shadow: 0 0 24px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
+/*
+ * 迷你窗的**当前行**（正在播放那一行）勾一圈与字色**相反**的轮廓：深色主题下字是白的 → 勾黑，
+ * 浅色主题下字是墨黑的 → 勾白（两个取值在 tokens.css 那两个迷你窗块里，跟着各自的墨色走）。
+ *
+ * ★ 为什么走「相反」而不是跟着字色：勾这一圈是为了让这一行从前后几行里跳出来，跟着字色走就成了
+ *   糊在笔画边上的一层同色，等于没勾。这样也不受面板底色那根滑块影响 —— 它改的是面板自己那层
+ *   底色（--mini-panel-tint），轮廓是字自己的一层。
+ * ★ paint-order: stroke fill 让描边画在字的**底下**（先描边、后填字）：描边默认压着字的边线居中
+ *   画，有一半盖进字身里；迷你窗字号小（12–30px，见 MINI_LYRIC_FONT_SIZE_*），那一刀看得出来
+ *   笔画变细。
+ * ★ 用 -webkit-text-stroke 而不是把 text-shadow 改成四面铺的那一串偏移：那道 24px 的强调色
+ *   光晕（见上面紧挨着的那条）是要**留着**的，轮廓是另外**新加**的一层 —— 而 text-shadow 是同一个
+ *   属性，在这条规则里动它就会把光晕顶掉。
+ * ★ 描边会被子元素继承：带逐字数据的歌词里整行是由 .lyric-word 拼出来的，它们跟着一起勾 ——
+ *   整行勾一圈正是要的样子（已唱 / 未唱由字色深浅分），不必为它们各写一条。
+ * ★ 只管迷你窗：主窗口那三处歌词的当前行仍是原来那套（只有强调色光晕）。
+ */
+html[data-mini='true'] .lyric-line[data-active='true'] .lyric-main {
+  -webkit-text-stroke: 1px var(--mini-lyric-active-outline);
+  paint-order: stroke fill;
+}
+
 .lyric-translation {
   font-size: 0.78em;
   font-weight: 450;
