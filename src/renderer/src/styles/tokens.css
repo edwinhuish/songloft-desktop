@@ -269,6 +269,12 @@
    */
   --mini-lyric-active-outline: #000000;
   /*
+   * 迷你窗**当前行**的字号 = 其他行的多少倍，见 components.css 那条 calc(... * 1em)。
+   * ★ 必须是**倍率**而不是 px：这块面板的字号由用户自己拧（miniLyricFontSize，12–30），
+   *   写死一个 px 就等于让那颗滑块对当前行失效 —— 拖到 30 时这一行还是那么点大。
+   */
+  --mini-lyric-active-scale: 1.3;
+  /*
    * 迷你条比主窗口小一号，阴影也收一档（模糊 6 → 5，边距 12 → 10）。
    * ⚠ --win-edge 必须与 shared/ipc.ts 的 MINI_SHADOW_EDGE 一致：那边按它算窗口尺寸，
    *   这边按它让出可见面 —— 差一档就是「阴影被裁」或「条没铺满窗口」。
