@@ -7,7 +7,8 @@
  *   1. access_token 有没有带上、有没有被正确编码（token 里可能有 + / 空格）；
  *   2. 追加参数用的是 `?` 还是 `&`（拼错就是给服务器发一个畸形路径）；
  *   3. 外链 CDN 的地址**不能**被我们改 query（可能带签名，改了直接失效）；
- *   4. `track` 与 `format` 不能同时出现（后端两个一起给会互相冲突）。
+ *   4. `track` 与 `format` 不能同时出现（后端两个一起给会互相冲突）；
+ *   5. 候选音源链的顺序与去重（播放失败时按它逐级换源，见 songUrlCandidates）。
  *
  * 第 2 条就是写这批用例时暴露出来的：`buildCoverUrl` 在「同源绝对地址且原本没有 query」时
  * 会拼出 `http://host/c.jpg&w=96` —— 缺一个 `?`，`&w=96` 被当成路径的一部分。
@@ -21,6 +22,7 @@ import {
   buildLyricUrl,
   buildResourceUrl,
   buildSongUrl,
+  songUrlCandidates,
   transcodeFormatFor
 } from './url'
 
@@ -185,5 +187,39 @@ describe('buildSongUrl', () => {
 
   it('两个地址都没有时返回空串', () => {
     expect(buildSongUrl(song({ url: null, source_url: null }), ctx)).toBe('')
+  })
+})
+
+describe('songUrlCandidates', () => {
+  it('按「逐级退掉加工环节」的顺序给出候选', () => {
+    const urls = songUrlCandidates(song({ format: 'flac' }), ctx, {
+      quality: '320',
+      normalize: true
+    })
+    expect(urls).toHaveLength(3)
+    expect(urls[0]).toContain('quality=320')
+    expect(urls[0]).toContain('normalize=1')
+    // 第二档丢掉码率偏好，但还带着音量归一化
+    expect(urls[1]).not.toContain('quality=')
+    expect(urls[1]).toContain('normalize=1')
+    // 第三档连归一化也不走（那一步要 ffmpeg 读完整段音频，失败率最高）
+    expect(urls[2]).not.toContain('quality=')
+    expect(urls[2]).not.toContain('normalize=')
+  })
+
+  it('等价候选去重（用户本来就选原始质量又没开归一化时只剩一个）', () => {
+    const urls = songUrlCandidates(song(), ctx, { quality: 'original', normalize: false })
+    expect(urls).toHaveLength(1)
+  })
+
+  it('指定音轨时三个候选塌成一个 —— 重试同一个地址，不重复列举', () => {
+    const urls = songUrlCandidates(song({ format: 'wma' }), ctx, { track: 1 })
+    expect(urls).toHaveLength(1)
+    expect(urls[0]).toContain('track=1')
+    expect(urls[0]).not.toContain('format=')
+  })
+
+  it('压根没有可播地址时返回空数组（调用方据此直接报错，不必空试 3 次）', () => {
+    expect(songUrlCandidates(song({ url: null, source_url: null }), ctx)).toEqual([])
   })
 })

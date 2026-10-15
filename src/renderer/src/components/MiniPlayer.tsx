@@ -91,6 +91,7 @@ import { Queue } from './Panel'
 import { MODE_LABEL, modeIcon } from './play-mode'
 import { PlayerProgress } from './PlayerProgress'
 import { Cover, Slider } from './primitives'
+import { fallbackTitle, songCoverUrl } from '@shared/metadata'
 import { useUnfocusable } from '@/hooks/useUnfocusable'
 import { displayArtist, formatDuration } from '@/lib/format'
 import { usePlayer } from '@/state/usePlayer'
@@ -318,7 +319,7 @@ export function MiniPlayer(): React.JSX.Element {
         */}
           <div className="mini-cover">
             <Cover
-              coverUrl={song?.cover_url}
+              coverUrl={songCoverUrl(song)}
               width={128}
               size="var(--mini-bar-h)"
               radius={0}
@@ -354,7 +355,7 @@ export function MiniPlayer(): React.JSX.Element {
                 <ScrollingLine
                   key={`title-${song?.id ?? 0}`}
                   className="playerbar-title"
-                  text={song?.title ?? '未在播放'}
+                  text={fallbackTitle(song)}
                 />
                 <div className="mini-info-sub">
                   <ScrollingLine

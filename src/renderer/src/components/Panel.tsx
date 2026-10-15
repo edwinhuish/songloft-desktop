@@ -12,6 +12,7 @@ import { Cover, EmptyState } from './primitives'
 import { LyricsView } from './LyricsView'
 import { openMenuFromEvent } from './ContextMenu'
 import { buildSongMenuItems } from './songMenu'
+import { fallbackTitle, songCoverUrl } from '@shared/metadata'
 import { displayArtist, formatDuration } from '@/lib/format'
 import { usePlayer } from '@/state/usePlayer'
 import { useUi } from '@/state/useUi'
@@ -89,11 +90,11 @@ function NowPlaying(): React.JSX.Element {
     <div className="now-playing">
       <div className="now-playing-art-wrap">
         <div className="now-playing-art">
-          <Cover coverUrl={song.cover_url} width={640} size="100%" radius={0} kind="song" />
+          <Cover coverUrl={songCoverUrl(song)} width={640} size="100%" radius={0} kind="song" />
         </div>
       </div>
       <div className="now-playing-meta">
-        <div className="now-playing-title">{song.title}</div>
+        <div className="now-playing-title">{fallbackTitle(song)}</div>
         <div className="now-playing-sub">
           {displayArtist(song.artist)}
           {song.album ? ` · ${song.album}` : ''}
@@ -274,9 +275,9 @@ export function Queue({
           <span className="queue-drag" data-tip="拖动调整顺序">
             <IconMusic size={14} />
           </span>
-          <Cover coverUrl={song.cover_url} width={72} size={38} radius={8} kind="song" />
+          <Cover coverUrl={songCoverUrl(song)} width={72} size={38} radius={8} kind="song" />
           <div style={{ minWidth: 0 }}>
-            <div className="queue-title truncate">{song.title}</div>
+            <div className="queue-title truncate">{fallbackTitle(song)}</div>
             <div className="queue-artist truncate">{displayArtist(song.artist)}</div>
           </div>
           <div className="row" style={{ gap: 2 }}>

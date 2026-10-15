@@ -33,6 +33,7 @@ import {
   IconVolumeX
 } from './Icons'
 import { Cover } from './primitives'
+import { fallbackTitle, songCoverUrl } from '@shared/metadata'
 import { getSongs } from '@/api/endpoints'
 import { displayArtist } from '@/lib/format'
 import { requireClient } from '@/state/useAuth'
@@ -247,10 +248,11 @@ export function CommandPalette(): React.JSX.Element | null {
     const songEntries: Entry[] = songs.map((song) => ({
       key: `song-${song.id}`,
       group: '歌曲',
-      label: song.title,
+      // 标题与封面都走降级口径（缺元数据时用文件名 / 原始音源封面，见 shared/metadata）
+      label: fallbackTitle(song),
       hint: displayArtist(song.artist),
       icon: <IconPlay size={15} />,
-      coverUrl: song.cover_url,
+      coverUrl: songCoverUrl(song),
       run: () => void playSongs([song], 0, { type: 'search', key: query.trim() })
     }))
 

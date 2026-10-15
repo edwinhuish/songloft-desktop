@@ -119,6 +119,7 @@ src/
 │  ├─ lyric.ts        歌词四路合并 + 解析 + 当前行/逐字定位
 │  ├─ plugin.ts       JS 插件模型 / 排序纯函数 / 扩展页 URL 拼接 / PLUGIN_PARTITION
 │  ├─ data.ts         两份数据快照是否等价（页面切回时的**静默刷新**靠它判断「要不要动界面」）
+│  ├─ metadata.ts     元数据缺口判定 / 「只补缺失」的合并 / 封面与标题的降级口径
 │  ├─ version.ts      版本号比较（认不出来的写法一律判「不比它新」，宁可少提示一次更新）
 │  └─ links.ts        对外 URL 常量（本仓库 / 上游）
 └─ renderer/       React 19 + zustand
@@ -126,7 +127,8 @@ src/
    │                 plugins.ts（JS 插件：列表 / 启停 / 卸载 / 顺序 / 商店）
    ├─ state/         useAuth / usePlayer / usePlaylists / useSettings / useUi / useToasts /
    │                 usePlugins（已装扩展 + 顺序 + 运行时音频状态，唯一事实源）/
-   │                 useLibrary（曲库数据的版本号 + 后台任务守望，见 §5.7）
+   │                 useLibrary（曲库数据的版本号 + 后台任务守望，见 §5.7）/
+   │                 song-metadata（起播时按缺口补齐元数据：只补缺失 / 超时 / 缓存 / 请服务端补齐）
    ├─ pages/         10 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
    │                 Recent / Search / Settings / Login / Extensions（+ 同目录的 PluginStore）
    │                 （「文件夹」不是独立页面，是 LibraryPage 里的一个标签，见 FoldersView）

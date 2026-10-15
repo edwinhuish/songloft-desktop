@@ -9,6 +9,7 @@
 
 import { useMemo, useState } from 'react'
 
+import { filled, fallbackTitle, songCoverUrl } from '@shared/metadata'
 import {
   IconHeart,
   IconLyrics,
@@ -27,6 +28,7 @@ import { Cover, Slider } from './primitives'
 import { displayArtist, formatDuration } from '@/lib/format'
 import { usePlayer } from '@/state/usePlayer'
 import { usePlaylists } from '@/state/usePlaylists'
+import { useSongMetadata } from '@/state/song-metadata'
 import { useUi } from '@/state/useUi'
 
 /**
@@ -66,6 +68,19 @@ export function PlayerBar(): React.JSX.Element {
   const favorited = song ? favoriteIds.has(song.id) : false
   const hasTrackSwitch = player.tracks.length > 1
 
+  /*
+   * 元数据补齐中的加载提示（见 state/song-metadata）。
+   *
+   * 只在**真的缺东西**时才说话：库里绝大多数歌的信息是齐的，补齐也不会为它们发请求，
+   * 若不管三七二十一都显示一句「正在获取…」，等于给每次起播都加一次没有意义的闪动。
+   * 提示落在歌手那一行（原本显示「未知歌手」的位置）—— 那正是此刻还不知道的东西。
+   */
+  const patchingMetadata = useSongMetadata(
+    (s) => s.patching && (song ? s.patchingSongId === song.id : false)
+  )
+  const awaitingMetadata =
+    song != null && patchingMetadata && (!filled(song.title) || !filled(song.artist))
+
   return (
     <footer className="playerbar">
       {/* 拖动 / 键盘那一整套在 PlayerProgress 里，与迷你模式那条栏共用同一份 */}
@@ -92,12 +107,18 @@ export function PlayerBar(): React.JSX.Element {
           aria-label="满窗播放"
           onClick={() => setFullPlayer(true)}
         >
-          <Cover coverUrl={song?.cover_url} width={112} size={54} radius={10} kind="song" />
+          {/* 缺后端出图时退到原始音源封面（见 shared/metadata 的 songCoverUrl） */}
+          <Cover coverUrl={songCoverUrl(song)} width={112} size={54} radius={10} kind="song" />
         </button>
         <div style={{ minWidth: 0 }}>
-          <div className="playerbar-title truncate">{song?.title ?? '未在播放'}</div>
+          {/* 标题兜底：元数据里没有标题时用文件名，再没有才说「未知歌曲」 */}
+          <div className="playerbar-title truncate">{fallbackTitle(song)}</div>
           <div className="playerbar-artist truncate">
-            {song ? displayArtist(song.artist) : '从曲库选一首开始播放'}
+            {awaitingMetadata
+              ? '正在获取歌曲信息…'
+              : song
+                ? displayArtist(song.artist)
+                : '从曲库选一首开始播放'}
           </div>
         </div>
         {song ? (

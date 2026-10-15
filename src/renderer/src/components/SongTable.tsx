@@ -13,6 +13,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 
 import type { Song, SongSortField } from '@shared/types'
+import { fallbackTitle, songCoverUrl } from '@shared/metadata'
 import { openMenuFromEvent, type MenuItem } from './ContextMenu'
 import { IconGrip, IconHeart, IconMore, IconPause, IconPlay } from './Icons'
 import { Cover, EmptyState, InfiniteSentinel, SongRowsSkeleton } from './primitives'
@@ -345,9 +346,9 @@ function SongRow({
       case 'title':
         return (
           <div className="row" style={{ minWidth: 0 }}>
-            <Cover coverUrl={song.cover_url} width={88} size={34} radius={7} kind="song" />
+            <Cover coverUrl={songCoverUrl(song)} width={88} size={34} radius={7} kind="song" />
             <div style={{ minWidth: 0 }}>
-              <div className="song-title truncate">{song.title}</div>
+              <div className="song-title truncate">{fallbackTitle(song)}</div>
             </div>
           </div>
         )

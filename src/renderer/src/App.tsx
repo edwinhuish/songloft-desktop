@@ -55,6 +55,7 @@ import { RecentPage } from './pages/RecentPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { installMiniHost } from './state/mini-host'
+import { installMetadataWatch } from './state/song-metadata'
 import {
   installMediaSessionHandlers,
   installNowPlayingSync,
@@ -182,6 +183,12 @@ export function App(): React.JSX.Element {
         bootstrapped = true
         disposers.push(installMediaSessionHandlers())
         disposers.push(installNowPlayingSync())
+        /*
+         * 起播时补齐缺失的元数据（封面 / 歌词 / 歌手 / 歌名）。
+         * 与上面两条同一类「只该发生一次」的接线：它是一条模块级订阅，多装一次只是白占一份
+         * 监听（每次播放状态变化都会被叫起来，靠内部的缓存与缺口判定收敛开销，见 song-metadata）。
+         */
+        disposers.push(installMetadataWatch())
       }
 
       await useAuth.getState().bootstrap()

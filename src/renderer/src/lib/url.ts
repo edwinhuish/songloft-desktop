@@ -107,3 +107,47 @@ export function buildSongUrl(
 
   return result
 }
+
+/**
+ * 一首歌最多试几个音源，试满还不出声就跳到下一首（见 localPlayer 的 error 处理）。
+ *
+ * ★ 口径：「连换 3 次都不行就跳下一首」在本应用里落在**尝试次数 = 3**（首选 1 次 + 换源 2 次）
+ *   —— 候选链只有三级（用户偏好 / 原始音源 / 去掉音量归一化），第 4 次必然是在重复其中一级，
+ *   再试只是让用户多等一轮加载失败。要改口径就改这一个数。
+ * ★ 上限是**尝试次数**，不是候选个数：候选去重后可能只剩一个（比如用户本来就选了原始质量
+ *   且没开音量归一化，三个候选完全等价），那时这 3 次就是「同一个地址再拉一遍」——
+ *   对「首字节没到就断了」这类瞬时抖动同样有效，所以不因为候选少就少试几次。
+ */
+export const MAX_SOURCE_ATTEMPTS = 3
+
+/**
+ * 同一首歌的候选音源，按优先级排列（去重）。
+ *
+ * 后端的播放地址是**同一份音频的不同取法**，所以「换音源」在这里不是换平台，而是逐级退掉
+ * 那些可能出问题的加工环节 —— 它们正是 code 4（解码 / 源不可用）最常见的原因：
+ *   1. **用户偏好**：码率（后端转码降码率）+ 音量归一化（ffmpeg EBU R128）+ 老格式转码；
+ *   2. **原始音源**：丢掉码率偏好，直接要原文件（转码链路整条绕开）；
+ *   3. **最保守**：连音量归一化也不走 —— 那一步要 ffmpeg 读完整段音频，是失败率最高的一环。
+ *
+ * ★ 指定 `track`（原伴唱切换）时后端不再附加 format/quality（容器由该音轨决定），
+ *   于是三个候选会塌成同一个地址 —— 去重之后只剩一个，播放器就按同一个地址重试，
+ *   符合预期（切轨失败多半是文件本身的问题）。
+ */
+export function songUrlCandidates(
+  song: Song,
+  ctx: ResourceContext,
+  options: SongUrlOptions = {}
+): string[] {
+  const attempts: SongUrlOptions[] = [
+    { ...options },
+    { ...options, quality: 'original' },
+    { ...options, quality: 'original', normalize: false }
+  ]
+
+  const urls: string[] = []
+  for (const attempt of attempts) {
+    const url = buildSongUrl(song, ctx, attempt)
+    if (url && !urls.includes(url)) urls.push(url)
+  }
+  return urls
+}

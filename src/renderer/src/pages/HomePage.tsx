@@ -28,6 +28,7 @@ import {
 } from '@/components/Icons'
 import { CardGridSkeleton, Cover, EmptyState } from '@/components/primitives'
 import { buildSongMenuItems } from '@/components/songMenu'
+import { fallbackTitle, songCoverUrl } from '@shared/metadata'
 import { getFacets, getLibraryStats, getSongs } from '@/api/endpoints'
 import { useAsync } from '@/hooks/useAsync'
 import { useHorizontalScroll } from '@/hooks/useHorizontalScroll'
@@ -378,19 +379,19 @@ function RecentSongCard({
       onContextMenu={(event) => openMenuFromEvent(event, buildSongMenuItems([song], { onDeleted }))}
     >
       <div className="card-art">
-        <Cover coverUrl={song.cover_url} width={400} size="100%" radius={0} kind="song" />
+        <Cover coverUrl={songCoverUrl(song)} width={400} size="100%" radius={0} kind="song" />
         <button
           type="button"
           className="card-play"
-          aria-label={`播放 ${song.title}`}
+          aria-label={`播放 ${fallbackTitle(song)}`}
           data-tip="播放这首歌"
           onClick={onPlay}
         >
           <IconPlay size={17} />
         </button>
       </div>
-      <div className="card-title truncate" data-tip={song.title}>
-        {song.title}
+      <div className="card-title truncate" data-tip={fallbackTitle(song)}>
+        {fallbackTitle(song)}
       </div>
       <div className="card-meta truncate">
         {formatRelative(song.added_at)}
