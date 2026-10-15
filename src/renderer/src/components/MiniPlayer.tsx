@@ -44,8 +44,8 @@
  *     迷你窗的用处正是「一直摆在那儿」，缩进任务栏就等于看不见了（系统那一侧的最小化仍在，
  *     从底栏那颗按钮或托盘再点一下就唤回来，见 main/mini-window.ts 的 openMiniWindow）。
  *     ★ 那颗钮（从右数第二个）开出来的就是**共享的那份菜单**（components/ContextMenu，全条唯一
- *       入口）：里面是两根滑块 —— 整窗浓度那根，加**此刻这块面板**的浓度那根（面板没开时只有
- *       前者，理由见下面 opacityMenu）。它长在窗口
+ *       入口）：三根滑块 —— 整窗浓度，加歌词 / 队列**两块面板各自**的浓度（常驻三行，理由见
+ *       下面 opacityMenu）。它长在窗口
  *       **内部**、条下面那块透明容器让出来的地方 —— HTML 画不出窗口之外，而 Wayland 下又没法给
  *       新建的弹窗定位，所以菜单要地方，只能是窗口自己让出一段（加高的是窗口，不是播放器，
  *       见 shared/ipc.ts 的 MINI_MENU_HEIGHT）。
@@ -173,62 +173,61 @@ export function MiniPlayer(): React.JSX.Element {
   const position = scrub ?? player.currentTime
 
   /**
-   * 迷你窗的窗口菜单：整窗浓度一根滑块，加**此刻那块面板**的浓度一根。**全条唯一的入口是右上角
-   * 从右数第二个按钮**（那颗 .win-btn）—— 交互带的右键已撤、封面右键让给系统，条上别处一律不开
-   * 应用菜单（见 suppressContextMenu）。
+   * 迷你窗的窗口菜单：**三根滑块** —— 「播放器不透明度」「歌词面板不透明度」「队列面板不透明度」。
+   * **全条唯一的入口是右上角从右数第二个按钮**（那颗 .win-btn）—— 交互带的右键已撤、封面右键
+   * 让给系统，条上别处一律不开应用菜单（见 suppressContextMenu）。
    *
    * ★ 封面右键不再开这一份：拖拽区（= 非客户区）的右键由**系统**弹窗口菜单（Electron 文档那条），
    *   旋钮改由按钮独占。挂在按钮上本来也是最稳的那条路 —— 它在窗口钮组里、整组标着 no-drag，
    *   一定收得到。
-   * ★★ 面板那一行跟的是 `panel`：标签写清是歌词还是队列，滑块调的也是那一块的设置项（两块各存
-   *   一份浓度，见 shared/ipc.ts）。为什么不把两块**并列**摆出来：菜单里同时放两根面板滑块就是
-   *   三行，而「两行」正是 MINI_MENU_HEIGHT 那一档按着算出来的（见 shared/ipc.ts 的说明）——
-   *   并列就得让迷你窗为一个临时弹出的菜单再长高一截。只给**眼前这一块**也够用：拖这根滑块时
-   *   看着的本来就只有这一块（另一块在设置页里调，那两块并列，改完能立刻切过来比对）。
-   *   ⚠ 面板收起时这一行**不出现**：没有面板可看，滑它也没有观感可对照。
-   * ★ 做成**函数**而不是模块级常量：两个 value 与 onChange 要取「点开这一刻」的设置值，
-   *   常量数组会把它们钉死在首次渲染那一份上。`panel` 同理 —— 菜单是一份快照，取的就是
-   *   点开这一刻开着的那一块（见 toggleOpacityMenu）。
+   * ★★ 三根**常驻**：面板开没开、开着哪一块，菜单都是这三行。理由有两条 ——
+   *   ① 菜单里少一行多一行是**看得见**的（内容一变，窗口高度也跟着变一次），而那两根滑块本来就是
+   *      「随时可能想调」的东西，不该要人先把对的那块面板开出来才找得到；
+   *   ② 两块面板的浓度是**各存一份**的（见 shared/ipc.ts），标题里把「哪一块」写清，比按当前
+   *      面板换标题更不容易看错。
+   *   ★ 代价：MINI_MENU_HEIGHT 是按**三行**重算的（见 shared/ipc.ts 那一段）—— 菜单里再加减内容，
+   *     要回去核那一档，否则菜单会被窗口下边缘裁掉或被迫出滚动条。
+   * ★ 两根面板滑块调的都是**那一块自己**的浓度：拖「歌词面板」那根，队列那份一个像素都不动。
+   *   面板收起时拖它照样生效（下次展开就是那个浓度）。
+   * ★ 底色是**相对播放条**（--mini-tint）的浓度，100 = 与条一致 —— 深浅两个主题下都说得通，
+   *   不必分两套默认值；它顺带牵动**窗口那圈阴影**（面板调淡时，围着「条 + 面板」那一圈跟着淡出、
+   *   围着播放条自己那一圈按互补比例淡入，见样式表 .mini-surface 与 .mini-player::before），
+   *   这里不必额外做什么。
+   * ★ 做成**函数**而不是模块级常量：三个 value 与 onChange 要取「点开这一刻」的设置值，
+   *   常量数组会把它们钉死在首次渲染那一份上。
    */
-  const opacityMenu = (): MenuItem[] => {
-    const rows: MenuItem[] = [
-      {
-        key: 'mini-opacity',
-        label: '播放器不透明度',
-        slider: {
-          min: 0,
-          max: 100,
-          value: miniOpacity,
-          onChange: (value) => void patchSettings({ miniWindowOpacity: value })
-        }
+  const opacityMenu = (): MenuItem[] => [
+    {
+      key: 'mini-opacity',
+      label: '播放器不透明度',
+      slider: {
+        min: 0,
+        max: 100,
+        value: miniOpacity,
+        onChange: (value) => void patchSettings({ miniWindowOpacity: value })
       }
-    ]
-    if (panel) {
-      const isLyrics = panel === 'lyrics'
-      /*
-        面板那层底色是**相对播放条**的浓度（100 = 与条一致），见 styles/components.css 的
-        .mini-player 那一段 —— 所以它在深浅两个主题下都说得通，不必分两套默认值。
-        ★ 它顺带牵动**窗口那圈阴影**：面板调淡时，围着「条 + 面板」那一圈跟着淡出，
-          围着播放条自己那一圈按互补比例淡入（面板透到 0，挂件的下边缘就是条的下边缘）。
-          两个落点见样式表 .mini-surface 与 .mini-player::before，这里不必额外做什么。
-      */
-      rows.push({
-        key: `mini-panel-opacity-${panel}`,
-        label: isLyrics ? '歌词面板不透明度' : '队列面板不透明度',
-        slider: {
-          min: 0,
-          max: 100,
-          // 取**这一块**此刻的值：菜单开的时候取一次（之后由这一行自己管，见 MenuSliderRow）
-          value: isLyrics ? lyricsPanelOpacity : queuePanelOpacity,
-          onChange: (value) =>
-            void patchSettings(
-              isLyrics ? { miniLyricsPanelOpacity: value } : { miniQueuePanelOpacity: value }
-            )
-        }
-      })
+    },
+    {
+      key: 'mini-lyrics-panel-opacity',
+      label: '歌词面板不透明度',
+      slider: {
+        min: 0,
+        max: 100,
+        value: lyricsPanelOpacity,
+        onChange: (value) => void patchSettings({ miniLyricsPanelOpacity: value })
+      }
+    },
+    {
+      key: 'mini-queue-panel-opacity',
+      label: '队列面板不透明度',
+      slider: {
+        min: 0,
+        max: 100,
+        value: queuePanelOpacity,
+        onChange: (value) => void patchSettings({ miniQueuePanelOpacity: value })
+      }
     }
-    return rows
-  }
+  ]
 
   /**
    * 点那颗钮：**开着就收起，关着就展开**。

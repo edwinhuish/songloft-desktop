@@ -454,34 +454,35 @@ function AppearanceSettings(): React.JSX.Element {
           的是整窗（桌面会透进来），这两条只在窗口内部透 —— 面板淡下去露出的是同一个窗口里
           它下面那层。
           ★ 两块**分开**是有用的：歌词看两眼就够、队列常要多看几首，压暗一块、另一块留亮，
-            两块才不会是同一张底（迷你窗那颗下拉里也有这一项，但一次只给开着的那一块）。
+            两块才不会是同一张底。迷你窗那颗下拉里也有这两根（标题与这里逐字相同，见
+            MiniPlayer 的 opacityMenu）—— 一处「找得到」，一处「就在手边」。
           ★ 高度不在这里：那是拖出来的（迷你窗面板的下边缘上压着一根把手），两块也各记一份。
         */}
         <Row
-          title="歌词面板背景不透明度"
-          desc={`${settings.miniLyricsPanelOpacity}%：迷你窗歌词面板的底色，100 与播放条一致`}
+          title="歌词面板不透明度"
+          desc={`${settings.miniLyricsPanelOpacity}%：迷你窗歌词面板那层底色的浓度，100 与播放条一致`}
         >
           <input
             type="range"
             min={0}
             max={100}
             value={settings.miniLyricsPanelOpacity}
-            aria-label="歌词面板背景不透明度"
+            aria-label="歌词面板不透明度"
             onChange={(event) => void patch({ miniLyricsPanelOpacity: Number(event.target.value) })}
             style={{ width: 180 }}
           />
         </Row>
 
         <Row
-          title="队列面板背景不透明度"
-          desc={`${settings.miniQueuePanelOpacity}%：迷你窗播放队列面板的底色，100 与播放条一致`}
+          title="队列面板不透明度"
+          desc={`${settings.miniQueuePanelOpacity}%：迷你窗播放队列面板那层底色的浓度，100 与播放条一致`}
         >
           <input
             type="range"
             min={0}
             max={100}
             value={settings.miniQueuePanelOpacity}
-            aria-label="队列面板背景不透明度"
+            aria-label="队列面板不透明度"
             onChange={(event) => void patch({ miniQueuePanelOpacity: Number(event.target.value) })}
             style={{ width: 180 }}
           />
