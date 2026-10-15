@@ -18,6 +18,7 @@ import { openMenuFromEvent, type MenuItem } from './ContextMenu'
 import { IconGrip, IconHeart, IconMore, IconPause, IconPlay } from './Icons'
 import { Cover, EmptyState, InfiniteSentinel, SongRowsSkeleton } from './primitives'
 import { buildSongMenuItems, type SongMenuOptions } from './songMenu'
+import { SONGS_DRAG_TYPE } from '@/lib/dnd'
 import { displayAlbum, displayArtist, formatDuration, formatRelative } from '@/lib/format'
 import { usePlayer } from '@/state/usePlayer'
 import { usePlaylists } from '@/state/usePlaylists'
@@ -386,7 +387,7 @@ function SongRow({
       onContextMenu={onContextMenu}
       onDragStart={(event) => {
         // 给侧栏歌单用的负载：拖到歌单上就能加进去
-        event.dataTransfer.setData('application/x-songloft-songs', JSON.stringify([song.id]))
+        event.dataTransfer.setData(SONGS_DRAG_TYPE, JSON.stringify([song.id]))
         event.dataTransfer.effectAllowed = 'copyMove'
         onDragStart()
       }}

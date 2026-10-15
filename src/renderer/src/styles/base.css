@@ -1173,6 +1173,22 @@ html[data-menu='open'] .plugin-view {
   box-shadow: inset 0 0 0 1px var(--accent-line);
 }
 
+/* 歌单重排的插入线：落在目标项的上半 / 下半，线就画在上沿 / 下沿。
+   ★ 用 inset box-shadow 而不是加一条伪元素：`[aria-current]` 的左侧强调条已经占了
+     ::before，再加一条会打架。 */
+.nav-item[data-reorder='before'] {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+
+.nav-item[data-reorder='after'] {
+  box-shadow: inset 0 -2px 0 0 var(--accent);
+}
+
+/* 正在被拖走的那一项：浏览器已经替它拉出一个跟随指针的拖动影像，原件淡下去当「腾出的空位」 */
+.nav-item[data-dragging='true'] {
+  opacity: 0.45;
+}
+
 /* ─────────────────────────── 顶部工具条 ─────────────────────────── */
 
 .toolbar {

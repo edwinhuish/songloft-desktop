@@ -8,6 +8,7 @@
 
 import { create } from 'zustand'
 
+import { applyPlaylistOrder, sortPinnedFirst } from '@shared/playlist'
 import type { Playlist, PlaylistType, Song } from '@shared/types'
 import {
   addSongsToPlaylist,
@@ -17,6 +18,7 @@ import {
   getPlaylistSongIds,
   getPlaylists,
   removeSongFromPlaylist,
+  reorderPlaylists,
   setPlaylistPinned,
   setPlaylistVisibility,
   updatePlaylist,
@@ -60,6 +62,8 @@ interface PlaylistState {
   uploadCover: (id: number, file: File) => Promise<void>
   setPinned: (id: number, pinned: boolean) => Promise<void>
   setHidden: (id: number, hidden: boolean) => Promise<void>
+  /** 按拖动后的顺序重排（侧栏）。入参是**看得见的那一份** id 序列 */
+  reorder: (ids: number[]) => Promise<void>
   addSongs: (id: number, songIds: number[]) => Promise<{ added: number; skipped: number }>
   removeSong: (id: number, songId: number) => Promise<void>
   isFavorite: (songId: number) => boolean
@@ -82,15 +86,8 @@ export const usePlaylists = create<PlaylistState>((set, get) => ({
         limit: 200,
         excludeLabels: options.includeHidden ? 'none' : undefined
       })
-      set({
-        playlists: [...res.playlists].sort((a, b) => {
-          // 置顶优先，其余按后端给出的顺序（后端已按 position 排好）
-          if (Boolean(a.pinned_at) !== Boolean(b.pinned_at)) return a.pinned_at ? -1 : 1
-          return 0
-        }),
-        loading: false,
-        error: null
-      })
+      // 置顶优先，其余按后端给出的顺序（后端已按 position 排好）
+      set({ playlists: sortPinnedFirst(res.playlists), loading: false, error: null })
     } catch (error) {
       set({ loading: false, error: error instanceof Error ? error.message : '歌单加载失败' })
     }
@@ -167,15 +164,35 @@ export const usePlaylists = create<PlaylistState>((set, get) => ({
     try {
       const updated = await setPlaylistPinned(requireClient(), id, pinned)
       set((state) => ({
-        playlists: state.playlists
-          .map((p) => (p.id === id ? updated : p))
-          .sort((a, b) => {
-            if (Boolean(a.pinned_at) !== Boolean(b.pinned_at)) return a.pinned_at ? -1 : 1
-            return 0
-          })
+        playlists: sortPinnedFirst(state.playlists.map((p) => (p.id === id ? updated : p)))
       }))
     } catch (error) {
       toast('操作失败', 'error', error instanceof Error ? error.message : undefined)
+    }
+  },
+
+  /**
+   * 侧栏拖动后的重排。
+   *
+   * ★ 入参是**侧栏列出来的那一份**（「我的歌单」），隐藏歌单与两个内置收藏都不在里面 ——
+   *   服务端对未纳入的 id 保持原槽位（songloft#266），与 shared/playlist 的
+   *   applyPlaylistOrder 是同一条口径，所以本地先渲染出来的那份和服务端存下的一致。
+   * ★ 先本地生效再发请求：拖完立刻看到结果，网络慢也不会「弹回去」；失败原样退回来。
+   */
+  reorder: async (ids) => {
+    const previous = get().playlists
+    const next = sortPinnedFirst(applyPlaylistOrder(previous, ids))
+    set({ playlists: next })
+    try {
+      // 发回**最终显示的那份**顺序。拖进置顶块里的项会被置顶规则拉回块后，服务端该存下的
+      // 是用户看到的那个样子 —— 否则下次刷新它自己跳一下，看起来就像「顺序没保存」。
+      await reorderPlaylists(
+        requireClient(),
+        regularPlaylists(next).map((playlist) => playlist.id)
+      )
+    } catch (error) {
+      set({ playlists: previous })
+      toast('歌单顺序保存失败', 'error', error instanceof Error ? error.message : undefined)
     }
   },
 
