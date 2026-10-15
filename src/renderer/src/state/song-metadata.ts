@@ -102,7 +102,7 @@ function endPatching(): void {
   useSongMetadata.setState({ patching: false, patchingSongId: null })
 }
 
-/** 只换队列里那一个对象 —— 与 refreshCurrentSong 同一套做法（见 localPlayer） */
+/** 只换队列里那一个对象 —— 与 refreshCurrentSong 同一套做法（见 playerCore） */
 function replaceInQueue(song: Song): void {
   usePlayer.setState((state) => ({
     queue: state.queue.map((item) => (item.id === song.id ? song : item))

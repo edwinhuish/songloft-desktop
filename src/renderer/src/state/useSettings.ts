@@ -14,7 +14,7 @@ import { create } from 'zustand'
 
 import { DEFAULT_SETTINGS, type AppSettings } from '@shared/ipc'
 import { readableTextOn } from '@/lib/color'
-import { isMiniWindow } from '@/lib/mini-window'
+import { isMiniWindow } from '@/lib/window-role'
 
 interface SettingsState {
   settings: AppSettings

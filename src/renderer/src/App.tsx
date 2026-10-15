@@ -27,7 +27,6 @@
 
 import { useEffect, useRef, useState } from 'react'
 
-import type { MediaCommand } from '@shared/ipc'
 import { isNewerVersion } from '@shared/version'
 import { checkServerUpgrade, getGithubProxy } from './api/endpoints'
 import { AddToPlaylistDialog } from './components/AddToPlaylistDialog'
@@ -56,6 +55,7 @@ import { RecentPage } from './pages/RecentPage'
 import { SearchPage } from './pages/SearchPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { installLocalFileIntake } from './state/useLocalFiles'
+import { installMediaCommands } from './state/media-commands'
 import { installMiniHost } from './state/mini-host'
 import { installMetadataWatch } from './state/song-metadata'
 import {
@@ -223,7 +223,14 @@ export function App(): React.JSX.Element {
 
   /* ── 主进程推送 ─────────────────────────────────────────────────── */
   useEffect(() => {
-    const offMedia = window.songloft.on.mediaCommand((command) => handleMediaCommand(command))
+    /*
+     * 媒体命令（托盘菜单 / 全局媒体键）落在这一窗的播放器上。那一份实现在 state/media-commands
+     * 里，因为**迷你宿主窗**（本地文件会话）也要装同一份 —— 差别只有「显示歌词」那一条落在
+     * 哪儿：这一窗是右侧那只抽屉，那一窗是下方的歌词面板。
+     */
+    const offMedia = installMediaCommands({
+      toggleLyrics: () => useUi.getState().togglePanel('now-playing')
+    })
     const offNavigate = window.songloft.on.navigate((path) => {
       const route = routeFromPath(path)
       if (route) useUi.getState().navigate(route)
@@ -684,40 +691,5 @@ function renderRoute(route: NativeRoute): React.JSX.Element {
     // NativeRoute 在上面已经穷举完了，这一条只是让「将来漏了一条」不会变成白屏
     default:
       return <HomePage />
-  }
-}
-
-/** 托盘 / 媒体键发来的命令 */
-function handleMediaCommand(command: MediaCommand): void {
-  const player = usePlayer.getState()
-  const ui = useUi.getState()
-
-  switch (command.kind) {
-    case 'play-pause':
-      void player.toggle()
-      break
-    case 'next':
-      void player.next(false)
-      break
-    case 'previous':
-      void player.previous()
-      break
-    case 'seek':
-      player.seekBy(command.delta)
-      break
-    case 'volume':
-      player.setVolume(Math.max(0, Math.min(1, player.volume + command.delta)))
-      break
-    case 'toggle-mute':
-      player.toggleMute()
-      break
-    case 'toggle-favorite': {
-      const song = player.currentSong()
-      if (song) void usePlaylists.getState().toggleFavorite(song)
-      break
-    }
-    case 'toggle-lyrics':
-      ui.togglePanel('now-playing')
-      break
   }
 }

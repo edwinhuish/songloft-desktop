@@ -198,7 +198,7 @@ export function songFromLocalFile(absolutePath: string): Song {
   const format = extensionOf(absolutePath)
   return {
     id: localSongId(absolutePath),
-    // 归到 'local'：播放器据此走「没有别的源可找」那条重试策略（见 localPlayer）
+    // 归到 'local'：播放器据此走「没有别的源可找」那条重试策略（见 playerCore）
     type: 'local',
     title: titleOf(absolutePath),
     artist: null,

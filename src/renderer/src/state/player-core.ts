@@ -1,9 +1,17 @@
 /**
- * **真播放器**：一个模块级的 `HTMLAudioElement` + zustand 状态。
+ * **播放核心**：一个模块级的 `HTMLAudioElement` + zustand 状态。
  *
- * ★ 这个进程（主窗口）是播放的唯一事实源：音频、队列、游标、歌词、音量全在这里。
- *   迷你窗那边拿到的是它的**镜像**（state/remotePlayer.ts），两份靠 IPC 对齐 ——
- *   两个窗口各放一份音频是不可能的（同一首歌会响两遍），所以只有这一份。
+ * ★ 音频、队列、游标、歌词、音轨、音量全在这里，而它**不知道自己跑在哪个窗口里** ——
+ *   这正是它与 state/remotePlayer.ts 的分工：谁当**宿主**谁用它，另一侧用镜像，两边靠
+ *   IPC 对齐。至于「谁是宿主」只有两种答案（见 @shared/window-role）：
+ *     · 主窗口 —— 完整界面那个窗口；
+ *     · 迷你窗 · 宿主 —— 本地文件会话（双击音频文件）里，迷你窗自己就是播放器，没有主窗口。
+ *   一首歌只能有一个 `HTMLAudioElement` 在放（两个窗口各放一份就是同一首歌响两遍），
+ *   所以**同一个进程里**永远只有一侧用它，见 state/usePlayer 那句模块级分流。
+ *
+ * ★ 于是这个模块里不许出现「主窗口才有的东西」：曲库、会话、页面路由、扩展 webview 一个
+ *   都不碰（要用到的会话只经 resourceContext() 问一句「现在拿得到地址和 token 吗」，
+ *   拿不到就按没有会话处理）。本地文件会话里它照样要能完整地放音频。
  *
  * 一个模块级的 `HTMLAudioElement` + zustand 状态，刻意不用 React 的 ref：
  * 切歌、切页面、抽屉开关都不该重建音频元素（重建 = 断流 + 丢失缓冲）。
@@ -299,7 +307,7 @@ function describeMediaError(code: number | undefined): string {
   }
 }
 
-export const localPlayer = create<PlayerState>((set, get) => {
+export const playerCore = create<PlayerState>((set, get) => {
   /**
    * 真正把某首歌灌进 audio 元素。
    *
@@ -867,11 +875,22 @@ export const localPlayer = create<PlayerState>((set, get) => {
 
 let persistTimer: number | null = null
 
-localPlayer.subscribe(() => {
+playerCore.subscribe(() => {
+  /*
+   * ★ 只有**已登录的那个会话**才拥有「上次队列」这一份记录（见「本地文件会话」那一节）。
+   *
+   * 「上次队列」是在线播放列表在客户端唯一的落点：登录时由 usePlayer.restoreLastQueue
+   * 还原，之后由这里随时覆写。而下面两种会话答不上「在线队列长什么样」：
+   *   · 本地文件会话（迷你宿主窗：没有主窗口，也没有任何会话）；
+   *   · 主窗口里的免登录模式（用户双击文件、只听本机音乐的那一趟）。
+   * 让它们写进去的后果是把上一次登录留下的那份抹成空 —— 表现是「听了几首本地文件，
+   * 再登录回来，上次的播放队列没了」。
+   */
+  if (useAuth.getState().status !== 'authenticated') return
   if (persistTimer !== null) return
   persistTimer = window.setTimeout(() => {
     persistTimer = null
-    const { queue, order, cursor, context } = localPlayer.getState()
+    const { queue, order, cursor, context } = playerCore.getState()
     /*
      * 只记曲库里的歌：本地文件（id 为负）重启之后是取不回来的，写进去只会在下次开机时
      * 白跑一批注定失败的请求。
@@ -879,6 +898,13 @@ localPlayer.subscribe(() => {
      *   被筛掉，恢复出来的位置就整体前移了（表现是「开机后队列停在了别的歌上」）。
      */
     const persisted = queue.filter((song) => song.id > 0).slice(0, 500)
+    /*
+     * ★ 队列非空、却一首曲库的歌都没有 = 整队都是本机文件（负 id 只有这一种来源）。
+     *   这一趟不该动落盘那一份：用户在已登录的窗口里双击一个音频文件，把「上次队列」
+     *   清成空，等于用本地播放列表的**内容**改写了在线播放列表 —— 正是要避免的那件事。
+     *   （队列真的空掉是另一回事：那是用户自己清空队列，照记不误。）
+     */
+    if (persisted.length === 0 && queue.length > 0) return
     const current = cursor >= 0 && cursor < order.length ? queue[order[cursor]] : undefined
     void useSettings.getState().patch({
       lastQueue: persisted.map((song) => song.id),
@@ -893,7 +919,7 @@ localPlayer.subscribe(() => {
 export function installMediaSessionHandlers(): () => void {
   if (!('mediaSession' in navigator)) return () => undefined
   const session = navigator.mediaSession
-  const player = localPlayer.getState()
+  const player = playerCore.getState()
 
   const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
     ['play', () => void player.toggle()],
@@ -933,7 +959,7 @@ export function installMediaSessionHandlers(): () => void {
 /** 当前歌曲 / 播放状态变化时刷新系统媒体控件与托盘 */
 export function installNowPlayingSync(): () => void {
   let lastKey = ''
-  return localPlayer.subscribe((state) => {
+  return playerCore.subscribe((state) => {
     const song =
       state.cursor >= 0 && state.cursor < state.order.length
         ? state.queue[state.order[state.cursor]]
@@ -952,11 +978,16 @@ export function installNowPlayingSync(): () => void {
   })
 }
 
-/** 供 App 启动时调用一次：把音量/播放模式同步给 audio 元素 */
+/**
+ * 把音量 / 播放模式同步给 audio 元素。
+ *
+ * 由**宿主**在设置读完之后调一次：主窗口是 App 的启动编排，迷你宿主窗是本地会话的接线
+ * （见 state/local-session.ts）。必须赶在第一次起播之前 —— 否则第一首歌会按默认音量出声。
+ */
 export function primeAudio(): void {
   const settings = useSettings.getState().settings
   audio.volume = settings.volume
-  localPlayer.setState({ volume: settings.volume, playMode: settings.playMode })
+  playerCore.setState({ volume: settings.volume, playMode: settings.playMode })
 }
 
 export { audio as audioElement }

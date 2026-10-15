@@ -1,9 +1,11 @@
 /**
- * 迷你窗里的「播放器」：主窗口那一份的**镜像**（只在迷你窗里用）。
+ * **跟随者**那一侧的「播放器」：宿主那一份的**镜像**（只在普通迷你窗里用）。
  *
- * ★ 为什么要有它，而不是让迷你窗自己建一个播放器：一首歌只能有一个 `HTMLAudioElement`
- *   在放（两个窗口各放一份就是同一首歌响两遍）。所以播放的唯一事实源永远在主窗口那边，
- *   这边只做两件事：
+ * ★ 谁需要它：迷你窗在**普通会话**里只是主界面旁边挂着的一条播放条 —— 播放的唯一事实源
+ *   在主窗口那边。而本地文件会话里的迷你窗是**宿主**（自己就是播放器，见 state/usePlayer
+ *   的分流），那种窗口用不到这个模块。
+ * ★ 为什么要有它，而不是让每个窗口都自己建一个播放器：一首歌只能有一个 `HTMLAudioElement`
+ *   在放（两个窗口各放一份就是同一首歌响两遍）。所以镜像这一侧只做两件事：
  *     · 把主窗口推来的快照贴进 store（数据）；
  *     · 把界面上的动作变成**遥控命令**发过去（动作，见 shared/ipc.ts 的 MiniCommand）。
  *
@@ -20,7 +22,7 @@ import { create } from 'zustand'
 
 import type { MiniCommand, MiniPlayerSnapshot } from '@shared/ipc'
 import type { ParsedLyric } from '@shared/lyric'
-import type { PlayerState } from './localPlayer'
+import type { PlayerState } from './player-core'
 import { useAuth } from './useAuth'
 import { useMiniView } from './useMiniView'
 import { useSettings } from './useSettings'

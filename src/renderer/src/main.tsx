@@ -15,7 +15,7 @@ import { createRoot } from 'react-dom/client'
 
 import { App } from './App'
 import { MiniApp } from './MiniApp'
-import { isMiniWindow } from './lib/mini-window'
+import { isMiniWindow } from './lib/window-role'
 import './styles/index.css'
 
 const container = document.getElementById('root')

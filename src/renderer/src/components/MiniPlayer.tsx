@@ -10,9 +10,13 @@
  *   一个像素都不跟着变。这三段的尺寸各自钉死，所以那一格里的东西不会因为窗口变大而变形
  *   （见样式表 .mini-player）。
  *
- * ★ 它读的 `usePlayer` 是**主窗口那份的镜像**（state/remotePlayer.ts）：数据由主窗口推来，
- *   动作（播放 / 切歌 / 跳转 / 音量 / 队列增删改）变成遥控命令发回去。播放的唯一事实源
- *   永远在主窗口 —— 两个窗口各放一份音频就是同一首歌响两遍。
+ * ★ 它读的 `usePlayer` 按窗口角色分流（见 state/usePlayer）：
+ *   · 普通迷你窗（跟随者）拿到的**主窗口那份的镜像**（state/remotePlayer.ts）—— 数据由主窗口
+ *     推来，动作（播放 / 切歌 / 跳转 / 音量 / 队列增删改）变成遥控命令发回去；
+ *   · 本地文件会话里的迷你窗（宿主）拿到的**就是播放器本身**（state/player-core.ts）——
+ *     动作当场就落在自己那个 <audio> 上。
+ *   同一棵树、同一套组件，界面一个分支都不必分。**同一首歌永远只有一个 <audio> 在放**：
+ *   分流保证了一个窗口要么是宿主、要么是跟随者。
  *
  * ── 条上有什么（从左到右）────────────────────────────────────────────────
  *   · 封面：贴左缘的全高方块，**拖窗口的把手**之一（条整体都是把手区，见样式表 .mini-bar）：
@@ -94,6 +98,7 @@ import { Cover, Slider } from './primitives'
 import { fallbackTitle, songCoverUrl } from '@shared/metadata'
 import { useUnfocusable } from '@/hooks/useUnfocusable'
 import { displayArtist, formatDuration } from '@/lib/format'
+import { isMiniHost } from '@/lib/window-role'
 import { usePlayer } from '@/state/usePlayer'
 import { selectPanelHeight, useMiniView } from '@/state/useMiniView'
 import { useSettings } from '@/state/useSettings'
@@ -123,6 +128,8 @@ const suppressContextMenu = (event: React.MouseEvent<HTMLElement>): void => {
 }
 
 export function MiniPlayer(): React.JSX.Element {
+  /** 宿主身份（本地文件会话里的迷你窗）：决定条上冒出哪几颗钮，见下面收藏那一段 */
+  const host = isMiniHost()
   const player = usePlayer()
   /** 下方那块面板装什么（null = 收起）。★ 这份状态在 useMiniView 上，见那里的说明 */
   const panel = useMiniView((s) => s.panel)
@@ -404,16 +411,23 @@ export function MiniPlayer(): React.JSX.Element {
                 >
                   {modeIcon(player.playMode, ICON_CTL)}
                 </button>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  data-active={favorite}
-                  aria-label={favorite ? '取消收藏' : '收藏'}
-                  disabled={!song}
-                  onClick={() => void window.songloft.mini.command({ kind: 'toggle-favorite' })}
-                >
-                  <IconHeart size={ICON_CTL} filled={favorite} />
-                </button>
+                {/*
+                  收藏走的是**后端**（收藏表在服务端那份歌单里）：本地文件会话（迷你宿主窗）
+                  里没有会话、也没有主窗口能接这条遥控命令，所以那一趟里这颗钮整个不出现 ——
+                  摆一颗点了没反应的钮比不摆更糟。收藏态本身也是主窗口喂过来的（useMiniView）。
+                */}
+                {host ? null : (
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    data-active={favorite}
+                    aria-label={favorite ? '取消收藏' : '收藏'}
+                    disabled={!song}
+                    onClick={() => void window.songloft.mini.command({ kind: 'toggle-favorite' })}
+                  >
+                    <IconHeart size={ICON_CTL} filled={favorite} />
+                  </button>
+                )}
               </div>
             </div>
 

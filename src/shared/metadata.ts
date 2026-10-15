@@ -39,7 +39,7 @@ export function filled(value: string | null | undefined): boolean {
  *
  * 三个刻意的例外：
  *   * **歌词**：`local` 歌曲完全不判 —— 它的歌词正是内嵌在音频文件里的，没有 `lyric_url`
- *     不代表取不到（客户端照样会去问 `/songs/{id}/lyric`，见 localPlayer 的 loadLyrics）。
+ *     不代表取不到（客户端照样会去问 `/songs/{id}/lyric`，见 playerCore 的 loadLyrics）。
  *     网络歌曲没有 `lyric_url` / `lyric_remote_url` 才是真的没有来源。
  *   * **封面**：`cover_url`（后端出图）与 `source_cover_url`（原始音源地址）任一非空即算有，
  *     因为渲染时本来就会退到后者（songCoverUrl）。
@@ -159,7 +159,7 @@ export function fallbackTitle(song: Song | null | undefined): string {
 /**
  * 元数据缓存键：`id + updated_at`。
  *
- * 与歌词缓存同一套口径（见 localPlayer 的 lyricCacheKey）：同一首歌的数据被服务端改过之后
+ * 与歌词缓存同一套口径（见 playerCore 的 lyricCacheKey）：同一首歌的数据被服务端改过之后
  * `updated_at` 会变，键也就变了 —— 于是「扫描 / 刷新元数据之后要重新问一次」是自动成立的，
  * 不必额外去作废缓存。
  */
