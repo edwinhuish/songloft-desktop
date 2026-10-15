@@ -84,6 +84,11 @@ const bridge: SongloftBridge = {
       ipcRenderer.invoke(IPC.fileSave, suggestedName, contents) as Promise<FileSaveResult>,
     open: () => ipcRenderer.invoke(IPC.fileOpen) as Promise<FileOpenResult | null>
   },
+  localFiles: {
+    open: () => ipcRenderer.invoke(IPC.localFilesOpen) as Promise<string[]>,
+    takePending: () => ipcRenderer.invoke(IPC.localFilesTakePending) as Promise<string[]>,
+    onPending: (handler) => subscribe<void>(IPC.onLocalFilesPending, () => handler())
+  },
   cache: {
     stats: () => ipcRenderer.invoke(IPC.localCacheStats) as Promise<LocalCacheStats>,
     clear: () => ipcRenderer.invoke(IPC.localCacheClear) as Promise<LocalCacheStats>

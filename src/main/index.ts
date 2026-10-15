@@ -25,6 +25,14 @@ import { installAppMenu } from './app-menu'
 import { applyLocalCacheLimit, clearLocalCache, readLocalCache } from './cache'
 import { checkClientUpdate } from './release'
 import { openTextFile, saveTextFile } from './files'
+import {
+  announceLocalFiles,
+  openLocalFilesDialog,
+  pathsFromArgv,
+  setLocalFilesNotifier,
+  takePendingPaths
+} from './local-files'
+import { registerLocalFileScheme, installLocalFileProtocol } from './media-protocol'
 import { registerMediaKeys } from './media-keys'
 import {
   applyMiniWindowOnTop,
@@ -38,6 +46,7 @@ import {
   setMiniWindowOpen
 } from './mini-window'
 import { fetchCoverBytes, probeServer } from './probe'
+import { LOCAL_FILE_SCHEME } from '@shared/local-file'
 import { PLUGIN_PARTITION } from '@shared/plugin'
 import { ConfigStore } from './store'
 import { createTray, destroyTray, render as renderTray } from './tray'
@@ -65,6 +74,13 @@ import { applyWindowOnTop, createMainWindow } from './windows'
  *   scripts/verify-package.sh 会断言这一组关系。
  */
 app.setDesktopName('io.github.edwinhuish.songloft-desktop')
+
+/*
+ * 本地文件的播放地址走的自定义协议（见 media-protocol.ts）。★ 这一句必须越过 app ready
+ * —— Chromium 只在启动那一刻读特权协议的声明，晚一步注册就会把它当成一个普通（不安全、
+ * 且不能流式）的来源，媒体加载直接失败且几乎不给原因。
+ */
+registerLocalFileScheme()
 
 /**
  * 允许把配置目录挪走。两个用途：
@@ -125,6 +141,23 @@ if (!gotTheLock) {
   app.quit()
 }
 
+/**
+ * 本地文件的三个来源里，有两个**可能早于窗口**（见 local-files.ts）：先把它们收下排进队，
+ * 渲染层就绪后会自己来取（它开机就来取一次）。
+ *
+ * 只在拿到锁的这个实例里做：没拿到锁的那个进程马上就会退出，它 argv 里的文件由
+ * `second-instance` 那条路交给真正在跑的这个实例。
+ */
+if (gotTheLock) {
+  // macOS：双击关联文件启动、或应用已开着时再双击一个
+  app.on('open-file', (event, path) => {
+    event.preventDefault()
+    announceLocalFiles([path])
+  })
+  // Windows / Linux：文件关联把路径追加在 argv 里
+  announceLocalFiles(pathsFromArgv(process.argv.slice(1)))
+}
+
 const store = new ConfigStore()
 
 // 本机缓存上限得赶在 ready 之前交给 Chromium（它只在解析启动参数时读一次，运行中改不了），
@@ -165,7 +198,9 @@ function applyCsp(): void {
             // 样式里大量用了行内 style（尺寸/进度条 width），必须放开 inline style
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob: http: https:",
-            "media-src 'self' blob: http: https:",
+            // ★ 带上媒体协议：本地文件的播放地址走的是它（见 main/media-protocol.ts）。
+            //   漏掉这一项时打包态下本地文件一首也放不出来，且 CSP 的拦截**只写在控制台**里。
+            `media-src 'self' blob: http: https: ${LOCAL_FILE_SCHEME}:`,
             "connect-src 'self' http: https: ws: wss:",
             "font-src 'self' data:",
             "object-src 'none'",
@@ -452,6 +487,11 @@ function registerIpcHandlers(): void {
     saveTextFile(mainWindow, suggestedName, contents)
   )
   ipcMain.handle(IPC.fileOpen, () => openTextFile(mainWindow))
+  // 本地文件：挑一批（对话框）+ 取走排着队的那批（推给我们的是「有新的」这条摇铃）
+  ipcMain.handle(IPC.localFilesOpen, (event) =>
+    openLocalFilesDialog(senderWindow(event) ?? mainWindow)
+  )
+  ipcMain.handle(IPC.localFilesTakePending, () => takePendingPaths())
   ipcMain.handle(IPC.localCacheStats, () => readLocalCache())
   ipcMain.handle(IPC.localCacheClear, () => clearLocalCache())
   ipcMain.handle(IPC.colorExtract, (_event, url: string) => fetchCoverBytes(url))
@@ -483,7 +523,13 @@ const trayDeps = {
 
 // ─────────────────────────────── 生命周期 ───────────────────────────────
 if (gotTheLock) {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv, workingDirectory) => {
+    /*
+     * 第二次启动被拦下了，但它命令行里的东西不能丢：`songloft-desktop song.mp3` 在应用
+     * 已开着时正是「再加一首放进去」。相对路径按**那个进程**的目录解（见 pathsFromArgv）。
+     */
+    announceLocalFiles(pathsFromArgv(argv, workingDirectory))
+
     if (!mainWindow) return
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.show()
@@ -493,6 +539,10 @@ if (gotTheLock) {
   app.whenReady().then(() => {
     applyTlsPolicy(store.getSettings().allowInsecureTls)
     applyCsp()
+    // 本地文件的播放地址由它来读（必须在页面开始请求之前装好）
+    installLocalFileProtocol()
+    // 「又有本地文件要打开」推到主窗口：渲染层收到后回来 takePendingPaths()
+    setLocalFilesNotifier(() => sendToRenderer(IPC.onLocalFilesPending, null))
     // 必须早于任何 webview 挂载：它注册的 web-contents-created 只在创建时生效一次
     hardenPluginSession()
     registerIpcHandlers()

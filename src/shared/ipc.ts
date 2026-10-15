@@ -38,6 +38,22 @@ export const IPC = {
   fileSave: 'file:save',
   /** 弹打开框读文本（导入歌单备份）；取消返回 null */
   fileOpen: 'file:open',
+  /**
+   * 弹系统文件框挑**本地音频文件**（取消返回空数组）。
+   *
+   * ★ 与上面 fileOpen 是两件事，别合并：那个读的是「一首歌的备份文本」，这个挑的是
+   *   「要拿去播放的音频文件」—— 过滤器、是否多选、返回什么（路径 vs 内容）全不一样。
+   */
+  localFilesOpen: 'localfile:open',
+  /**
+   * 取走主进程替我们排好的那批本地文件路径（**取走即清空**）。
+   *
+   * ★ 为什么是「取」而不是「推」：路径可能在任何时刻产生（启动参数、macOS 的 open-file、
+   *   第二次启动），而渲染层可能还没装好监听。只推送的话那几条消息会直接消失（用户双击了
+   *   文件却什么都没发生）；排队 + 取走，则「早到晚到都只处理一次」。
+   *   与 miniIsOpen 是同一条理由（见那条的说明）。
+   */
+  localFilesTakePending: 'localfile:take-pending',
   /** 本机磁盘缓存（Chromium 的 HTTP 缓存）占用。服务端缓存那套走 HTTP 接口，这个是本机自己的 */
   localCacheStats: 'cache:stats',
   /** 清掉本机磁盘缓存，返回清理后的占用 */
@@ -79,6 +95,8 @@ export const IPC = {
   onMediaCommand: 'media:command',
   onWindowState: 'window:state',
   onNavigate: 'app:navigate',
+  /** 有本地文件等着被打开（推给主窗口：来取一下，见 localFilesTakePending） */
+  onLocalFilesPending: 'localfile:pending',
   /** 迷你窗开没开（推给主窗口：那颗按钮的高亮、以及要不要继续推送状态都看它） */
   onMiniOpen: 'mini:open',
   /** 播放状态快照（推给迷你窗） */

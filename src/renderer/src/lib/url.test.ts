@@ -16,6 +16,7 @@
 
 import { describe, expect, it } from 'vitest'
 
+import { localFileUrl, pathFromLocalFileUrl } from '@shared/local-file'
 import type { Song } from '@shared/types'
 import {
   buildCoverUrl,
@@ -186,6 +187,37 @@ describe('buildSongUrl', () => {
 
   it('两个地址都没有时返回空串', () => {
     expect(buildSongUrl(song({ url: null, source_url: null }), ctx)).toBe('')
+  })
+})
+
+describe('本地文件（自定义协议）', () => {
+  const localUrl = localFileUrl('/home/edwin/Music/夜曲.flac')
+
+  it('资源地址原样返回：不拼服务器、不带 token', () => {
+    expect(buildResourceUrl(localUrl, ctx)).toBe(localUrl)
+  })
+
+  it('播放地址原样返回，后端那些参数一个都不加', () => {
+    expect(buildSongUrl(song({ url: localUrl, format: 'flac' }), ctx)).toBe(localUrl)
+    expect(
+      buildSongUrl(song({ url: localUrl, format: 'flac' }), ctx, {
+        quality: '320',
+        normalize: true,
+        track: 1
+      })
+    ).toBe(localUrl)
+  })
+
+  it('重试时地址要变（否则浏览器会复用上一次那份失败的响应）', () => {
+    const retried = buildSongUrl(song({ url: localUrl }), ctx, { retry: 1 })
+    expect(retried).toBe(`${localUrl}?retry=1`)
+    // 参数只是给缓存看的：还原回路径时不该受影响
+    expect(pathFromLocalFileUrl(retried)).toBe('/home/edwin/Music/夜曲.flac')
+  })
+
+  it('没有服务器（未登录）时照样拿得到地址', () => {
+    const anonymous = { baseUrl: '', accessToken: '' }
+    expect(buildSongUrl(song({ url: localUrl }), anonymous)).toBe(localUrl)
   })
 })
 

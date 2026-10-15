@@ -109,7 +109,7 @@ exec_path_of() {
 DESKTOP_EXEC=''
 
 check_desktop_file() { # $1=.desktop 路径 $2=说明；Exec 值经 $DESKTOP_EXEC 回传
-  local f="$1" label="$2" base wm exec_val
+  local f="$1" label="$2" base wm exec_val mime
   DESKTOP_EXEC=''
 
   # 空文件 = 解包被截断（典型原因是临时目录空间不足）。先说清原因，
@@ -137,6 +137,16 @@ check_desktop_file() { # $1=.desktop 路径 $2=说明；Exec 值经 $DESKTOP_EXE
   [ -n "$(desktop_key "$f" Icon)" ] \
     && good "$label Icon=$(desktop_key "$f" Icon)" \
     || bad "$label 缺 Icon"
+
+  # ★ 文件关联：条目里的 MimeType 必须真的带上音频类型。漏了它，文件管理器不会把
+  #   「用本应用打开」摆出来 —— 而「双击音频文件就用本应用播」正是靠它，且构建期一声不响
+  #   （fileAssociations 的 mimeType 只进 Linux 的这一项，与 Windows/macOS 那两份无关）。
+  mime="$(desktop_key "$f" MimeType)"
+  if printf '%s' "$mime" | grep -q 'audio/mpeg'; then
+    good "$label 条目声明了音频 MIME：$mime"
+  else
+    bad "$label 的 MimeType 里没有 audio/mpeg —— 文件关联没生效（双击音频文件不会用本应用打开）"
+  fi
 
   DESKTOP_EXEC="$exec_val"
 }

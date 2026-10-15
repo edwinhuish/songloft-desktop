@@ -106,6 +106,19 @@ export interface SongloftBridge {
     /** 弹打开框读文本；取消返回 null */
     open(): Promise<FileOpenResult | null>
   }
+  /**
+   * 本地文件的入口（播放本地文件不需要登录，所以这条通道与凭据无关）。
+   *
+   * 路径在主进程里落成绝对路径后才交出来 —— 渲染层不碰文件系统，也不需要知道 cwd。
+   */
+  localFiles: {
+    /** 弹系统文件框挑音频文件（多选）；取消返回空数组 */
+    open(): Promise<string[]>
+    /** 取走排在主进程里的那批路径（取走即清空） */
+    takePending(): Promise<string[]>
+    /** 又有本地文件要打开（关联双击、二次启动、菜单）；回调里应当去 takePending() */
+    onPending(handler: () => void): () => void
+  }
   cache: {
     /** 本机磁盘缓存（Chromium 的 HTTP 缓存）的占用与**生效中**的上限 */
     stats(): Promise<LocalCacheStats>

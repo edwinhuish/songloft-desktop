@@ -13,12 +13,26 @@ import { Menu, app, shell } from 'electron'
 import type { BrowserWindow } from 'electron'
 import { IPC } from '@shared/ipc'
 import { REPO_URL, UPSTREAM_URL } from '@shared/links'
+import { announceLocalFiles, openLocalFilesDialog } from './local-files'
 
 export function installAppMenu(getWindow: () => BrowserWindow | null): void {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
       label: '文件',
       submenu: [
+        {
+          /**
+           * 本地文件的主要入口。菜单栏在无边框窗口里看不见，但加速键照旧生效 ——
+           * 而「打开本地文件」这件事本就该有一个键（Ctrl+O 是这一行的通用约定）。
+           * 挑完之后交给 announceLocalFiles：它与「双击关联文件」是同一条路。
+           */
+          label: '打开本地文件…',
+          accelerator: 'CmdOrCtrl+O',
+          click: async () => {
+            announceLocalFiles(await openLocalFilesDialog(getWindow()))
+          }
+        },
+        { type: 'separator' },
         {
           label: '设置',
           accelerator: 'CmdOrCtrl+,',

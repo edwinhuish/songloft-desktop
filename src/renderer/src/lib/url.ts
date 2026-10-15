@@ -13,6 +13,7 @@
  * 直接单测，也避免了「token 刷新后旧 URL 还挂在 DOM 上」这类时序坑。
  */
 
+import { isLocalFileUrl } from '@shared/local-file'
 import type { Song } from '@shared/types'
 
 export interface ResourceContext {
@@ -25,10 +26,13 @@ function trimTrailingSlash(url: string): string {
   return url.replace(/\/+$/, '')
 }
 
-/** 拼一个后端资源地址；外部绝对地址原样返回 */
+/** 拼一个后端资源地址；外部绝对地址与本地文件地址原样返回 */
 export function buildResourceUrl(url: string | null | undefined, ctx: ResourceContext): string {
   if (!url) return ''
   if (/^https?:\/\//i.test(url)) return url
+  // 本地文件走我们自己的协议（见 shared/local-file）：它既不该被拼上服务器地址，
+  // 也不该带 access_token —— 那份 token 是给后端认的，与读本机文件无关
+  if (isLocalFileUrl(url)) return url
   const base = trimTrailingSlash(ctx.baseUrl)
   const separator = url.includes('?') ? '&' : '?'
   return `${base}${url}${separator}access_token=${encodeURIComponent(ctx.accessToken)}`
@@ -101,6 +105,17 @@ export function buildSongUrl(
   options: SongUrlOptions = {}
 ): string {
   const source = song.url ?? song.source_url ?? ''
+  if (!source) return ''
+  /*
+   * 本地文件：地址就是我们自己的协议，后端那些参数（quality / normalize / track / format）
+   * 一个都不适用 —— 拼上去等于把一个本机路径当成后端资源来谈。
+   * 只保留 retry：它存在的意义是让「重新要一次」是个**不同的地址**（绕开浏览器对已失败
+   * 响应的缓存复用），这件事与音源在哪无关。
+   */
+  if (isLocalFileUrl(source)) {
+    const retry = options.retry ?? 0
+    return retry > 0 ? `${source}?retry=${retry}` : source
+  }
   let result = buildResourceUrl(source, ctx)
   if (!result) return ''
 
