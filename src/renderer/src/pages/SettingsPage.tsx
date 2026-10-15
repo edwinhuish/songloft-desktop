@@ -145,18 +145,19 @@ const ACCENT_PRESETS = ['#7c5cff', '#22a7d6', '#ee5a8a', '#f08a3c', '#3fb27f', '
 /**
  * 免登录模式（useAuth 的 guest）下**整节**都收掉的分区。
  *
- * ★ 判据是「这一节里有没有本机内容」，而不是「有没有服务端内容」：
+ * ★ 判据是「这一节里还有没有本机内容」，而不是「有没有服务端内容」：
  *   · `library`（曲库与扫描）—— 每一行都是服务端设置（逐行标了 `server`）
  *   · `network`（网络设置）—— 代理那张卡是服务端的；「忽略 SSL 证书校验」虽是本机偏好，
  *     但它管的是**与服务器之间**的连接，没有服务器时无从谈起
  *   · `account`（账号）—— 通篇是「连了哪台服务器、以谁登录」
+ *   · `data`（数据管理）—— 目前只有「歌单备份」，导出 / 导入的都是后端那份歌单
  *   收掉整个分区，而不是让人点进去看一页空的 —— 与侧栏、标题栏那份菜单同一口径：
  *   不摆出来，而不是灰掉（见 Sidebar.tsx 里 guest 那一段）。
  * ★ 其余分区留着：里面还有本机内容（外观 / 播放与歌词 / 本机缓存 / 快捷键 / 关于与更新），
- *   由 Row 把带「服务端」徽标的行逐行抽掉，两处**不是**服务端设置、但离不开服务器的
- *   （服务端更新、后端版本）在各自那里单独收掉。
+ *   由 Row 把带「服务端」徽标的行逐行抽掉，几处**不是**服务端设置、但离不开服务器的
+ *   （服务端更新、后端版本、歌词的翻译与罗马音）在各自那里单独收掉。
  */
-const HIDDEN_WHEN_GUEST: readonly SettingsSection[] = ['library', 'network', 'account']
+const HIDDEN_WHEN_GUEST: readonly SettingsSection[] = ['library', 'network', 'account', 'data']
 
 export function SettingsPage({ section }: { section: SettingsSection }): React.JSX.Element {
   const navigate = useUi((s) => s.navigate)
@@ -723,20 +724,27 @@ function PlaybackSettings(): React.JSX.Element {
           />
         </Row>
 
-        <Row title="显示翻译" desc="后端返回 tlyric 时显示在原文下方">
-          <Switch
-            ariaLabel="显示歌词翻译"
-            checked={settings.lyricShowTranslation}
-            onChange={(checked) => void patch({ lyricShowTranslation: checked })}
-          />
-        </Row>
-        <Row title="显示罗马音" desc="后端返回 rlyric 时显示">
-          <Switch
-            ariaLabel="显示罗马音"
-            checked={settings.lyricShowRoman}
-            onChange={(checked) => void patch({ lyricShowRoman: checked })}
-          />
-        </Row>
+        {/* 翻译与罗马音这两行是**本机偏好**（所以不打「服务端」徽标），但内容来自后端的
+            tlyric / rlyric —— 免登录时不光没有服务器可取，本地也根本拿不到这两种歌词，
+            于是免登录时一并收掉，只留纯样式那几行 */}
+        {guest ? null : (
+          <>
+            <Row title="显示翻译" desc="后端返回 tlyric 时显示在原文下方">
+              <Switch
+                ariaLabel="显示歌词翻译"
+                checked={settings.lyricShowTranslation}
+                onChange={(checked) => void patch({ lyricShowTranslation: checked })}
+              />
+            </Row>
+            <Row title="显示罗马音" desc="后端返回 rlyric 时显示">
+              <Switch
+                ariaLabel="显示罗马音"
+                checked={settings.lyricShowRoman}
+                onChange={(checked) => void patch({ lyricShowRoman: checked })}
+              />
+            </Row>
+          </>
+        )}
       </Card>
     </>
   )
