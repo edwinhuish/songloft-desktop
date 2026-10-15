@@ -69,7 +69,10 @@ pnpm run audit            # 依赖安全公告（刻意不进 check 的必过路
 src/
 ├─ main/          Electron 主进程（Node 环境，唯一持有系统权限的地方）
 │  ├─ index.ts        生命周期、窗口创建、安全策略与 CSP、setDesktopName、userData 覆盖
-│  ├─ windows.ts      BrowserWindow 构造（contextIsolation / sandbox / nodeIntegration）+ 迷你窗几何
+│  ├─ windows.ts      BrowserWindow 构造（contextIsolation / sandbox / nodeIntegration）
+│  ├─ mini-window.ts  迷你播放器窗口：几何 / 两种身份（跟随者 | 宿主 → 本地文件会话）
+│  ├─ local-files.ts  本地文件的收件口（启动参数 / macOS open-file / 对话框；排队 + 摇铃）
+│  ├─ media-protocol.ts 本地文件的媒体协议 songloft-media://（按 Range 读字节）
 │  ├─ app-icon.ts     窗口图标定位（只对 X11 / Windows / macOS 有效；Wayland 那份传不出去）
 │  ├─ media-keys.ts   媒体键（globalShortcut 兜底；优先走 Media Session 自动映射）
 │  ├─ store.ts        本地持久化：设置 / 凭据 / 服务器列表（JSON，落在 userData）
@@ -87,12 +90,16 @@ src/
 │  ├─ lyric.ts        歌词四路合并 + 解析 + 当前行/逐字定位
 │  ├─ plugin.ts       JS 插件模型 / 排序纯函数 / 扩展页 URL 拼接 / PLUGIN_PARTITION
 │  ├─ data.ts         两份数据快照是否等价（页面切回时的静默刷新靠它）
+│  ├─ window-role.ts  「这个渲染进程是哪种窗口」的契约（主进程写 hash、渲染层读）
 │  ├─ version.ts      版本号比较（认不出来的写法一律判「不比它新」）
 │  └─ links.ts        对外 URL 常量（本仓库 / 上游）
 └─ renderer/       React 19 + zustand
    ├─ api/           client.ts（fetch 封装）/ endpoints.ts（端点清单，来自上游 Flutter 实现）/
    │                 plugins.ts（JS 插件：列表 / 启停 / 卸载 / 顺序 / 商店）
-   ├─ state/         useAuth / usePlayer / usePlaylists / useSettings / useUi / useToasts /
+   ├─ state/         useAuth / usePlayer（按窗口角色分流）/ usePlaylists / useSettings / useUi /
+   │                 useToasts / player-core（**播放核心**：音频 / 队列 / 歌词，与窗口形态无关）/
+   │                 remotePlayer（宿主的镜像）/ local-session（本地文件会话的启动编排）/
+   │                 media-commands（托盘 / 媒体键的命令，两个宿主窗口共用）/
    │                 usePlugins（已装扩展 + 顺序 + 运行时音频状态，唯一事实源）/
    │                 useLibrary（曲库数据的版本号 + 后台任务守望）
    ├─ pages/         10 个页面：Home / Library / Playlists / PlaylistDetail / Favorites /
@@ -104,7 +111,8 @@ src/
    │                 MiniPlayer / ExtensionFrame / PluginSurface / RegistrySourcesDialog / …
    ├─ hooks/         useSongList / usePlaylistSongs / useAsync / usePageActive /
    │                 useResponsiveSidebar / useHorizontalScroll
-   ├─ lib/           url / color / accent / format / concurrency / responsive / plugin-actions
+   ├─ lib/           url / color / accent / format / concurrency / responsive / plugin-actions /
+   │                 window-role（「我在哪个窗口里」+「我是不是宿主」）
    └─ styles/        tokens.css / base.css / components.css / index.css
 ```
 
@@ -124,6 +132,9 @@ src/
 3. **播放**走 `HTMLAudioElement` + **Media Session API**。Chromium 会把它自动映射成 Linux 的
    MPRIS / Windows 的 SMTC / macOS 的 Now Playing，**不需要**为每个平台写原生桥。
    键盘媒体键另走 `globalShortcut` 兜底。
+   ★ **谁在播**由**窗口角色**决定（`shared/window-role.ts`）：**宿主**（主窗口，或本地文件会话
+   里那个迷你窗）持有播放核心 `state/player-core.ts`，另一侧是它的镜像；`usePlayer.ts` 是那个
+   分流点。双击音频文件起的那一趟**没有主窗口**，详见 [`../AGENTS.md`](../AGENTS.md) 的 §8.17。
 4. **媒体地址带 `access_token` 查询参数**（`lib/url.ts`）：封面/音频是交给 `img` / `audio`
    直接请求的，走不了带 `Authorization` 头的 fetch 封装。
 5. **封面取主色由主进程代取字节**（`cover:extract`）：渲染层直接读跨域 `canvas` 会污染画布。

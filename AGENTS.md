@@ -102,6 +102,7 @@ src/
 ├─ main/          Electron 主进程（Node 环境，唯一持有系统权限的地方）
 │  ├─ index.ts        生命周期、窗口创建、安全策略与 CSP、setDesktopName、userData 覆盖
 │  ├─ windows.ts      BrowserWindow 构造（contextIsolation / sandbox / nodeIntegration）
+│  ├─ mini-window.ts  迷你播放器窗口：几何 / 两种身份（跟随者 | 宿主，见 §8.17）
 │  ├─ app-icon.ts     窗口图标定位（只对 X11 / Windows / macOS 生效；Wayland 见 §8.11）
 │  ├─ media-keys.ts   媒体键（globalShortcut 兜底；优先走 Media Session 自动映射）
 │  ├─ store.ts        本地持久化：设置 / 凭据 / 服务器列表（JSON，落在 userData）
@@ -123,12 +124,18 @@ src/
 │  ├─ local-file.ts   本地文件播放：路径 ↔ 可播放地址 ↔ Song 的换算 + Range 解析（§8.16）
 │  ├─ data.ts         两份数据快照是否等价（页面切回时的**静默刷新**靠它判断「要不要动界面」）
 │  ├─ metadata.ts     元数据缺口判定 / 「只补缺失」的合并 / 封面与标题的降级口径
+│  ├─ window-role.ts  「这个渲染进程是哪种窗口」的契约（主进程写 hash、渲染层读；见 §8.17）
 │  ├─ version.ts      版本号比较（认不出来的写法一律判「不比它新」，宁可少提示一次更新）
 │  └─ links.ts        对外 URL 常量（本仓库 / 上游）
 └─ renderer/       React 19 + zustand
    ├─ api/           client.ts（fetch 封装）/ endpoints.ts（端点清单，来自上游 Flutter 实现）/
    │                 plugins.ts（JS 插件：列表 / 启停 / 卸载 / 顺序 / 商店）
    ├─ state/         useAuth / usePlayer / usePlaylists / useSettings / useUi / useToasts /
+   │                 player-core（**播放核心**：音频 / 队列 / 歌词 / 音轨 —— 与窗口形态无关）/
+   │                 remotePlayer（宿主的镜像）/ usePlayer（按窗口角色分流，见 §8.17）/
+   │                 mini-host（宿主推快照 + 接遥控命令）/
+   │                 local-session（**本地文件会话**的启动编排：迷你宿主窗靠它起播，见 §8.17）/
+   │                 media-commands（托盘 / 媒体键的命令 —— 两个宿主窗口共用这一份）/
    │                 useLocalFiles（本地文件的收件箱：路径 → 队列，免登录也能用，见 §8.16）/
    │                 usePlugins（已装扩展 + 顺序 + 运行时音频状态，唯一事实源）/
    │                 useLibrary（曲库数据的版本号 + 后台任务守望，见 §5.7）/
@@ -151,6 +158,7 @@ src/
    │                 useHorizontalScroll（溢出时才出的横向滚动条）
    ├─ lib/           url（资源 URL 拼接）/ color / accent / format / concurrency /
    │                 responsive（断点判定，纯函数）/
+   │                 window-role（「我在哪个窗口里」+「我是不是宿主」，见 §8.17）/
    │                 plugin-actions（插件的停用 / 卸载 —— 确认与提示只有这一份，
    │                 将来再加入口别另写；lib/ 里唯一一个不是纯函数的）
    └─ styles/        tokens.css / base.css / components.css / index.css
@@ -219,14 +227,18 @@ src/
 * **迷你播放器**（底栏那颗按钮，`components/MiniPlayer.tsx` + `MiniApp.tsx`）：它是**另一个
   BrowserWindow**（`main/mini-window.ts`），主窗口一点都不动 —— 这也是它没有走 `surface`
   也没有走满窗播放那套「藏起来」的原因：它压根不在这个窗口里。
-  两边靠主进程中转：主窗口推**播放状态快照**过去（轻的一半跟进度走、重的一半带队列与歌词
-  和封面的 token），迷你窗把动作变成**遥控命令**发回来（`state/mini-host.ts` ↔
-  `state/remotePlayer.ts`）。播放的唯一事实源永远在主窗口（`state/localPlayer.ts`），
-  `state/usePlayer.ts` 因此是一个**分流器**：主窗口拿到真播放器、迷你窗拿到镜像 ——
-  于是 `Queue` / `LyricsView` 这些组件两边共用同一份实现。
+  ★ 这个窗口有两种**身份**（由 URL 的 hash 定，见 §8.17 与 `shared/window-role.ts`）：
+  · **跟随者**（普通会话）：主窗口推**播放状态快照**过来（轻的一半跟进度走、重的一半带队列与
+    歌词和封面的 token），它把动作变成**遥控命令**发回去（`state/mini-host.ts` ↔
+    `state/remotePlayer.ts`）；
+  · **宿主**（**本地文件会话**：双击音频文件起的那一趟，那里没有主窗口）：它**自己就是播放器**。
+  播放的核心（`state/player-core.ts`：音频 / 队列 / 歌词 / 音轨 / 音量）因此**不知道自己在哪个
+  窗口里**，`state/usePlayer.ts` 是一个**分流器** —— 谁当宿主谁拿到核心，另一侧拿到镜像。
+  于是 `Queue` / `LyricsView` 这些组件两边共用同一份实现，一个分支都不必分。
 
 新加播放相关的界面时照着这条走：读同一个 `usePlayer`、复用 `PlayerProgress`（"拖动期间只动
-本地 scrub、松手才 seek"只有那一份）与 `LyricsView`，别复制一份状态出去。
+本地 scrub、松手才 seek"只有那一份）与 `LyricsView`，别复制一份状态出去 —— 也**别在组件里读
+「当前是哪个窗口」**：那是 `usePlayer` 与 `lib/window-role` 的事。
 
 ---
 
@@ -636,7 +648,9 @@ Linux 的文件关联把路径追加在 argv 里）、macOS 的 `open-file` 事�
   Chromium 还在加载页面），此刻推过去的消息直接消失 —— 用户双击了文件却什么都没发生、也没有
   任何报错。所以主进程排队（`queuePaths`），渲染层开机取一次（`installLocalFileIntake` 里那次
   `takePending`）、之后每次收到摇铃再取；取走即清空，于是「早到晚到都只处理一次」。与
-  `miniIsOpen` 同一条理由。第二次启动的 argv 走 `second-instance`（单实例锁会拦下它）。
+  `miniIsOpen` 同一条理由。
+  ★ **摇铃必须送给「正在播放的那个窗口」**（`sendToHost()`）：双击文件起的那一趟里没有主窗口，
+  播放器在迷你窗手里（见 §8.17），写死主窗口的话第二个文件就掉了。
 * **「免登录」是独立的一位 `useAuth.guest`，不要往 `AuthStatus` 里再加一档。** status 答的是
   「与服务器现在是什么关系」，「不连服务器、只听本机文件」与它正交 —— 免登录进来之后照样可以
   再登录。于是「能不能进主界面」只在一处判断：`status === 'authenticated' || guest`（`App.tsx`）。
@@ -657,8 +671,57 @@ Linux 的文件关联把路径追加在 argv 里）、macOS 的 `open-file` 事�
   `pnpm run verify:package`（后者已断言条目里带 `audio/mpeg`）。
 * 这条链**不在 `pnpm run e2e` 里**（e2e 里没有可双击的文件）。要端到端验一遍，最省事的做法是
   把它当启动参数递进去：`SONGLOFT_USER_DATA=$(mktemp -d) electron . --no-sandbox <某个音频文件>`
-  —— 应当免登录直接落在「本地文件」页并出声；再用同一个 userData 起第二个进程带另一个文件，
-  应当转交给在跑的那个实例并接着播。
+  —— 应当**只有一条迷你播放器露面、没有主窗口**，并且直接出声（见 §8.17）；不带文件的普通启动
+  照旧是完整主界面。再从菜单 / 「本地文件」页挑文件时走的仍是**主界面**那条路（免登录 + 本地文件页）。
+
+---
+
+### 8.17 本地文件会话：那一趟里迷你窗**自己就是播放器**，而且没有主窗口
+
+「双击一个音频文件就开始放，而且**只**起一个迷你播放器、主播放器保持关闭且不可打开」——
+这一节的四件事就是它的落地。改任何一件之前先读这里：
+
+| 位置 | 事实 |
+|---|---|
+| `main/index.ts` 的 `localSession` | 判据 = argv 里有音频文件（Windows / Linux 的文件关联），或 macOS 那份 `open-file` 赶在 ready **之前**到了。命中就**不创建主窗口**，只 `openMiniWindow('mini-host')` |
+| `shared/window-role.ts` | 迷你窗的两种身份由 **URL hash** 定：`#mini`（跟随者）、`#mini-host`（宿主）。渲染层按它分流 |
+| `renderer/state/usePlayer.ts` | 分流器：宿主（主窗口 / 迷你宿主窗）拿到 `player-core`，跟随者拿到 `remotePlayer` |
+| `renderer/state/local-session.ts` | 宿主那一窗的启动编排：`primeAudio` + 系统媒体控件 + 托盘与媒体键的命令 + **取件即播** |
+
+* **这一趟刻意不抢单实例锁**（`const gotTheLock = launchFiles.length > 0 || app.requestSingleInstanceLock()`）：
+  双击第二个文件要的是**另起一个迷你播放器**，而不是把文件塞给在跑的那个主界面 —— 于是
+  「多实例」是**需求**，不是 bug，别顺手把锁加回来。反过来，普通启动照旧抢锁，「再点一次图标」
+  仍然只是把主窗口顶到前面；没抢到锁的进程要继续把 argv 交给在跑的那个实例（`second-instance`）。
+  macOS 上不成立：系统不会为一次双击另起进程，而是往已在跑的实例发 `open-file` —— 那一趟走的是
+  普通会话（文件加进当前界面），**不是**本地文件会话。
+* **「谁在播」只有一种判据：窗口角色，而且是加载那一刻定死的。** 别在渲染层问「主进程有没有
+  主窗口」（问不到，而且它答的是**此刻**），也别按「是不是迷你窗」来分 —— 迷你宿主窗的存在正是
+  为了打破那个二分。核心（`state/player-core.ts`）因此**不读任何窗口相关的东西**：
+  它要用到会话时只经 `resourceContext()` 问一句「现在拿得到地址和 token 吗」，拿不到就按没有
+  会话处理。
+* **主进程要送给「正在播放的那个窗口」的东西一律走 `sendToHost()`**：本地文件的摇铃
+  （`IPC.onLocalFilesPending`）与托盘 / 媒体键的命令（`IPC.onMediaCommand`）都算。写死
+  `sendToRenderer`（= 主窗口）的话，本地会话里「再双击一个文件」「托盘上按一下暂停」会静默地
+  掉进一个不存在的窗口 —— 点了没反应，也没有报错。
+* **关掉迷你条就退出应用**（`installMiniWindow` 的 `onOpenChanged(false)` 那一段）：那一趟里
+  它是唯一的界面，留着只剩一个看不见的进程（音频照放，除托盘外没有任何入口）。托盘里也**没有**
+  「显示 / 隐藏主窗口」那一项（`TrayDeps.windowItem` 返回 null）—— 摆一项只会把人引向一个永远
+  不会出现的窗口；点托盘图标是「把迷你条唤回来」。
+* **本地会话不许改写在线播放队列。** `player-core` 的持久化订阅有两道闸门：会话不是
+  `authenticated`、或**整队都是本机文件**（非空、却一首曲库的歌都没有）时，直接不写。
+  否则「听了两首本地文件」会把 `lastQueue` 抹成空，用户下次登录时上次的队列就没了 ——
+  这正是「本地播放列表的内容不该影响在线播放列表」那条需求的落点（另一半更彻底：
+  本地会话与主界面**根本不在一个进程里**，`useLocalFiles` 那份列表只活在宿主窗的内存里）。
+* 这一趟里**没有会话**：不 bootstrap、不碰凭据、不发业务请求（与跟随者同一条理由，见
+  `useAuth` 的 `mirroredMedia`）。所以条上的**收藏钮整个不出现**（收藏要走后端，摆一颗点了没
+  反应的钮比不摆更糟），「显示 / 收起歌词」那条媒体命令落在下方那块歌词面板上（那一窗没有抽屉）。
+* **多实例 ⇒ 落盘必须现读现改**（`store.ts` 的 `mutate`）：两个实例共享同一个 userData 目录，
+  若各持一份启动时的快照、每次整份写回，就会互相抹除 —— 症状是「我刚拖高的面板过一会儿自己
+  变回去了」「这边刚存下的队列被那边一次毫不相干的写入打回去」，而两次写入之间看不出任何关系。
+  于是每次写入都先从磁盘重读一份、只改自己那一个键。改 `store.ts` 时别把这条当成性能优化删掉。
+* 迷你窗还有一条与身份无关的兜底：渲染层**迟迟不报 ready**（页面压根没加载起来）时，
+  `LOAD_FALLBACK_MS` 一到就先把窗口亮出来。跟随者那一边这只是「条出来了」；本地会话里那一窗
+  是唯一的界面，藏起来就成了「双击了文件，什么都没有」。
 
 ---
 
@@ -697,6 +760,14 @@ Linux 的文件关联把路径追加在 argv 里）、macOS 的 `open-file` 事�
   免登录再往 `AuthStatus` 里加一档 —— 它是与 status 正交的一位。
 * 不要只靠 `onPending` 推来接手本地文件：那条通知可能早于渲染层就绪，文件会静默丢掉
   （见 8.16 的「排队 + 来取」）。
+* 不要把「送给播放器的那点东西」写死成主窗口：本地文件的摇铃与托盘 / 媒体键的命令一律走
+  `sendToHost()`（见 8.17）。
+* 不要在渲染层猜「我在哪个窗口」：角色由 URL hash 定（`shared/window-role.ts` +
+  `lib/window-role.ts`），而且**播放核心不许依赖它**（见 8.17）。
+* 不要让「本地播放」那两趟（免登录、本地文件会话）改写「上次队列」：那等于用本地播放列表的
+  内容覆盖在线播放列表，用户下次登录就发现队列没了（见 8.17）。
+* 不要给本地文件会话抢单实例锁，也别替它创建主窗口 —— 「主播放器不可打开」就是这么成立的
+  （见 8.17）。
 
 ---
 
@@ -708,6 +779,8 @@ Linux 的文件关联把路径追加在 argv 里）、macOS 的 `open-file` 事�
 **本地文件即播（桌面端独有）**：双击本机的音频文件（或菜单 / 「本地文件」页里挑）就开始放，
 **不需要登录、也不进曲库** —— 上游只有「后端扫描入库的本地文件」这一条路。装了包之后系统里
 「用 Songloft Desktop 打开」也归它（`fileAssociations`，见 §8.16）。
+★ 双击文件起的那一趟是**本地文件会话**：**只**起一个迷你播放器（它自己就是播放器），主界面
+压根不创建，本地文件那份播放列表也**不碰**在线播放列表（见 §8.17）。
 
 **JS 插件（扩展）**：已实现「列表 / 启用停用 / 卸载 / 上传 zip / 从商店安装 / 调整顺序 /
 批量更新 / 单插件更新（检查 + 下载）/ 常驻运行 / 清理残留数据」与「扩展主框架（插件商店 +
