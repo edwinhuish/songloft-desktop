@@ -46,13 +46,23 @@ export function AddToPlaylistDialog(): React.JSX.Element | null {
     close(null)
   }
 
+  /**
+   * 加入歌单。
+   *
+   * ★ 这里**刻意不做可用性预检**：不逐首去试「这首歌现在放不放得出来」，也不因此把谁拦下。
+   *   一首歌能不能播是**播放时**的问题（音源会过期、后台会转码、网盘可能临时抽风），
+   *   加进歌单只是记一条关系 —— 在这里预检的代价是「加 200 首要发 200 个探测请求」，
+   *   换来的却是把「现在恰好试不通」的歌挡在歌单外面（过一会儿它可能又好了）。
+   *   真放不出来时由播放器自己换音源、连换 3 次不行再跳下一首（见 state/localPlayer）。
+   *   后端也不预检：它只在返回里报 `skipped`（歌曲不存在 / 类型不适用于该歌单 / 已在歌单中）。
+   */
   const handleAdd = async (playlistId: number, name: string): Promise<void> => {
     setBusyId(playlistId)
     try {
       const result = await addSongs(playlistId, target)
       toast(
         result.skipped > 0
-          ? `已加入「${name}」${result.added} 首，跳过 ${result.skipped} 首（已在歌单中）`
+          ? `已加入「${name}」${result.added} 首，跳过 ${result.skipped} 首（已在歌单中或不适用于该歌单）`
           : `已加入「${name}」${result.added} 首`,
         'success'
       )

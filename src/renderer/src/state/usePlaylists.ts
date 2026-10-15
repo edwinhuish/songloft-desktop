@@ -189,6 +189,15 @@ export const usePlaylists = create<PlaylistState>((set, get) => ({
     }
   },
 
+  /**
+   * 往歌单里加歌。
+   *
+   * ★ 不做可用性预检：只把 id 交给后端，不逐首探测「能不能播」。能不能播是**播放时**的问题
+   *   （音源会过期、后台会转码、网盘会临时抽风），而加歌只是记一条关系 —— 预检会把「此刻
+   *   恰好试不通」的歌挡在歌单外，代价却是加 N 首发 N 个请求。放不出来时由播放器换源重试
+   *   （见 state/localPlayer 的 error 处理），连换 3 次不行才跳下一首。
+   *   后端的 `skipped` 是「歌曲不存在 / 类型不适用于该歌单 / 已在歌单中」，与能不能播无关。
+   */
   addSongs: async (id, songIds) => {
     const result = await addSongsToPlaylist(requireClient(), id, songIds)
     if (id === FAVORITE_PLAYLIST_ID) {
