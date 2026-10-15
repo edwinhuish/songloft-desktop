@@ -40,6 +40,7 @@ import { MODE_ICON, MODE_LABEL } from './play-mode'
 import { PlayerProgress } from './PlayerProgress'
 import { Cover, EmptyState, Slider } from './primitives'
 import { fallbackTitle, songCoverUrl } from '@shared/metadata'
+import { useNowPlayingStatus } from '@/hooks/useNowPlayingStatus'
 import { displayArtist, formatDuration } from '@/lib/format'
 import { buildCoverUrl } from '@/lib/url'
 import { resourceContext } from '@/state/useAuth'
@@ -78,6 +79,8 @@ export function FullPlayer(): React.JSX.Element {
   const hasTrackSwitch = player.tracks.length > 1
   /** 封面：后端出图缺了就退到原始音源封面（见 shared/metadata） */
   const coverUrl = songCoverUrl(song)
+  /** 歌手那一行的状态（放不出来 / 正在补齐元数据 / null），与底栏共用一份优先级 */
+  const status = useNowPlayingStatus(song, player.error)
 
   /*
    * 背景那张糊封面的地址。走 buildCoverUrl 而不是自己拼字符串：它认得「相对路径要带
@@ -139,9 +142,17 @@ export function FullPlayer(): React.JSX.Element {
 
           <div className="fullplayer-info">
             <div className="fullplayer-title">{fallbackTitle(song)}</div>
-            <div className="fullplayer-sub">
-              {displayArtist(song.artist)}
-              {song.album ? ` · ${song.album}` : ''}
+            {/*
+              歌手这一行兼作播放状态行（与底栏同一份优先级，见 hooks/useNowPlayingStatus）——
+              满窗播放会把底栏整个盖住，只在底栏报「放不出来」等于开着满窗就看不到。
+            */}
+            <div className="fullplayer-sub" data-state={player.error ? 'error' : undefined}>
+              {status ?? (
+                <>
+                  {displayArtist(song.artist)}
+                  {song.album ? ` · ${song.album}` : ''}
+                </>
+              )}
             </div>
             {/* 徽标与抽屉里「正在播放」那一份同源同序（见 components/Panel.tsx） */}
             <div className="fullplayer-badges">

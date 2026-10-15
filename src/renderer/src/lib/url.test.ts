@@ -8,7 +8,7 @@
  *   2. 追加参数用的是 `?` 还是 `&`（拼错就是给服务器发一个畸形路径）；
  *   3. 外链 CDN 的地址**不能**被我们改 query（可能带签名，改了直接失效）；
  *   4. `track` 与 `format` 不能同时出现（后端两个一起给会互相冲突）；
- *   5. 候选音源链的顺序与去重（播放失败时按它逐级换源，见 songUrlCandidates）。
+ *   5. 重试标记 `retry` 只在重试时出现（播放失败后重新要地址时绕开浏览器缓存复用）。
  *
  * 第 2 条就是写这批用例时暴露出来的：`buildCoverUrl` 在「同源绝对地址且原本没有 query」时
  * 会拼出 `http://host/c.jpg&w=96` —— 缺一个 `?`，`&w=96` 被当成路径的一部分。
@@ -22,7 +22,6 @@ import {
   buildLyricUrl,
   buildResourceUrl,
   buildSongUrl,
-  songUrlCandidates,
   transcodeFormatFor
 } from './url'
 
@@ -190,36 +189,19 @@ describe('buildSongUrl', () => {
   })
 })
 
-describe('songUrlCandidates', () => {
-  it('按「逐级退掉加工环节」的顺序给出候选', () => {
-    const urls = songUrlCandidates(song({ format: 'flac' }), ctx, {
-      quality: '320',
-      normalize: true
-    })
-    expect(urls).toHaveLength(3)
-    expect(urls[0]).toContain('quality=320')
-    expect(urls[0]).toContain('normalize=1')
-    // 第二档丢掉码率偏好，但还带着音量归一化
-    expect(urls[1]).not.toContain('quality=')
-    expect(urls[1]).toContain('normalize=1')
-    // 第三档连归一化也不走（那一步要 ffmpeg 读完整段音频，失败率最高）
-    expect(urls[2]).not.toContain('quality=')
-    expect(urls[2]).not.toContain('normalize=')
+describe('buildSongUrl 的重试标记', () => {
+  it('首次不带 retry（地址与以前完全一致）', () => {
+    expect(buildSongUrl(song(), ctx, { quality: '320' })).toBe(
+      `http://localhost:58091/api/v1/songs/1/audio?${TOKEN_QS}&quality=320`
+    )
+    expect(buildSongUrl(song(), ctx, { retry: 0 })).not.toContain('retry=')
   })
 
-  it('等价候选去重（用户本来就选原始质量又没开归一化时只剩一个）', () => {
-    const urls = songUrlCandidates(song(), ctx, { quality: 'original', normalize: false })
-    expect(urls).toHaveLength(1)
-  })
-
-  it('指定音轨时三个候选塌成一个 —— 重试同一个地址，不重复列举', () => {
-    const urls = songUrlCandidates(song({ format: 'wma' }), ctx, { track: 1 })
-    expect(urls).toHaveLength(1)
-    expect(urls[0]).toContain('track=1')
-    expect(urls[0]).not.toContain('format=')
-  })
-
-  it('压根没有可播地址时返回空数组（调用方据此直接报错，不必空试 3 次）', () => {
-    expect(songUrlCandidates(song({ url: null, source_url: null }), ctx)).toEqual([])
+  it('重试时地址不同（绕开浏览器对同一 URL 的缓存复用）', () => {
+    const first = buildSongUrl(song(), ctx)
+    const second = buildSongUrl(song(), ctx, { retry: 1 })
+    expect(second).not.toBe(first)
+    expect(second).toContain('retry=1')
+    expect(second).toContain('access_token=tok')
   })
 })

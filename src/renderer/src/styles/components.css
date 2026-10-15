@@ -840,6 +840,20 @@
 }
 
 /*
+ * 状态行（歌手那一行的两种特殊含义，见 PlayerBar 的 status）：
+ *   · error   —— 放不出来 / 正在重试：要让人**一眼看见**，所以用 danger 色而不是灰字；
+ *   · loading —— 正在补齐元数据：只是暂时不知道，用链接色（可点击感）而不是警告色。
+ * 两者都保留 12px 与单行截断：这一行高度固定，换字号会让整条底栏跟着跳。
+ */
+.playerbar-artist[data-state='error'] {
+  color: var(--danger);
+}
+
+.playerbar-artist[data-state='loading'] {
+  color: var(--accent);
+}
+
+/*
  * 底栏上的图标钮比全局那 32px 大一档（38px）。
  * 里面那几颗图标已经放大到 1.5 倍（16→24 / 17→26 / 19→28，见 components/PlayerBar.tsx），
  * 钮不跟着长的话字形会顶到悬浮底色（那层底色就是这颗钮的尺寸）的边上。
@@ -1037,6 +1051,11 @@
   margin-top: 6px;
   font-size: 13.5px;
   color: var(--text-2);
+}
+
+/* 这一行也兼作播放状态行：放不出来时用 danger 色（与底栏 `.playerbar-artist` 同一套口径） */
+.fullplayer-sub[data-state='error'] {
+  color: var(--danger);
 }
 
 .fullplayer-badges {

@@ -9,7 +9,8 @@
 
 import { useMemo, useState } from 'react'
 
-import { filled, fallbackTitle, songCoverUrl } from '@shared/metadata'
+import { fallbackTitle, songCoverUrl } from '@shared/metadata'
+import { useNowPlayingStatus } from '@/hooks/useNowPlayingStatus'
 import {
   IconHeart,
   IconLyrics,
@@ -28,7 +29,6 @@ import { Cover, Slider } from './primitives'
 import { displayArtist, formatDuration } from '@/lib/format'
 import { usePlayer } from '@/state/usePlayer'
 import { usePlaylists } from '@/state/usePlaylists'
-import { useSongMetadata } from '@/state/song-metadata'
 import { useUi } from '@/state/useUi'
 
 /**
@@ -69,17 +69,13 @@ export function PlayerBar(): React.JSX.Element {
   const hasTrackSwitch = player.tracks.length > 1
 
   /*
-   * 元数据补齐中的加载提示（见 state/song-metadata）。
+   * 歌手那一行兼作**播放状态行**（优先级见 hooks/useNowPlayingStatus）：
+   * 放不出来时它就是错误信息，正在补齐元数据时它说「正在获取歌曲信息…」，正常时才是歌手名。
    *
-   * 只在**真的缺东西**时才说话：库里绝大多数歌的信息是齐的，补齐也不会为它们发请求，
-   * 若不管三七二十一都显示一句「正在获取…」，等于给每次起播都加一次没有意义的闪动。
-   * 提示落在歌手那一行（原本显示「未知歌手」的位置）—— 那正是此刻还不知道的东西。
+   * ★ 播放失败**刻意不走 toast**：音源成片失效时 toast 会一首歌弹三条、堆满一屏，把错误本身
+   *   挤没（改之前就是这样）。底栏这一行一直在用户眼前，位置固定、不遮挡、也不会互相盖掉。
    */
-  const patchingMetadata = useSongMetadata(
-    (s) => s.patching && (song ? s.patchingSongId === song.id : false)
-  )
-  const awaitingMetadata =
-    song != null && patchingMetadata && (!filled(song.title) || !filled(song.artist))
+  const status = useNowPlayingStatus(song, player.error)
 
   return (
     <footer className="playerbar">
@@ -113,12 +109,17 @@ export function PlayerBar(): React.JSX.Element {
         <div style={{ minWidth: 0 }}>
           {/* 标题兜底：元数据里没有标题时用文件名，再没有才说「未知歌曲」 */}
           <div className="playerbar-title truncate">{fallbackTitle(song)}</div>
-          <div className="playerbar-artist truncate">
-            {awaitingMetadata
-              ? '正在获取歌曲信息…'
-              : song
-                ? displayArtist(song.artist)
-                : '从曲库选一首开始播放'}
+          {/*
+            歌手那一行兼作**播放状态行**（见上面 status 的说明）：放不出来时它就是错误信息，
+            正常时才是歌手名。`data-state` 只负责上色（错误主题色），文案本身已经说清了事。
+            错误时提示「点播放键重试」——底栏那颗播放键已经把「再试一次」接在这个语义上了。
+          */}
+          <div
+            className="playerbar-artist truncate"
+            data-state={player.error ? 'error' : status ? 'loading' : undefined}
+            data-tip={player.error ? `${player.error}（点中间的播放键重试）` : undefined}
+          >
+            {status ?? (song ? displayArtist(song.artist) : '从曲库选一首开始播放')}
           </div>
         </div>
         {song ? (

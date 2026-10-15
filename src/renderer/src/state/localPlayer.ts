@@ -8,9 +8,11 @@
  * 一个模块级的 `HTMLAudioElement` + zustand 状态，刻意不用 React 的 ref：
  * 切歌、切页面、抽屉开关都不该重建音频元素（重建 = 断流 + 丢失缓冲）。
  *
- * ★ 播放失败不是「立刻跳下一首」，而是先**换音源**重试：坏源里有一大半是加工环节的问题
- *   （降码率转码、老格式转码、ffmpeg 音量归一化），换个取法往往就能出声。逐级退让的候选链
- *   在 lib/url.ts 的 songUrlCandidates；试满 MAX_SOURCE_ATTEMPTS 次仍不行才跳到下一首。
+ * ★ 播放失败不是「立刻跳下一首」，而是**重新向后端要一次地址**（重新解析 / 重新找源）：
+ *   坏的是那个**音源**，而找别的音源只有后端做得到（它才有插件、才有跨插件搜索）。客户端
+ *   在这里只做三件事 —— 等一小会儿（给后端重新解析与后台换源留时间）、换一个带 `retry` 的
+ *   地址（绕开浏览器缓存复用）、把话说在**播放条上**而不是弹 toast。试满 MAX_PLAY_ATTEMPTS
+ *   次仍不出声才跳到下一首，详见 handlePlaybackFailure。
  * ★ 元数据（封面 / 歌词 / 歌手 / 歌名）缺失的补齐**不在这个文件里**：它跟播放没有耦合
  *   （补齐到达时只换队列里那一个对象，不碰 audio），见 state/song-metadata.ts。
  *
@@ -30,11 +32,10 @@ import { getLyric, getSong, reportPlayed } from '@/api/endpoints'
 import { fetchCoverAccentFor } from '@/lib/accent'
 import { parseLyrics, type ParsedLyric } from '@shared/lyric'
 import { songCoverUrl } from '@shared/metadata'
-import { buildCoverUrl, buildSongUrl, MAX_SOURCE_ATTEMPTS, songUrlCandidates } from '@/lib/url'
+import { buildCoverUrl, buildSongUrl } from '@/lib/url'
 import { displayArtist } from '@/lib/format'
 import { requireClient, resourceContext } from './useAuth'
 import { useSettings } from './useSettings'
-import { useToasts } from './useToasts'
 
 const EMPTY_LYRIC: ParsedLyric = { lines: [], synced: false, meta: {}, offset: 0 }
 
@@ -212,49 +213,109 @@ function scheduleVolumePersist(volume: number, immediate = false): void {
 /* ─────────────────────── store ─────────────────────── */
 
 /*
- * 换源的记账（模块级，不进 store）：
+ * 重试的记账（模块级，不进 store）：
  *
- *   · `currentAttempt` —— 这一首已经试到第几个音源了（0 = 首选）。error 事件是**只注册一次**的，
- *     它要读的正是「此刻正在试第几个」；
- *   · `expectedSrc` —— 此刻期望在放哪一个地址。换源时旧地址的 error 可能迟到（浏览器对
+ *   · `currentAttempt` —— 这一首已经试到第几次了（0 = 首次）。error 事件是**只注册一次**的，
+ *     它要读的正是「此刻正在试第几次」；
+ *   · `expectedSrc` —— 此刻期望在放哪一个地址。重试时旧地址的 error 可能迟到（浏览器对
  *     「换了 src 之后旧资源报错」没有约定），拿它做闸门，免得把旧地址的失败算到新地址头上
- *     ——那会表现为「刚换到备用音源就立刻又换」（连换两次、白白跳过一首）；
- *   · `requestedTrack` —— 用户点「伴奏」选中的那条音轨。换源重试要**停在这条轨上**，不能
+ *     ——那会表现为「刚换到新地址就立刻又重试一次」（连跳两次、白白跳掉一首）；
+ *   · `requestedTrack` —— 用户点「伴奏」选中的那条音轨。重试要**停在这条轨上**，不能
  *     悄悄退回原唱；undefined = 交给后端决定默认轨（换一首歌就归位）。
- *   · `accountedSong` —— 这一次收听（首次尝试 + 它的所有重试）已经记过账了没有。换源重试
- *     会重跑一遍 startSong 的成功路径，不拦一下的话一次收听会往服务端报 2~3 次播放。
+ *   · `accountedSong` —— 这一次收听（首次 + 它的所有重试）已经记过账了没有。重试会重跑一遍
+ *     startSong 的成功路径，不拦一下的话一次收听会往服务端报 2~3 次播放。
+ *   · `consecutiveFailures` —— 连续几首「试满仍不出声」。整个队列轮一遍都是 0 成功时，说明
+ *     不是某首歌的问题（后端不可达 / 音源全挂），继续自动往下跳只会把队列刷完、把错误刷掉。
+ *   · `retryTimer` —— 等待重试的那一下。换歌 / 清队列要把它撤掉，否则会往新歌头上补一刀。
  */
 let currentAttempt = 0
 let expectedSrc = ''
 let requestedTrack: number | undefined
 let accountedSong = -1
+let consecutiveFailures = 0
+let retryTimer: number | null = null
+
+/**
+ * 一次收听最多试几次（首次 + 重试），试满就跳到下一首。
+ *
+ * ★ 「连换 3 次都不行就跳下一首」在本应用里的落点：**总共 3 次**。因为每次重试都要等后端
+ *   重新解析 / 重新找源（见 RETRY_DELAYS_MS），再多试只是让用户多等一轮没有结果的加载。
+ */
+const MAX_PLAY_ATTEMPTS = 3
+
+/**
+ * 失败后等多久再重新要一次地址（第 1、2 次重试）。
+ *
+ * ★ 空等是**必要的**，这不是「再拉一遍」：每次向后端要地址，后端都会**重新解析音源**
+ *   （主源直链 + 插件内自搜），解析失败还会在后台起一个「换源」任务（跨插件联网找源、落盘、
+ *   回写 source_data，预算 60s）—— 立刻重发只会拿到同一份失败，白烧一次请求。
+ * ★ 首档短（1.2s）：音源直链过期时重新解析是毫秒级的，不该让用户干等。
+ * ★ 网络歌曲给两档、本地歌曲只给一档：本地文件没有「别的源」可找，重试一次只是确认它不是
+ *   瞬时 IO / 转码抖动（见 localRetryDelayMs）。
+ */
+const RETRY_DELAYS_MS = [1200, 6000]
+const LOCAL_RETRY_DELAY_MS = 800
+
+/** 本地歌曲的最多尝试次数：没有别的源可搜，重试一次就够了 */
+const MAX_LOCAL_PLAY_ATTEMPTS = 2
+
+/**
+ * 连续几首「试满仍不出声」就停下自动跳过。
+ *
+ * ★ 判据刻意**不是**「等于队列长度」：几百首的曲库在后端不可达时会变成几百轮「等 7 秒 → 放弃」，
+ *   那是按小时计的原地打转。连续 5 首都试满（每首 3 次尝试 + 退避）已经花了半分钟没有任何声音，
+ *   足够断定不是某一首歌的源坏了。
+ */
+const MAX_CONSECUTIVE_FAILURES = 5
+
+function clearRetryTimer(): void {
+  if (retryTimer !== null) {
+    window.clearTimeout(retryTimer)
+    retryTimer = null
+  }
+}
+
+/** `MediaError.code` → 一句能放在播放条上短话（底栏那一行放不下完整原因） */
+function describeMediaError(code: number | undefined): string {
+  switch (code) {
+    case 2:
+      return '网络中断'
+    case 3:
+      return '音频无法解码'
+    case 4:
+      return '源不可用或无法解码'
+    default:
+      return '资源加载失败'
+  }
+}
 
 export const localPlayer = create<PlayerState>((set, get) => {
   /**
    * 真正把某首歌灌进 audio 元素。
    *
-   * `attempt` 是「同一首歌第几次试」（0 = 首选音源）。播放失败时由 error 处理逐级调上来
-   * （见下面那段），到 MAX_SOURCE_ATTEMPTS 还没出声才跳到下一首。
+   * `attempt` 是「同一首歌第几次试」（0 = 首次）。播放失败时由 error 处理延时调上来
+   * （见下面那段），试满 MAX_PLAY_ATTEMPTS 还没出声才跳到下一首。
    */
   async function startSong(song: Song, ctx: PlaybackContext | null, attempt = 0): Promise<void> {
     const settings = useSettings.getState().settings
+    clearRetryTimer()
     // 首次尝试 = 一次新的收听：上一首选的音轨、上一次的记账都在这时归位
     if (attempt === 0) {
       requestedTrack = undefined
       accountedSong = -1
     }
-    const candidates = songUrlCandidates(song, resourceContext(), {
+    const url = buildSongUrl(song, resourceContext(), {
       quality: settings.quality,
       normalize: settings.volumeNormalize,
-      track: requestedTrack
+      track: requestedTrack,
+      // 重试时换一个地址：绕开浏览器对同一 URL 的缓存复用，确保真的重新去后端解析一次
+      retry: attempt
     })
-    if (candidates.length === 0) {
+    if (!url) {
       set({ error: '这首歌没有可播放的地址', buffering: false, playing: false })
       return
     }
 
-    // 候选比尝试次数少时就停在最后一个上重试（同一个地址再拉一遍，扛瞬时抖动）
-    const url = candidates[Math.min(attempt, candidates.length - 1)]
     currentAttempt = attempt
 
     set({
@@ -277,26 +338,28 @@ export const localPlayer = create<PlayerState>((set, get) => {
     try {
       await audio.play()
     } catch (error) {
-      set({ buffering: false, playing: false })
       const message = error instanceof Error ? error.message : String(error)
       /*
        * NotAllowedError 只会在「没有用户手势」时出现，属于程序问题而非资源问题 ——
-       * 这一条**不换源**（换个地址照样会被拦），也不该把它算进尝试次数里。
+       * 这一条**不重试**（换个地址照样会被拦），也不该把它算进尝试次数里。
        */
-      set({
-        error: message.includes('NotAllowed')
-          ? '浏览器阻止了自动播放，请点一下播放按钮'
-          : `播放失败：${message}`
-      })
+      if (message.includes('NotAllowed')) {
+        set({ buffering: false, playing: false, error: '浏览器阻止了自动播放，请点一下播放按钮' })
+        return
+      }
+      // 其余 play() 失败与 error 事件同路：都可能是「这个源不行」，交给同一套判定
+      handlePlaybackFailure(song, '资源加载失败')
       return
     }
 
     /*
-     * 播放成功后才记账 —— 且一次收听只记一次：首次音源失败、第二个才出声时，成功的是
-     * 第二次调用，账要记在这一次上；反过来，能出声之后又换源（不该发生，但真发生了也别重复报）。
+     * 播放成功后才记账 —— 且一次收听只记一次：首次失败、重试才出声时，成功的是第二次调用，
+     * 账要记在这一次上；反过来，能出声之后又重试（不该发生，但真发生了也别重复报）。
      */
     if (accountedSong !== song.id) {
       accountedSong = song.id
+      // 真出声了就说明这一轮不是「整条路都断了」，连续失败的计数重新开始
+      consecutiveFailures = 0
       void reportPlayed(requireClient(), song.id, { type: 'play', context: ctx }).catch(
         () => undefined
       )
@@ -342,12 +405,73 @@ export const localPlayer = create<PlayerState>((set, get) => {
       .catch(() => set({ tracks: [], activeTrack: -1 }))
   }
 
-  /** 按 order 前进/后退，返回是否成功移动游标 */
-  async function step(direction: 1 | -1, auto: boolean): Promise<void> {
+  /**
+   * 播放失败时的统一判定：还能再试就等一会儿**重新向后端要一次地址**，试满就跳到下一首。
+   *
+   * ★ 提示一律落在**播放控制栏的歌手位置**（PlayerBar 读这里的 `error`），**不发 toast**：
+   *   音源成片失效时 toast 会一屏一屏地堆（一首歌就三条），把用户真正要看的那句话挤没；
+   *   而底栏那一行本来就一直在眼前，还能顺手把「正在联网找源」和「放不出来」说清楚。
+   * ★ 重试是**重新解析**而不是「同一个地址再拉一遍」：找别的音源只有后端做得到（它才有插件、
+   *   才有跨插件搜索），客户端能做的就是重新要一次地址，`retry` 参数保证这次请求不被浏览器缓存吃掉。
+   */
+  function handlePlaybackFailure(song: Song, detail: string): void {
+    const isLocal = song.type === 'local'
+    const nextAttempt = currentAttempt + 1
+    const maxAttempts = isLocal ? MAX_LOCAL_PLAY_ATTEMPTS : MAX_PLAY_ATTEMPTS
+
+    if (nextAttempt < maxAttempts) {
+      const delay = isLocal
+        ? LOCAL_RETRY_DELAY_MS
+        : (RETRY_DELAYS_MS[Math.min(currentAttempt, RETRY_DELAYS_MS.length - 1)] ?? 1000)
+      set({
+        buffering: false,
+        playing: false,
+        // 「重试」与「联网找源」是两件事：本地文件没有别的源可找，别给它安一个不存在的动作
+        error: isLocal ? '无法播放，正在重试…' : '无法播放，正在联网搜索其他音源…'
+      })
+      clearRetryTimer()
+      retryTimer = window.setTimeout(() => {
+        retryTimer = null
+        // 等待期间换了歌 / 清了队列：这一刀不该补到别人头上
+        if (get().currentSong()?.id !== song.id) return
+        void startSong(song, get().context, nextAttempt)
+      }, delay)
+      return
+    }
+
+    consecutiveFailures += 1
+    set({ buffering: false, playing: false, error: `无法播放：${detail}` })
+
+    if (get().order.length <= 1) return
+
+    if (consecutiveFailures >= Math.min(get().order.length, MAX_CONSECUTIVE_FAILURES)) {
+      /*
+       * 连着好几首都试满了还是不出声 —— 这不是「某首歌的源坏了」，而是整条路都断了
+       * （后端不可达 / 音源配置全失效）。继续自动往下跳只会一首首地等、把错误也一起刷掉，
+       * 用户只看到界面自己跳个不停。停下来，把这一句留在底栏上。
+       */
+      set({ error: `无法播放：${detail}；已连续多首放不出来，暂停自动跳过（点播放键可重试）` })
+      return
+    }
+    // force：单曲循环下也要真的换一首，否则坏源会在原地无限重放（见 step 的说明）
+    void step(1, true, true)
+  }
+
+  /**
+   * 按 order 前进/后退，返回是否成功移动游标。
+   *
+   * `force` 只给「这首歌放不出来」那条路用：单曲循环下（single + auto）它必须**真的换一首**，
+   * 而 step 平时在那种模式下的语义是「把当前这首从头再放一遍」—— 对一首放不出来的歌，
+   * 那等于原地打转。
+   */
+  async function step(direction: 1 | -1, auto: boolean, force = false): Promise<void> {
     const { order, cursor, queue, playMode } = get()
     if (order.length === 0) return
 
-    if (playMode === 'single' && auto) {
+    // 用户自己点的上一首/下一首：这一下不算「自动跳」，连续失败的计数重新开始
+    if (!auto) consecutiveFailures = 0
+
+    if (playMode === 'single' && auto && !force) {
       audio.currentTime = 0
       await audio.play().catch(() => undefined)
       return
@@ -392,38 +516,12 @@ export const localPlayer = create<PlayerState>((set, get) => {
     void step(1, true)
   })
   audio.addEventListener('error', () => {
-    // 换源时旧地址的失败会迟到：只认「此刻期望在放的那一个」（见 expectedSrc 的说明）
+    // 重试时旧地址的失败会迟到：只认「此刻期望在放的那一个」（见 expectedSrc 的说明）
     if (expectedSrc && audio.src !== expectedSrc) return
 
     const song = get().currentSong()
     if (!song) return
-    const code = audio.error?.code
-    const detail =
-      code === 4
-        ? '无法解码或源不可用（后端可能需要转码，或直链已失效）'
-        : code === 2
-          ? '网络中断'
-          : '资源加载失败'
-
-    /*
-     * ▸ 换源：同一首歌的失败多半出在「加工环节」而不是文件本身（降码率转码、老格式转码、
-     *   EBU R128 音量归一化都要动 ffmpeg）。候选链逐级退掉这些环节（见 songUrlCandidates），
-     *   所以这里不是「原样重试」而是「换一个取法再试」。
-     * ▸ 连试 MAX_SOURCE_ATTEMPTS 个音源仍不出声 → 才认账并跳到下一首：坏源不该把队列卡死。
-     */
-    const nextAttempt = currentAttempt + 1
-    if (nextAttempt < MAX_SOURCE_ATTEMPTS) {
-      useToasts
-        .getState()
-        .push(`播放失败，换用备用音源重试（第 ${nextAttempt + 1} 次）`, 'info', detail)
-      void startSong(song, get().context, nextAttempt)
-      return
-    }
-
-    set({ buffering: false, playing: false, error: `${song.title}：${detail}` })
-    useToasts.getState().push('播放失败，已跳到下一首', 'error', detail)
-    // 尝试次数在切歌时由 startSong 归零，这里不必手动清
-    if (get().order.length > 1) void step(1, true)
+    handlePlaybackFailure(song, describeMediaError(audio.error?.code))
   })
 
   return {
@@ -453,6 +551,8 @@ export const localPlayer = create<PlayerState>((set, get) => {
 
     playSongs: async (songs, startIndex = 0, context = null) => {
       if (songs.length === 0) return
+      // 用户挑的歌单/歌曲：这是一轮新的播放，接着上一轮「全放不出来」的账不该算到它头上
+      consecutiveFailures = 0
       const mode = get().playMode
       const order =
         mode === 'random' ? shuffleIndices(songs.length, startIndex) : identityOrder(songs.length)
@@ -470,13 +570,24 @@ export const localPlayer = create<PlayerState>((set, get) => {
         // 队列空：让调用方决定放什么，这里只提示
         return
       }
-      if (audio.paused) {
-        await audio.play().catch((error: unknown) => {
-          set({ error: error instanceof Error ? error.message : '播放失败' })
-        })
-      } else {
+      if (!audio.paused) {
         audio.pause()
+        return
       }
+      /*
+       * 上一轮已经放不出来（底栏还挂着那句错误）时，这一下「播放」应当被理解成**再试一次这首歌**
+       * —— 重新向后端要地址（重新解析 / 重新找源），而不是拿同一个旧地址再拉一遍。
+       * 计数归零，于是它又享有完整的一轮重试；用户手点一下也算「不是自动跳」。
+       */
+      const song = get().currentSong()
+      if (get().error && song) {
+        consecutiveFailures = 0
+        await startSong(song, get().context, 0)
+        return
+      }
+      await audio.play().catch((error: unknown) => {
+        set({ error: error instanceof Error ? error.message : '播放失败' })
+      })
     },
 
     pause: () => audio.pause(),
@@ -626,11 +737,13 @@ export const localPlayer = create<PlayerState>((set, get) => {
     clearQueue: () => {
       audio.pause()
       audio.removeAttribute('src')
+      clearRetryTimer()
       // 队列清空后没有「期望地址」了：留着旧值会让下一首的 error 被误判成迟到的旧错误
       expectedSrc = ''
       currentAttempt = 0
       requestedTrack = undefined
       accountedSong = -1
+      consecutiveFailures = 0
       set({
         queue: [],
         order: [],
@@ -647,6 +760,9 @@ export const localPlayer = create<PlayerState>((set, get) => {
       const { queue, order, context } = get()
       const cursor = order.indexOf(index)
       if (cursor < 0) return
+      // 用户自己点的：撤掉待执行的自动重试，连续失败的账也不带过去
+      clearRetryTimer()
+      consecutiveFailures = 0
       set({ cursor })
       const song = queue[index]
       if (song) await startSong(song, context)
