@@ -145,14 +145,18 @@ const ACCENT_PRESETS = ['#7c5cff', '#22a7d6', '#ee5a8a', '#f08a3c', '#3fb27f', '
 /**
  * 免登录模式（useAuth 的 guest）下**整节**都收掉的分区。
  *
- * ★ 判据是「这一节里有没有本机内容」：曲库与扫描那一节的每一行都是服务端设置（逐行标了
- *   `server`，见下面各处的 Row），没有会话时既改不动也没什么可看。收掉整个分区，而不是让人
- *   点进去看一页空的 —— 与侧栏、标题栏那份菜单同一口径：不摆出来，而不是灰掉
- *   （见 Sidebar.tsx 里 guest 那一段）。
- * ★ 其余几节在免登录下仍有本机内容（外观 / 播放与歌词 / 本机缓存 / 网络里的证书开关 /
- *   快捷键 / 关于），所以整节留着，由 Row 把带「服务端」徽标的行逐行抽掉。
+ * ★ 判据是「这一节里有没有本机内容」，而不是「有没有服务端内容」：
+ *   · `library`（曲库与扫描）—— 每一行都是服务端设置（逐行标了 `server`）
+ *   · `network`（网络设置）—— 代理那张卡是服务端的；「忽略 SSL 证书校验」虽是本机偏好，
+ *     但它管的是**与服务器之间**的连接，没有服务器时无从谈起
+ *   · `account`（账号）—— 通篇是「连了哪台服务器、以谁登录」
+ *   收掉整个分区，而不是让人点进去看一页空的 —— 与侧栏、标题栏那份菜单同一口径：
+ *   不摆出来，而不是灰掉（见 Sidebar.tsx 里 guest 那一段）。
+ * ★ 其余分区留着：里面还有本机内容（外观 / 播放与歌词 / 本机缓存 / 快捷键 / 关于与更新），
+ *   由 Row 把带「服务端」徽标的行逐行抽掉，两处**不是**服务端设置、但离不开服务器的
+ *   （服务端更新、后端版本）在各自那里单独收掉。
  */
-const HIDDEN_WHEN_GUEST: readonly SettingsSection[] = ['library']
+const HIDDEN_WHEN_GUEST: readonly SettingsSection[] = ['library', 'network', 'account']
 
 export function SettingsPage({ section }: { section: SettingsSection }): React.JSX.Element {
   const navigate = useUi((s) => s.navigate)
@@ -208,12 +212,7 @@ export function SettingsPage({ section }: { section: SettingsSection }): React.J
               <LocalCacheSettings />
             </>
           ) : null}
-          {active === 'network' ? (
-            <>
-              {guest ? null : <ProxySettings />}
-              <SecuritySettings />
-            </>
-          ) : null}
+          {active === 'network' ? <NetworkSettings /> : null}
           {active === 'data' ? <DataSettings /> : null}
           {active === 'account' ? <AccountSettings /> : null}
           {active === 'shortcuts' ? <ShortcutsSettings /> : null}
@@ -2433,14 +2432,13 @@ function LocalCacheSettings(): React.JSX.Element {
 /* ───────────────────────────── 网络设置 ───────────────────────────── */
 
 /**
- * 代理（服务端设置）。
+ * 网络设置。**整节都是服务端侧的**，所以免登录时整个分区从导航里撤掉（见 HIDDEN_WHEN_GUEST）。
  *
- * ★ 与「安全」拆成两个组件，而不是像原来那样摆在同一页：这一整张卡的每一项都是服务端设置，
- *   没有会话时不仅没内容可改，四个读请求还会照发（`requireClient()` 是同步抛的，抛在
- *   `useAsync` 的 effect 里会掀掉整棵组件树）。免登录时由 SettingsPage 把这一块整个摘掉，
- *   「安全」那一项是本机偏好（证书校验开关），照旧留着。
+ * 代理那张卡自不必说；「忽略 SSL 证书校验」虽然是写在本机设置里的偏好，但它管的是**与服务器
+ * 之间**的连接 —— 一台服务器都没连的时候，这一项无从谈起。
  */
-function ProxySettings(): React.JSX.Element {
+function NetworkSettings(): React.JSX.Element {
+  const { settings, patch } = useSettings()
   const httpProxy = useAsync(() => getHttpProxy(requireClient()), [])
   const githubProxy = useAsync(() => getGithubProxy(requireClient()), [])
   const allowlist = useAsync(() => getProxyAllowlist(requireClient()), [])
@@ -2542,6 +2540,28 @@ function ProxySettings(): React.JSX.Element {
         </Row>
       </Card>
 
+      <Card title="安全">
+        <Row
+          title="忽略 SSL 证书校验"
+          desc="自签证书或内网证书才需要打开。开启后任何证书都会被接受，中间人能读到与服务器之间的全部内容"
+        >
+          <Switch
+            ariaLabel="忽略 SSL 证书校验"
+            checked={settings.allowInsecureTls}
+            onChange={(checked) => {
+              if (
+                checked &&
+                !window.confirm(
+                  '开启后不再校验服务器证书：中间人可以读到你的登录凭据与所有请求内容。确定继续？'
+                )
+              )
+                return
+              void patch({ allowInsecureTls: checked })
+            }}
+          />
+        </Row>
+      </Card>
+
       {editing === 'http' || editing === 'github' ? (
         <TextPromptModal
           title={editing === 'http' ? 'HTTP 代理' : 'GitHub 加速代理'}
@@ -2567,40 +2587,6 @@ function ProxySettings(): React.JSX.Element {
         />
       ) : null}
     </>
-  )
-}
-
-/**
- * 安全（本机偏好）。
- *
- * 只有「忽略 SSL 证书校验」一项：它写在本机的设置里（不是服务端配置），所以与代理那张卡
- * 分开 —— 免登录时这一项照旧在，代理那一张不在（见 SettingsPage 的 network 分支）。
- */
-function SecuritySettings(): React.JSX.Element {
-  const { settings, patch } = useSettings()
-
-  return (
-    <Card title="安全">
-      <Row
-        title="忽略 SSL 证书校验"
-        desc="自签证书或内网证书才需要打开。开启后任何证书都会被接受，中间人能读到与服务器之间的全部内容"
-      >
-        <Switch
-          ariaLabel="忽略 SSL 证书校验"
-          checked={settings.allowInsecureTls}
-          onChange={(checked) => {
-            if (
-              checked &&
-              !window.confirm(
-                '开启后不再校验服务器证书：中间人可以读到你的登录凭据与所有请求内容。确定继续？'
-              )
-            )
-              return
-            void patch({ allowInsecureTls: checked })
-          }}
-        />
-      </Row>
-    </Card>
   )
 }
 
@@ -3067,6 +3053,7 @@ function AboutSettings(): React.JSX.Element {
   const { backendVersion, guest } = useAuth()
   const info = useAsync<AppInfo>(() => window.songloft.app.info(), [])
 
+  /** 运行信息。**「后端版本」不在这里** —— 它要有后端才有得报，免登录时单独收掉（见下面） */
   const rows: [string, string][] = info.data
     ? [
         ['应用版本', formatVersion(info.data.version)],
@@ -3077,8 +3064,7 @@ function AboutSettings(): React.JSX.Element {
         [
           '运行方式',
           info.data.packaged ? (info.data.appImage ? 'AppImage' : '已安装包') : '开发模式'
-        ],
-        ['后端版本', formatVersion(backendVersion)]
+        ]
       ]
     : []
 
@@ -3115,11 +3101,26 @@ function AboutSettings(): React.JSX.Element {
             <IconLoader size={16} />
           </Row>
         ) : (
-          rows.map(([label, value]) => (
-            <Row key={label} title={label} desc={<span className="mono selectable">{value}</span>}>
-              <span />
-            </Row>
-          ))
+          <>
+            {rows.map(([label, value]) => (
+              <Row
+                key={label}
+                title={label}
+                desc={<span className="mono selectable">{value}</span>}
+              >
+                <span />
+              </Row>
+            ))}
+            {/* 后端版本：要有后端才有得报。它不是服务端「设置」（不打徽标），所以在这里单独收掉 */}
+            {guest ? null : (
+              <Row
+                title="后端版本"
+                desc={<span className="mono selectable">{formatVersion(backendVersion)}</span>}
+              >
+                <span />
+              </Row>
+            )}
+          </>
         )}
       </Card>
     </>
@@ -3135,25 +3136,29 @@ function AboutSettings(): React.JSX.Element {
  */
 function UpdateCard(): React.JSX.Element {
   const { settings, patch } = useSettings()
+  const guest = useAuth((s) => s.guest)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [clientOpen, setClientOpen] = useState(false)
 
   return (
     <Card title="更新">
-      <Row
-        title="服务端更新"
-        desc="检查服务端有没有新版本；Docker 部署可以直接在线升级，也可以上传本地的二进制文件"
-      >
-        <button
-          type="button"
-          className="btn"
-          data-variant="primary"
-          onClick={() => setUpgradeOpen(true)}
+      {/* 「服务端更新」免登录时整行不摆：没有服务端可升级，而它下面每一次请求都要会话 */}
+      {guest ? null : (
+        <Row
+          title="服务端更新"
+          desc="检查服务端有没有新版本；Docker 部署可以直接在线升级，也可以上传本地的二进制文件"
         >
-          <IconRefresh size={15} />
-          检查更新
-        </button>
-      </Row>
+          <button
+            type="button"
+            className="btn"
+            data-variant="primary"
+            onClick={() => setUpgradeOpen(true)}
+          >
+            <IconRefresh size={15} />
+            检查更新
+          </button>
+        </Row>
+      )}
 
       <Row
         title="客户端更新"
@@ -3198,8 +3203,13 @@ function ClientUpdateModal({ onClose }: { onClose: () => void }): React.JSX.Elem
   const [checking, setChecking] = useState(true)
 
   useEffect(() => {
-    // 代理从后端读，但**读不到也照查**：客户端更新不该被后端可达性牵连，直连 GitHub 试一次
-    void getGithubProxy(requireClient())
+    // 代理从后端读，但**读不到也照查**：客户端更新不该被后端可达性牵连，直连 GitHub 试一次。
+    // ★ 取代理那一步得先包进 Promise 里再调用：没有会话时 `requireClient()` 是**同步抛**的，
+    //   直接 `getGithubProxy(requireClient())` 会抛在 effect 里、把整棵组件树掀掉 —— 而免登录
+    //   模式下这一页是能进来的（见 SettingsPage 的 guest 过滤）。包进去之后它变成「读不到」，
+    //   落到下面那个 catch 上，正好就是这句注释本来要的意思。
+    void Promise.resolve()
+      .then(() => getGithubProxy(requireClient()))
       .catch(() => '')
       .then((proxy) => window.songloft.app.checkClientUpdate(proxy))
       .then(setCheck)
@@ -3333,18 +3343,8 @@ function UpgradeModal({ onClose }: { onClose: () => void }): React.JSX.Element {
   const pollRef = useRef<number | null>(null)
   /** GitHub 代理：检查与升级都得显式带给后端（后端不会去读自己存的那份配置） */
   const proxyRef = useRef('')
-  /**
-   * 免登录模式：没有服务端可升级。
-   *
-   * ★ 「服务端更新」那一行不是服务端**设置**（它没有「服务端」徽标，所以免登录时仍在
-   *   「关于与更新」里），但它下面每一次请求都要会话。放任不管的话，点开弹窗那一下
-   *   `requireClient()` 就会同步抛在 effect 里、把整棵组件树掀掉（见 hooks/useAsync）。
-   *   所以这里明确说一句「先连接服务器」，而不是让整个界面消失。
-   */
-  const guest = useAuth((s) => s.guest)
 
   const runCheck = useCallback((): void => {
-    if (guest) return
     setChecking(true)
     setError(null)
     // 已经收工的进度（失败 / 重启完）别再占着版面：重新检查就是要回到「能不能升」这一页，
@@ -3359,14 +3359,9 @@ function UpgradeModal({ onClose }: { onClose: () => void }): React.JSX.Element {
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : '检查更新失败'))
       .finally(() => setChecking(false))
-  }, [guest])
+  }, [])
 
   useEffect(() => {
-    if (guest) {
-      setChecking(false)
-      setError('免登录模式：先连接服务器才能检查服务端更新')
-      return
-    }
     // 升级可能是上次打开弹窗时起的（甚至是别的客户端起的）：先问一句进度，
     // 否则关掉再打开，进度条会从零开始，看着像又升了一遍
     void getServerUpgradeProgress(requireClient())
@@ -3381,7 +3376,7 @@ function UpgradeModal({ onClose }: { onClose: () => void }): React.JSX.Element {
         proxyRef.current = value
         runCheck()
       })
-  }, [runCheck, guest])
+  }, [runCheck])
 
   const status = progress?.status ?? 'idle'
   const done = UPGRADE_DONE_STATUS.has(status)
