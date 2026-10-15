@@ -1329,3 +1329,49 @@ html[data-menu='open'] .plugin-view {
   background: var(--surface-3);
   color: var(--text-1);
 }
+
+/*
+ * 嵌在分段钮里的一层子选项：曲库页那颗「本地 / 服务器」后面，跟着「服务器」自己的
+ * 「曲库 / 文件夹」（见 components/LibraryHeader）。
+ *
+ * ★ 它得看上去**属于左边那一格**（先选来源、再选看法，是同一层选择的两步），所以给一层
+ *   更实的底色 + 左边一道分隔线，字号与高度都收一档 —— 摆成页头另一头一对钮的话，
+ *   这层从属关系就只能靠用户自己脑补。
+ * ★ 高度 24 + 上下各 2 的内边距 = 外层那 28px 的段高，两者在一条线上。
+ * ★ 这几条必须写在上面 `.segmented button` **之后**：选择器特异性相同（0,1,1），靠先后定胜负。
+ */
+.segmented-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  padding: 2px 2px 2px 6px;
+  border-left: 1px solid var(--line-1);
+  background: var(--surface-2);
+  border-radius: calc(var(--r-sm) - 3px);
+}
+
+.segmented-sub button {
+  height: 24px;
+  padding: 0 9px;
+  border: none;
+  background: transparent;
+  color: var(--text-3);
+  border-radius: calc(var(--r-sm) - 4px);
+  font-size: 11.5px;
+  font-weight: 540;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--dur-1) var(--ease),
+    color var(--dur-1) var(--ease);
+}
+
+.segmented-sub button:hover {
+  color: var(--text-1);
+}
+
+.segmented-sub button[aria-pressed='true'] {
+  background: var(--surface-3);
+  color: var(--text-1);
+}

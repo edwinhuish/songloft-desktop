@@ -6,15 +6,19 @@
  *   （父级 state + effect）等于为此多一次渲染、还要管「谁在报、谁负责清」；各自把这份页头
  *   摆在自己头上则什么都不用管。版式只有这一份实现，三处摆出来的是同一个东西。
  *
- * ★ 两行：第一行标题 + 副标题，第二行来源切换（右边是「服务器」那一半的两只看法切换）。
+ * ★ 两行：第一行标题 + 副标题，第二行来源切换。
  *   副标题从「标题下面的一句话」搬到了标题右边，那一块就不能再是左右两栏的 .page-header
  *   —— 见 base.css 里 [data-stacked] 那一条。
+ *
+ * ★ 「本地 / 服务器」是**同一页的两种来源**（本机磁盘上的文件 | 后端的曲库），而「服务器」
+ *   自己又分「曲库（按标签）/ 文件夹（按目录）」两种看法 —— 后者**嵌在服务器那一格里**
+ *   （.segmented-sub，见 base.css）：先选来源、再选看法，本来就是同一层选择的两步，
+ *   摆到页头另一头就成了两颗看不出从属关系的钮。
  *
  * ★ `pane` 由调用方写死，**不是**从 useUi 读「当前路由」：页面槽是常驻的，不活跃的那一份
  *   读到的已经属于别人了（见 pages/LibraryPage 的说明）。
  */
 
-import { LibraryViewSwitch } from './LibraryViewSwitch'
 import { useAuth } from '@/state/useAuth'
 import { useUi } from '@/state/useUi'
 
@@ -44,28 +48,45 @@ export function LibraryHeader({
       {/* ★ 免登录模式下这一整行不摆出来：服务器那一半的每一项都要会话（与侧栏同一口径 ——
           不是灰掉，是不摆出来），此时能看的本来就只有「本地」那一半 */}
       {guest ? null : (
-        <div className="row-between" style={{ gap: 14 }}>
-          {/* 来源切换（不是筛选）：所以走 .segmented，而不是筛选区那种 chip */}
-          <div className="segmented" role="group" aria-label="曲库来源">
-            <button
-              type="button"
-              aria-pressed={!local}
-              /* 已经在「服务器」那一半时**什么都不做**：按着的是这一档，再点一下不该把人从
-                 「文件夹」看法里拽回「曲库」看法 —— 换看法是右边那对图标钮的事 */
-              onClick={() => {
-                if (local) navigate({ name: 'library' })
-              }}
-            >
-              服务器
-            </button>
-            <button type="button" aria-pressed={local} onClick={() => navigate({ name: 'local' })}>
-              本地
-            </button>
-          </div>
+        <div className="segmented" role="group" aria-label="曲库来源">
+          <button type="button" aria-pressed={local} onClick={() => navigate({ name: 'local' })}>
+            本地
+          </button>
+          <button
+            type="button"
+            aria-pressed={!local}
+            /* 已经在「服务器」那一半时**什么都不做**：按着的是这一档，换看法是它自己那两颗
+               子选项的事，别在这里替人做决定（点一下把人从「文件夹」拽回「曲库」很奇怪） */
+            onClick={() => {
+              if (local) navigate({ name: 'library' })
+            }}
+          >
+            服务器
+          </button>
 
-          {/* 看法的切换（按标签 / 按文件夹）只在「服务器」这一半出现：本地那一半没有第二种
-              看法可切 —— 它读的是本机磁盘上那批文件，既没有标签分面也没有目录树 */}
-          {local ? null : <LibraryViewSwitch mode={pane} />}
+          {/* 「服务器」的两种看法，嵌在它自己那一格后面。
+              ★ 文字而不是图标：嵌在一格里本来就窄，再带图标就挤；
+              ★ 落点一律 path: ''：换看法是「换一只眼睛看曲库」，不是「回到上次逛到的目录」——
+                回目录靠文件夹那一页自己的面包屑。
+              ★ 「本地」那一半没有这一层选择，所以整块跟着来源一起出现 / 消失。 */}
+          {local ? null : (
+            <div className="segmented-sub" role="group" aria-label="曲库的浏览方式">
+              <button
+                type="button"
+                aria-pressed={pane === 'library'}
+                onClick={() => navigate({ name: 'library' })}
+              >
+                曲库
+              </button>
+              <button
+                type="button"
+                aria-pressed={pane === 'folders'}
+                onClick={() => navigate({ name: 'folders', path: '' })}
+              >
+                文件夹
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
