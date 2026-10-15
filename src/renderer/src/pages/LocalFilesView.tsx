@@ -8,8 +8,8 @@
  *   磁盘。所以免登录模式进来就落在这儿，页面上那条提示也只在这一块出现 —— 既说清
  *   「为什么那几个入口都不在」，也给出回登录页的那条路。
  *
- * ★ 与另外两半（LibraryView / FoldersView）同一个版式：**不自己画页头** —— 大标题与
- *   来源切换由 LibraryPage 提供，这里只画自己那一行（说明 + 动作）和列表。
+ * ★ 与另外两半（LibraryView / FoldersView）同一个版式：页头是同一个组件（LibraryHeader，
+ *   副标题就是下面那句「共 N 个文件」），这里只画自己那一行动作和列表。
  *
  * ★ 刻意不复用 SongTable：那张表是为**曲库里的歌**做的（收藏、加入歌单、从曲库删除、
  *   查看歌手专辑、拖到侧栏歌单…全都要经后端），而这里每一首都不在曲库里。与其传一堆
@@ -20,6 +20,7 @@
 import { useState } from 'react'
 
 import { IconFolderOpen, IconPause, IconPlay, IconServer, IconTrash } from '@/components/Icons'
+import { LibraryHeader } from '@/components/LibraryHeader'
 import { EmptyState } from '@/components/primitives'
 import { useAuth } from '@/state/useAuth'
 import { useLocalFiles, playLocalFileAt, pickLocalFiles } from '@/state/useLocalFiles'
@@ -54,48 +55,50 @@ export function LocalFilesView(): React.JSX.Element {
     }
   }
 
+  /** 报给页头那行副标题（本机有几个文件 —— 只有这一块知道，见 components/LibraryHeader） */
+  const subtitle =
+    songs.length === 0
+      ? '本机磁盘上的音频文件：打开就能放，不需要连接服务器'
+      : `共 ${songs.length} 个文件 · 双击任意一行开始播放`
+
   return (
     <>
-      <div className="row-between" style={{ gap: 14, marginBottom: 14 }}>
-        <div className="page-subtitle truncate" style={{ margin: 0, minWidth: 0 }}>
-          {songs.length === 0
-            ? '本机磁盘上的音频文件：打开就能放，不需要连接服务器'
-            : `共 ${songs.length} 个文件 · 双击任意一行开始播放`}
-        </div>
-        <div className="row" style={{ gap: 8, flex: 'none' }}>
-          <button
-            type="button"
-            className="btn"
-            data-variant="primary"
-            disabled={picking}
-            onClick={() => void openPicker()}
-          >
-            <IconFolderOpen size={15} />
-            打开文件…
-          </button>
-          <button
-            type="button"
-            className="btn"
-            disabled={songs.length === 0}
-            onClick={() => playLocalFileAt(0)}
-          >
-            <IconPlay size={15} />
-            播放全部
-          </button>
-          <button
-            type="button"
-            className="btn"
-            data-variant="danger"
-            disabled={songs.length === 0}
-            onClick={() => {
-              clear()
-              toast('已清空本地文件列表', 'success')
-            }}
-          >
-            <IconTrash size={15} />
-            清空列表
-          </button>
-        </div>
+      <LibraryHeader pane="local" subtitle={subtitle} />
+
+      {/* 动作条：副标题搬去页头之后，这一行只剩按钮，靠右 */}
+      <div className="row" style={{ gap: 8, justifyContent: 'flex-end', marginBottom: 14 }}>
+        <button
+          type="button"
+          className="btn"
+          data-variant="primary"
+          disabled={picking}
+          onClick={() => void openPicker()}
+        >
+          <IconFolderOpen size={15} />
+          打开文件…
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={songs.length === 0}
+          onClick={() => playLocalFileAt(0)}
+        >
+          <IconPlay size={15} />
+          播放全部
+        </button>
+        <button
+          type="button"
+          className="btn"
+          data-variant="danger"
+          disabled={songs.length === 0}
+          onClick={() => {
+            clear()
+            toast('已清空本地文件列表', 'success')
+          }}
+        >
+          <IconTrash size={15} />
+          清空列表
+        </button>
       </div>
 
       {guest ? (

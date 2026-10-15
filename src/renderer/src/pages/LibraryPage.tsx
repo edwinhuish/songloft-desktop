@@ -1,5 +1,5 @@
 /**
- * 曲库页 = 外壳（标题 +「服务器 / 本地」切换）+ 各来源、各看法自己的内容。
+ * 曲库页 = 三种内容（服务器的曲库 / 服务器的文件夹 / 本机磁盘上的文件）共用一个外壳。
  *
  * ★ 侧栏只有一个「曲库」入口：后端的曲库与**本机磁盘上的音频文件**是两份来源不同的东西
  *   （后者读磁盘、不需要登录，见 §8.16），所以页头那颗切换按**来源**分 ——
@@ -9,11 +9,14 @@
  * ★ 底下仍然是**三条路由**（library / folders / local），而不是一个组件内的 state：
  *   文件夹要能带着当前目录深链、面包屑要能一段段跳回去，局部 state 表达不了这些
  *   （刷新窗口或后退就丢）；主进程菜单、命令面板也都是按路由打的。
- *   所以这一页只负责页头与来源切换，内容各自成块（LibraryView / FoldersView / LocalFilesView）。
  *
- * ★ 「曲库 / 文件夹」与「分类浏览」这两只看法的入口是**工具条里的图标钮**，不再占页头
- *   （见 components/LibraryViewSwitch 与下面那一段）：它们属于「服务器」那一半的两种看法，
- *   而页头那一格现在归来源切换。文件夹视图里也画同一对钮，否则进去了就出不来。
+ * ★ 页头（标题 + 副标题 + 来源切换 + 看法切换）由三种内容**各摆一次**
+ *   （components/LibraryHeader）：副标题里的数字只有各自的视图知道。这一页因此只剩
+ *   「挑哪一块内容摆上去」这一件事。
+ *
+ * ★ 工具条右侧那几颗钮的分工：**分类浏览**与**显示隐藏歌单曲目**是曲库看法的两颗开关
+ *   （图标钮，打开 = 泛强调色，含义靠悬浮提示交代），**排序**是选择器。看法本身的切换
+ *   （按标签 / 按文件夹）不在这里 —— 它在页头第二行的右端，两种看法都看得见。
  *
  * 曲库模式（LibraryView）做了三件原 Flutter 端没做好的事：
  *   1. **分面浏览就在同一页**：歌手/专辑/流派/语种/风格 五个维度用 chip 切换，
@@ -29,20 +32,21 @@ import type { FacetField, Song, SongType } from '@shared/types'
 import { FACET_LABELS } from '@shared/types'
 import {
   IconClose,
+  IconEyeOff,
   IconPlay,
   IconRefresh,
   IconSearch,
   IconSparkle,
   IconUpload
 } from '@/components/Icons'
-import { LibraryViewSwitch } from '@/components/LibraryViewSwitch'
+import { LibraryHeader } from '@/components/LibraryHeader'
 import { CardGridSkeleton, Cover, EmptyState } from '@/components/primitives'
 import { SelectionBar } from '@/components/SelectionBar'
 import { LIBRARY_COLUMNS, SongTable, type SongSort } from '@/components/SongTable'
 import { getFacets } from '@/api/endpoints'
 import { useAsync } from '@/hooks/useAsync'
 import { useSongList } from '@/hooks/useSongList'
-import { requireClient, useAuth } from '@/state/useAuth'
+import { requireClient } from '@/state/useAuth'
 import { usePlayer } from '@/state/usePlayer'
 import { useUi, type NativeRoute } from '@/state/useUi'
 import { FoldersView } from './FoldersView'
@@ -74,39 +78,11 @@ type LibraryRoute = Extract<NativeRoute, { name: 'library' | 'folders' | 'local'
  *   而它本该停在用户离开时的样子；更要紧的是「曲库」那一半的筛选条件会跟着一起丢。
  */
 export function LibraryPage({ route }: { route: LibraryRoute }): React.JSX.Element {
-  const navigate = useUi((s) => s.navigate)
-  const guest = useAuth((s) => s.guest)
-  const local = route.name === 'local'
-
   return (
     <div className="page">
-      <div className="page-header">
-        <h1 className="page-title">曲库</h1>
-        {/* 来源切换（不是筛选）：所以走 .segmented，而不是筛选区那种 chip。
-            ★ 免登录模式下**不摆出来**：那一半的每一项都要会话（与侧栏同一口径 ——
-              不是灰掉，是不摆出来），此时能看的本来就只有「本地」那一半。 */}
-        {guest ? null : (
-          <div className="segmented" role="group" aria-label="曲库来源">
-            <button
-              type="button"
-              aria-pressed={!local}
-              /* 已经在「服务器」那一半时**什么都不做**：按着的是这一档，再点一下不该把人从
-                 「文件夹」看法里拽回「曲库」看法 —— 换看法是工具条那对图标钮的事 */
-              onClick={() => {
-                if (local) navigate({ name: 'library' })
-              }}
-            >
-              服务器
-            </button>
-            <button type="button" aria-pressed={local} onClick={() => navigate({ name: 'local' })}>
-              本地
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* 三种内容各自成块，共同点是都**不自己画页头**（标题与来源切换在上面那一层） */}
-      {local ? (
+      {/* 三种内容各自成块，并且**各自把同一份页头摆在头上**（components/LibraryHeader）——
+          副标题是「这里现在有多少东西」，那个数字只有各自的视图知道，见那里的说明 */}
+      {route.name === 'local' ? (
         <LocalFilesView />
       ) : route.name === 'folders' ? (
         <FoldersView path={route.path} />
@@ -187,30 +163,32 @@ function LibraryView(): React.JSX.Element {
     ? selectAllIds
     : selection.map((i) => list.songs[i]?.id).filter((x): x is number => x != null)
 
+  /** 报给页头那行副标题（跟着标题走，见 components/LibraryHeader） */
+  const subtitle =
+    list.loading && list.songs.length === 0
+      ? '正在读取…'
+      : `${list.total} 首${list.total > list.songs.length ? `（已加载 ${list.songs.length}）` : ''}`
+
   return (
     <>
-      <div className="row-between" style={{ gap: 14, marginBottom: 14 }}>
-        <div className="page-subtitle truncate" style={{ margin: 0, minWidth: 0 }}>
-          {list.loading && list.songs.length === 0
-            ? '正在读取…'
-            : `${list.total} 首${list.total > list.songs.length ? `（已加载 ${list.songs.length}）` : ''}`}
-        </div>
-        <div className="row" style={{ gap: 8, flex: 'none' }}>
-          <button type="button" className="btn" onClick={() => list.refresh()}>
-            <IconRefresh size={15} />
-            刷新
-          </button>
-          <button
-            type="button"
-            className="btn"
-            data-variant="primary"
-            disabled={list.songs.length === 0}
-            onClick={() => void playSongs(list.songs, 0, { type: 'library', key: 'all' })}
-          >
-            <IconPlay size={15} />
-            播放全部
-          </button>
-        </div>
+      <LibraryHeader pane="library" subtitle={subtitle} />
+
+      {/* 动作条：副标题搬去页头之后，这一行只剩按钮，靠右 */}
+      <div className="row" style={{ gap: 8, justifyContent: 'flex-end', marginBottom: 14 }}>
+        <button type="button" className="btn" onClick={() => list.refresh()}>
+          <IconRefresh size={15} />
+          刷新
+        </button>
+        <button
+          type="button"
+          className="btn"
+          data-variant="primary"
+          disabled={list.songs.length === 0}
+          onClick={() => void playSongs(list.songs, 0, { type: 'library', key: 'all' })}
+        >
+          <IconPlay size={15} />
+          播放全部
+        </button>
       </div>
 
       {/* ── 筛选区 ── */}
@@ -232,8 +210,7 @@ function LibraryView(): React.JSX.Element {
         </div>
 
         <div className="row" style={{ gap: 8 }}>
-          {/* 看法的入口（图标钮）：换一种切法看同一批歌。排在「显示隐藏歌单曲目」左手边 */}
-          <LibraryViewSwitch mode="library" />
+          {/* 分类浏览：一颗开关钮（打开后表头上面多一块分面网格） */}
           <button
             type="button"
             className="icon-btn"
@@ -245,18 +222,23 @@ function LibraryView(): React.JSX.Element {
           >
             <IconSparkle size={16} />
           </button>
+          {/* 「显示隐藏歌单曲目」：开着时把隐藏歌单里的歌也一起列出来。
+              ★ 图标是「带斜线的眼睛」（与「隐藏歌单」那几个入口同一个图形），这颗钮管的正是
+                「隐藏」这件事，按下泛强调色 = 现在把隐藏的也算进来。没有可见文字，含义全靠
+                悬浮提示 + 按下态交代，所以两样都不能省。 */}
           <button
             type="button"
-            className="btn"
-            data-size="sm"
-            data-variant={showHidden ? 'primary' : 'default'}
-            data-tip="包含被隐藏歌单里的歌曲"
+            className="icon-btn"
+            data-active={showHidden}
+            aria-pressed={showHidden}
+            aria-label="显示隐藏歌单曲目"
+            data-tip={showHidden ? '不再显示隐藏歌单里的曲目' : '把隐藏歌单里的曲目也一起显示'}
             onClick={() => {
               setShowHidden((v) => !v)
               clearSelection()
             }}
           >
-            显示隐藏歌单曲目
+            <IconEyeOff size={16} />
           </button>
           <select
             className="input"

@@ -443,6 +443,12 @@ window.__t = {
     /** 面包屑（文件夹模式逐级进入 / 跳回），取按钮文字 */
     crumbs: vis('.crumbs button').map((e) => (e.textContent || '').trim()),
     /*
+     * 看法切换那对图标钮（按标签浏览 / 按文件夹浏览），只能按 aria-label 找 —— 它们是纯图标。
+     * ★ 只在「服务器」那一半出现（见 components/LibraryHeader）：切到「本地」时连摆着它们的
+     *   那一页都整块被藏起来，所以这里数出来是 0。★ 两种看法下都得在（切过去还得能切回来）。
+     */
+    viewSwitches: vis('[aria-label="按标签浏览"], [aria-label="按文件夹浏览"]').length,
+    /*
      * 多选操作条。**没有行首复选框** —— 多选靠 Ctrl / Shift 点行，选完这一条才出现，
      * 所以「它在不在」与「上面写着已选几首」就是多选这条链路的全部判据。
      */
@@ -709,7 +715,7 @@ const STEPS = [
   ],
   /*
    * 打开分类浏览。默认维是「歌手」，所以卡片内容必须是歌手名。
-   * ★ 它现在是一颗**图标钮**（需求：与看法切换一起挪到「显示隐藏歌单曲目」左边），
+   * ★ 它现在是一颗**图标钮**（筛选行右端那几颗之一，与「显示隐藏歌单曲目」同一排），
    *   没有可见文字 —— 只能按 aria-label 点（byText 够不着）。
    */
   [
@@ -734,13 +740,17 @@ const STEPS = [
     { rows: exactly(12), cards: exactly(0), chipTitles: containsAll('流派：摇滚') }
   ],
 
-  // 换一种看法（工具条里那一对图标钮之一）：内容换成目录，**标题还得是「曲库」** ——
-  // 这一条正是「同一页的不同看法」的判据，只看 folderRows 的话，"又开了一个页面"也能过。
+  /*
+   * 换一种看法（页头第二行右端那一对图标钮之一）：内容换成目录，**标题还得是「曲库」** ——
+   * 这一条正是「同一页的不同看法」的判据，只看 folderRows 的话，"又开了一个页面"也能过。
+   * ★ 顺带断言那对钮**还在**（=2）：它们留在原处才谈得上「切回来」—— 少画一次的话，
+   *   进了文件夹就只能靠侧栏别的入口兜圈。
+   */
   [
     '09-library-folders-tab',
     "window.__t.clickLabel('按文件夹浏览')",
     2200,
-    { folderRows: exactly(5), pageTitle: exactly('曲库') }
+    { folderRows: exactly(5), pageTitle: exactly('曲库'), viewSwitches: exactly(2) }
   ],
   /*
    * 逐级进入目录。断言的是**行数**而不是「有内容」：目录行上写着「N 首」，
@@ -1402,7 +1412,7 @@ const STEPS = [
     '76-library-type-remote',
     "window.__t.click('.segmented[aria-label=\"歌曲类型\"] button', '网络')",
     2000,
-    { rows: exactly(2) }
+    { rows: exactly(2), viewSwitches: exactly(2) }
   ],
   [
     '77-library-local-half',
@@ -1413,14 +1423,16 @@ const STEPS = [
       // 所以这里必须是空态：不是「43 首曲库的歌」混进来，也不是一片白
       pageTitle: exactly('曲库'),
       rows: exactly(0),
-      emptyText: containsAll('还没有打开过本地文件')
+      emptyText: containsAll('还没有打开过本地文件'),
+      // 「本地」那一半没有第二种看法可切：那一对钮连同摆着它们的库槽一起消失
+      viewSwitches: exactly(0)
     }
   ],
   [
     '78-library-server-back',
     "window.__t.click('.segmented[aria-label=\"曲库来源\"] button', '服务器')",
     2200,
-    { rows: exactly(2), folderRows: exactly(0) }
+    { rows: exactly(2), folderRows: exactly(0), viewSwitches: exactly(2) }
   ]
 ]
 

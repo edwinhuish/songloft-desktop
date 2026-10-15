@@ -1,5 +1,5 @@
 /**
- * 曲库页的「文件夹」模式（见 LibraryPage 的说明）。
+ * 曲库页的「文件夹」看法（见 LibraryPage 的说明）。
  *
  * 后端 `/songs/folders?path=` 一次返回「当前目录 + 子文件夹 + 本目录下的歌」，
  * 所以一层一个请求，不需要自己拼路径。
@@ -7,19 +7,16 @@
  * 桌面端相对移动端多做的一点：面包屑做成可点击的层级链（移动端只有返回箭头），
  * 深目录下从 `Pop/2020/Live` 跳回 `Pop` 只要一次点击。
  *
- * ★ 页头（大标题 +「服务器 / 本地」来源切换）由 LibraryPage 提供，这里只画自己那一行
- *   （目录摘要 + 动作）和目录内容 —— 两处各写一遍标题，迟早会长歪。
- *
- * ★ 那一行右边开着**同一对看法切换钮**（components/LibraryViewSwitch，曲库视图 / 文件夹视图）：
- *   页头那格已经归来源切换了，不在这里再画一次的话，进了文件夹就再也切不回曲库。
- *   分类浏览那颗钮不跟过来 —— 它管的是分面网格，只在曲库视图里有东西可看。
+ * ★ 页头由 LibraryHeader 提供（**曲库看法里也是同一个组件、同一份版式**）：标题与副标题由
+ *   它摆，所以这里只画自己那一行动作和目录内容 —— 两处各写一遍标题，迟早会长歪。
+ * ★ 切回「按标签浏览」不用在这里另摆一颗钮：页头第二行右端那对看法图标钮两种看法下都在。
  */
 
 import { useMemo, useState } from 'react'
 
 import type { Song } from '@shared/types'
 import { IconFolder, IconFolderOpen, IconMusic, IconPlay, IconRefresh } from '@/components/Icons'
-import { LibraryViewSwitch } from '@/components/LibraryViewSwitch'
+import { LibraryHeader } from '@/components/LibraryHeader'
 import { EmptyState } from '@/components/primitives'
 import { SelectionBar } from '@/components/SelectionBar'
 import { LIBRARY_COLUMNS, SongTable } from '@/components/SongTable'
@@ -58,31 +55,32 @@ export function FoldersView({ path }: { path: string }): React.JSX.Element {
     setSelectAllIds(null)
   }
 
+  /** 报给页头那行副标题（目录摘要 —— 数字只有这一块知道，见 LibraryHeader） */
+  const subtitle =
+    result.loading && !data
+      ? '正在读取…'
+      : `${folders.length} 个子文件夹 · ${data?.total_songs ?? 0} 首歌${path ? ` · ${path}` : ''}`
+
   return (
     <>
-      <div className="row-between" style={{ gap: 14, marginBottom: 14 }}>
-        <div className="page-subtitle truncate" style={{ margin: 0, minWidth: 0 }}>
-          {result.loading && !data
-            ? '正在读取…'
-            : `${folders.length} 个子文件夹 · ${data?.total_songs ?? 0} 首歌${path ? ` · ${path}` : ''}`}
-        </div>
-        <div className="row" style={{ gap: 8, flex: 'none' }}>
-          <LibraryViewSwitch mode="folders" />
-          <button type="button" className="btn" onClick={() => result.reload()}>
-            <IconRefresh size={15} />
-            刷新
-          </button>
-          <button
-            type="button"
-            className="btn"
-            data-variant="primary"
-            disabled={songs.length === 0}
-            onClick={() => void playSongs(songs, 0, { type: 'folder', key: path || '/' })}
-          >
-            <IconPlay size={15} />
-            播放本目录
-          </button>
-        </div>
+      <LibraryHeader pane="folders" subtitle={subtitle} />
+
+      {/* 动作条：副标题搬去页头之后，这一行只剩按钮，靠右 */}
+      <div className="row" style={{ gap: 8, justifyContent: 'flex-end', marginBottom: 14 }}>
+        <button type="button" className="btn" onClick={() => result.reload()}>
+          <IconRefresh size={15} />
+          刷新
+        </button>
+        <button
+          type="button"
+          className="btn"
+          data-variant="primary"
+          disabled={songs.length === 0}
+          onClick={() => void playSongs(songs, 0, { type: 'folder', key: path || '/' })}
+        >
+          <IconPlay size={15} />
+          播放本目录
+        </button>
       </div>
 
       {/* ── 面包屑 ── */}

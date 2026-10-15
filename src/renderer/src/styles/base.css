@@ -443,6 +443,37 @@ html[data-mini='true'] .mini-player {
   color: var(--text-2);
 }
 
+/*
+ * 两行的页头（只有曲库页那一份，见 components/LibraryHeader）：第一行「标题 + 副标题」，
+ * 第二行来源切换（右边跟着看法切换）。
+ * ★ 默认那一份是左右两栏（标题在左、动作在右，align-items: flex-end）—— 副标题要跟标题
+ *   同行就排不进那个形状，所以整块改成块级，第一行由 .page-headline 自己排。
+ */
+.page-header[data-stacked='true'] {
+  display: block;
+}
+
+/* 第一行：大标题 + 它右边那句副标题 */
+.page-headline {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  margin-bottom: 12px;
+}
+
+/* 同行时标题不参与收缩：这一页的名字被副标题挤窄反而奇怪 */
+.page-headline .page-title {
+  flex: none;
+}
+
+/* 副标题本来是「标题下面的一句话」，同行时不再要那一截上边距；min-width: 0 是给 .truncate
+   用的 —— flex 项的自动最小尺寸是内容宽度，不置 0 的话它永远不缩、也就永远不会出现省略号 */
+.page-headline .page-subtitle {
+  margin: 0;
+  min-width: 0;
+}
+
 .section-title {
   display: flex;
   align-items: center;
