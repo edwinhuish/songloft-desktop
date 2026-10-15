@@ -157,7 +157,9 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
      * 其余每一项点下去都是一页「尚未登录」（它们全都要会话），摆着不如不摆 —— 与侧栏同一口径。
      * 「曲库」落在**本地**那一半（读本机磁盘、不要会话，见 pages/LibraryPage），
      * 名字跟着侧栏走而不叫「本地文件」：落到的那一页大标题就是「曲库」。
-     * 设置留着，是因为登录 / 切服务器那个入口就在它里面。
+     * ★ 设置落在**外观**那一节、与已登录那份菜单同一个默认：免登录时设置里只有本机内容
+     *   （服务端那几节整节收掉，带「服务端」徽标的行逐行抽掉，见 SettingsPage），所以不能再
+     *   指向「账号」——回服务器走侧栏那颗「连接服务器」。
      */
     if (guest) {
       return [
@@ -172,7 +174,7 @@ export function TitleBar({ solo = false }: TitleBarProps): React.JSX.Element {
           key: 'settings',
           label: '设置',
           icon: <IconSettings size={16} />,
-          onClick: () => navigate({ name: 'settings', section: 'account' })
+          onClick: () => navigate({ name: 'settings', section: 'appearance' })
         }
       ]
     }

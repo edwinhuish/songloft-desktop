@@ -142,25 +142,54 @@ const SECTIONS: { key: SettingsSection; label: string }[] = [
 
 const ACCENT_PRESETS = ['#7c5cff', '#22a7d6', '#ee5a8a', '#f08a3c', '#3fb27f', '#c9c2b6']
 
+/**
+ * 免登录模式（useAuth 的 guest）下**整节**都收掉的分区。
+ *
+ * ★ 判据是「这一节里有没有本机内容」：曲库与扫描那一节的每一行都是服务端设置（逐行标了
+ *   `server`，见下面各处的 Row），没有会话时既改不动也没什么可看。收掉整个分区，而不是让人
+ *   点进去看一页空的 —— 与侧栏、标题栏那份菜单同一口径：不摆出来，而不是灰掉
+ *   （见 Sidebar.tsx 里 guest 那一段）。
+ * ★ 其余几节在免登录下仍有本机内容（外观 / 播放与歌词 / 本机缓存 / 网络里的证书开关 /
+ *   快捷键 / 关于），所以整节留着，由 Row 把带「服务端」徽标的行逐行抽掉。
+ */
+const HIDDEN_WHEN_GUEST: readonly SettingsSection[] = ['library']
+
 export function SettingsPage({ section }: { section: SettingsSection }): React.JSX.Element {
   const navigate = useUi((s) => s.navigate)
+  const guest = useAuth((s) => s.guest)
+
+  const sections = guest
+    ? SECTIONS.filter((item) => !HIDDEN_WHEN_GUEST.includes(item.key))
+    : SECTIONS
+
+  /**
+   * 真正显示哪一节。
+   *
+   * ★ 免登录时路由可能正停在刚被收掉的那一节上（上一位用户停在「曲库与扫描」、退出登录后
+   *   又从免登录进来）：落回第一节，别给人一页没有任何导航项高亮的空白。
+   */
+  const active = sections.some((item) => item.key === section) ? section : sections[0].key
 
   return (
     <div className="page">
       <div className="page-header">
         <div>
           <h1 className="page-title">设置</h1>
-          <p className="page-subtitle">带「服务端」标志的项会影响所有连接到同一后端的设备</p>
+          <p className="page-subtitle">
+            {guest
+              ? '免登录模式：这里只列本机设置，连接服务器后才会出现影响所有设备的服务端设置'
+              : '带「服务端」标志的项会影响所有连接到同一后端的设备'}
+          </p>
         </div>
       </div>
 
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="设置分区">
-          {SECTIONS.map((item) => (
+          {sections.map((item) => (
             <button
               key={item.key}
               type="button"
-              aria-current={section === item.key}
+              aria-current={active === item.key}
               onClick={() => navigate({ name: 'settings', section: item.key })}
             >
               {item.label}
@@ -169,20 +198,26 @@ export function SettingsPage({ section }: { section: SettingsSection }): React.J
         </nav>
 
         <div>
-          {section === 'appearance' ? <AppearanceSettings /> : null}
-          {section === 'playback' ? <PlaybackSettings /> : null}
-          {section === 'library' ? <LibrarySettings /> : null}
-          {section === 'cache' ? (
+          {active === 'appearance' ? <AppearanceSettings /> : null}
+          {active === 'playback' ? <PlaybackSettings /> : null}
+          {active === 'library' ? <LibrarySettings /> : null}
+          {active === 'cache' ? (
             <>
-              <ServerCacheSettings />
+              {/* 服务端音乐缓存整卡都是服务端设置，整块不挂 —— 挂上就等于把它的读请求也发出去 */}
+              {guest ? null : <ServerCacheSettings />}
               <LocalCacheSettings />
             </>
           ) : null}
-          {section === 'network' ? <NetworkSettings /> : null}
-          {section === 'data' ? <DataSettings /> : null}
-          {section === 'account' ? <AccountSettings /> : null}
-          {section === 'shortcuts' ? <ShortcutsSettings /> : null}
-          {section === 'about' ? <AboutSettings /> : null}
+          {active === 'network' ? (
+            <>
+              {guest ? null : <ProxySettings />}
+              <SecuritySettings />
+            </>
+          ) : null}
+          {active === 'data' ? <DataSettings /> : null}
+          {active === 'account' ? <AccountSettings /> : null}
+          {active === 'shortcuts' ? <ShortcutsSettings /> : null}
+          {active === 'about' ? <AboutSettings /> : null}
         </div>
       </div>
     </div>
@@ -227,7 +262,20 @@ function Row({
   onToggle,
   expanded,
   children
-}: RowProps): React.JSX.Element {
+}: RowProps): React.JSX.Element | null {
+  /**
+   * 免登录模式：带「服务端」标记的项一律不摆。
+   *
+   * ★ 它们要会话才有意义，摆出来只会得到一行「尚未登录」或一行点不动的控件（与侧栏、
+   *   标题栏那份菜单同一口径）。收在这里而不在每一行上各写一遍，是为了让这条规矩**没有
+   *   漏网的机会**：将来往某张本机卡片里再加一行 `server` 行，这里自动收掉。
+   * ★ 整卡都是服务端内容的那几块（服务端缓存 / 网络代理 / 日志 / 曲库与扫描）不靠这里 ——
+   *   它们**整个组件都不挂**（见 SettingsPage 与 AboutSettings），否则组件里的读请求照发，
+   *   而 `requireClient()` 在没有会话时是同步抛的，抛在 effect 里会掀掉整棵组件树。
+   */
+  const guest = useAuth((s) => s.guest)
+  if (guest && server) return null
+
   // 非 block 行的 children 就是右侧控件（设置页的历史写法），block 行才是正文
   const trailing = control ?? (block ? null : children)
   const clickable = onToggle !== undefined
@@ -530,6 +578,7 @@ function AppearanceSettings(): React.JSX.Element {
 
 function PlaybackSettings(): React.JSX.Element {
   const { settings, patch } = useSettings()
+  const guest = useAuth((s) => s.guest)
 
   /*
    * 取色器必须拿到一个具体色值（不能是空串）。跟随主题时按「当前实际生效的主题」
@@ -538,17 +587,6 @@ function PlaybackSettings(): React.JSX.Element {
    */
   const fallbackLyricColor =
     document.documentElement.dataset.theme === 'light' ? '#12141f' : '#ffffff'
-
-  const normalize = useAsync(() => getVolumeNormalize(requireClient()), [])
-
-  // 「音量均衡」的开关在服务端，本机的 volumeNormalize 只是它的镜像 ——
-  // 音频 URL 由 audio 元素直接请求，拼装时没机会再问一次服务端。
-  // 所以服务端状态一到（或被别的设备改过）就把本机对齐，两处不再各说各话。
-  const serverNormalize = normalize.data?.enabled
-  useEffect(() => {
-    if (serverNormalize === undefined || serverNormalize === settings.volumeNormalize) return
-    void patch({ volumeNormalize: serverNormalize })
-  }, [serverNormalize, settings.volumeNormalize, patch])
 
   return (
     <>
@@ -604,34 +642,8 @@ function PlaybackSettings(): React.JSX.Element {
           />
         </Row>
 
-        <Row
-          server
-          title="音量均衡"
-          desc="启用 EBU R128 响度均衡，消除不同音源之间的音量差异。需要 ffmpeg，会增加 CPU 和首次播放延迟"
-        >
-          {normalize.loading ? (
-            <IconLoader size={16} />
-          ) : (
-            <Switch
-              ariaLabel="音量均衡"
-              checked={normalize.data?.enabled ?? false}
-              onChange={(checked) => {
-                void setVolumeNormalize(requireClient(), {
-                  enabled: checked,
-                  loudness: normalize.data?.loudness ?? -16
-                })
-                  // 本机镜像一起写：不然要等下一次拉设置才跟上，中间这段时间
-                  // 界面已经是「开」，音频 URL 里却没带 normalize=1
-                  .then(() => patch({ volumeNormalize: checked }))
-                  .then(() => normalize.reload())
-                  .then(() => toast(checked ? '已开启音量均衡' : '已关闭音量均衡', 'success'))
-                  .catch((error: unknown) =>
-                    toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
-                  )
-              }}
-            />
-          )}
-        </Row>
+        {/* 服务端那一项单独一个组件：免登录时整块不挂，它的读请求也就不会发出去 */}
+        {guest ? null : <VolumeNormalizeRow />}
       </Card>
 
       <Card title="歌词">
@@ -728,6 +740,60 @@ function PlaybackSettings(): React.JSX.Element {
         </Row>
       </Card>
     </>
+  )
+}
+
+/**
+ * 音量均衡（服务端设置）。
+ *
+ * ★ 为什么从 PlaybackSettings 里拆出来、单独成一个组件：开关在服务端，读它要一个
+ *   ApiClient，而没有会话时 `requireClient()` 是**同步抛**的 —— 抛在 `useAsync` 的
+ *   effect 里会把整棵组件树掀掉（见 hooks/useAsync）。所以它不能跟本机那几行同生共死：
+ *   免登录时由调用方把它整块摘掉。Row 自己也会收掉带「服务端」标记的行，但那发生在渲染
+ *   之后，救不了已经跑起来的 hook。
+ */
+function VolumeNormalizeRow(): React.JSX.Element {
+  const { settings, patch } = useSettings()
+  const normalize = useAsync(() => getVolumeNormalize(requireClient()), [])
+
+  // 「音量均衡」的开关在服务端，本机的 volumeNormalize 只是它的镜像 ——
+  // 音频 URL 由 audio 元素直接请求，拼装时没机会再问一次服务端。
+  // 所以服务端状态一到（或被别的设备改过）就把本机对齐，两处不再各说各话。
+  const serverNormalize = normalize.data?.enabled
+  useEffect(() => {
+    if (serverNormalize === undefined || serverNormalize === settings.volumeNormalize) return
+    void patch({ volumeNormalize: serverNormalize })
+  }, [serverNormalize, settings.volumeNormalize, patch])
+
+  return (
+    <Row
+      server
+      title="音量均衡"
+      desc="启用 EBU R128 响度均衡，消除不同音源之间的音量差异。需要 ffmpeg，会增加 CPU 和首次播放延迟"
+    >
+      {normalize.loading ? (
+        <IconLoader size={16} />
+      ) : (
+        <Switch
+          ariaLabel="音量均衡"
+          checked={normalize.data?.enabled ?? false}
+          onChange={(checked) => {
+            void setVolumeNormalize(requireClient(), {
+              enabled: checked,
+              loudness: normalize.data?.loudness ?? -16
+            })
+              // 本机镜像一起写：不然要等下一次拉设置才跟上，中间这段时间
+              // 界面已经是「开」，音频 URL 里却没带 normalize=1
+              .then(() => patch({ volumeNormalize: checked }))
+              .then(() => normalize.reload())
+              .then(() => toast(checked ? '已开启音量均衡' : '已关闭音量均衡', 'success'))
+              .catch((error: unknown) =>
+                toast('设置失败', 'error', error instanceof Error ? error.message : undefined)
+              )
+          }}
+        />
+      )}
+    </Row>
   )
 }
 
@@ -2366,8 +2432,15 @@ function LocalCacheSettings(): React.JSX.Element {
 
 /* ───────────────────────────── 网络设置 ───────────────────────────── */
 
-function NetworkSettings(): React.JSX.Element {
-  const { settings, patch } = useSettings()
+/**
+ * 代理（服务端设置）。
+ *
+ * ★ 与「安全」拆成两个组件，而不是像原来那样摆在同一页：这一整张卡的每一项都是服务端设置，
+ *   没有会话时不仅没内容可改，四个读请求还会照发（`requireClient()` 是同步抛的，抛在
+ *   `useAsync` 的 effect 里会掀掉整棵组件树）。免登录时由 SettingsPage 把这一块整个摘掉，
+ *   「安全」那一项是本机偏好（证书校验开关），照旧留着。
+ */
+function ProxySettings(): React.JSX.Element {
   const httpProxy = useAsync(() => getHttpProxy(requireClient()), [])
   const githubProxy = useAsync(() => getGithubProxy(requireClient()), [])
   const allowlist = useAsync(() => getProxyAllowlist(requireClient()), [])
@@ -2469,28 +2542,6 @@ function NetworkSettings(): React.JSX.Element {
         </Row>
       </Card>
 
-      <Card title="安全">
-        <Row
-          title="忽略 SSL 证书校验"
-          desc="自签证书或内网证书才需要打开。开启后任何证书都会被接受，中间人能读到与服务器之间的全部内容"
-        >
-          <Switch
-            ariaLabel="忽略 SSL 证书校验"
-            checked={settings.allowInsecureTls}
-            onChange={(checked) => {
-              if (
-                checked &&
-                !window.confirm(
-                  '开启后不再校验服务器证书：中间人可以读到你的登录凭据与所有请求内容。确定继续？'
-                )
-              )
-                return
-              void patch({ allowInsecureTls: checked })
-            }}
-          />
-        </Row>
-      </Card>
-
       {editing === 'http' || editing === 'github' ? (
         <TextPromptModal
           title={editing === 'http' ? 'HTTP 代理' : 'GitHub 加速代理'}
@@ -2516,6 +2567,40 @@ function NetworkSettings(): React.JSX.Element {
         />
       ) : null}
     </>
+  )
+}
+
+/**
+ * 安全（本机偏好）。
+ *
+ * 只有「忽略 SSL 证书校验」一项：它写在本机的设置里（不是服务端配置），所以与代理那张卡
+ * 分开 —— 免登录时这一项照旧在，代理那一张不在（见 SettingsPage 的 network 分支）。
+ */
+function SecuritySettings(): React.JSX.Element {
+  const { settings, patch } = useSettings()
+
+  return (
+    <Card title="安全">
+      <Row
+        title="忽略 SSL 证书校验"
+        desc="自签证书或内网证书才需要打开。开启后任何证书都会被接受，中间人能读到与服务器之间的全部内容"
+      >
+        <Switch
+          ariaLabel="忽略 SSL 证书校验"
+          checked={settings.allowInsecureTls}
+          onChange={(checked) => {
+            if (
+              checked &&
+              !window.confirm(
+                '开启后不再校验服务器证书：中间人可以读到你的登录凭据与所有请求内容。确定继续？'
+              )
+            )
+              return
+            void patch({ allowInsecureTls: checked })
+          }}
+        />
+      </Row>
+    </Card>
   )
 }
 
@@ -2979,7 +3064,7 @@ function LogSettings(): React.JSX.Element {
 }
 
 function AboutSettings(): React.JSX.Element {
-  const { backendVersion } = useAuth()
+  const { backendVersion, guest } = useAuth()
   const info = useAsync<AppInfo>(() => window.songloft.app.info(), [])
 
   const rows: [string, string][] = info.data
@@ -3001,7 +3086,8 @@ function AboutSettings(): React.JSX.Element {
     <>
       {/* 顺序照原播放器的「关于与更新」分类：先更新、再日志，最后才是关于本身 */}
       <UpdateCard />
-      <LogSettings />
+      {/* 日志两项都作用于服务端（见 LogSettings 的注释）：免登录时整卡不挂，读等级的请求也就不会发 */}
+      {guest ? null : <LogSettings />}
 
       <Card title="关于">
         <Row
@@ -3247,8 +3333,18 @@ function UpgradeModal({ onClose }: { onClose: () => void }): React.JSX.Element {
   const pollRef = useRef<number | null>(null)
   /** GitHub 代理：检查与升级都得显式带给后端（后端不会去读自己存的那份配置） */
   const proxyRef = useRef('')
+  /**
+   * 免登录模式：没有服务端可升级。
+   *
+   * ★ 「服务端更新」那一行不是服务端**设置**（它没有「服务端」徽标，所以免登录时仍在
+   *   「关于与更新」里），但它下面每一次请求都要会话。放任不管的话，点开弹窗那一下
+   *   `requireClient()` 就会同步抛在 effect 里、把整棵组件树掀掉（见 hooks/useAsync）。
+   *   所以这里明确说一句「先连接服务器」，而不是让整个界面消失。
+   */
+  const guest = useAuth((s) => s.guest)
 
   const runCheck = useCallback((): void => {
+    if (guest) return
     setChecking(true)
     setError(null)
     // 已经收工的进度（失败 / 重启完）别再占着版面：重新检查就是要回到「能不能升」这一页，
@@ -3263,9 +3359,14 @@ function UpgradeModal({ onClose }: { onClose: () => void }): React.JSX.Element {
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : '检查更新失败'))
       .finally(() => setChecking(false))
-  }, [])
+  }, [guest])
 
   useEffect(() => {
+    if (guest) {
+      setChecking(false)
+      setError('免登录模式：先连接服务器才能检查服务端更新')
+      return
+    }
     // 升级可能是上次打开弹窗时起的（甚至是别的客户端起的）：先问一句进度，
     // 否则关掉再打开，进度条会从零开始，看着像又升了一遍
     void getServerUpgradeProgress(requireClient())
@@ -3280,7 +3381,7 @@ function UpgradeModal({ onClose }: { onClose: () => void }): React.JSX.Element {
         proxyRef.current = value
         runCheck()
       })
-  }, [runCheck])
+  }, [runCheck, guest])
 
   const status = progress?.status ?? 'idle'
   const done = UPGRADE_DONE_STATUS.has(status)
