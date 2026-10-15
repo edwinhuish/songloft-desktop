@@ -148,7 +148,9 @@ src/
    │                  （按目录）/ 本机磁盘上的音频文件（唯一不需要登录的那一份，见 §8.16）。
    │                  看哪一份由页头那颗「本地 / 服务器」切换决定（「服务器」那一格里还嵌着
    │                  「曲库 / 文件夹」两颗子选项）—— 页头由三种内容共用同一份实现
-   │                  （components/LibraryHeader），因为副标题里的数字只有各自的视图知道）
+   │                  （components/LibraryHeader）：副标题与动作钮（刷新 / 播放全部…）都只有
+   │                  各自的视图才知道，所以由它们各自把这份页头摆上 —— 标题 + 副标题在第一行，
+   │                  动作钮在第二行右端、与来源切换同一行）
    ├─ components/    Sidebar / TitleBar / SongTable / PlayerBar / LyricsView / CommandPalette /
    │                 Panel / ContextMenu / Modal / Toasts / SelectionBar /
    │                 FullPlayer（满窗播放：盖在原生面上的浮层）/

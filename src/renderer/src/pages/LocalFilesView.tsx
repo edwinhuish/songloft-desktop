@@ -63,10 +63,8 @@ export function LocalFilesView(): React.JSX.Element {
 
   return (
     <>
-      <LibraryHeader pane="local" subtitle={subtitle} />
-
-      {/* 动作条：副标题搬去页头之后，这一行只剩按钮，靠右 */}
-      <div className="row" style={{ gap: 8, justifyContent: 'flex-end', marginBottom: 14 }}>
+      {/* 这一块的动作钮作为页头的 children：与来源切换同一行（见 LibraryHeader） */}
+      <LibraryHeader pane="local" subtitle={subtitle}>
         <button
           type="button"
           className="btn"
@@ -99,7 +97,7 @@ export function LocalFilesView(): React.JSX.Element {
           <IconTrash size={15} />
           清空列表
         </button>
-      </div>
+      </LibraryHeader>
 
       {guest ? (
         <div className="probe-result" style={{ marginBottom: 14 }}>

@@ -63,10 +63,8 @@ export function FoldersView({ path }: { path: string }): React.JSX.Element {
 
   return (
     <>
-      <LibraryHeader pane="folders" subtitle={subtitle} />
-
-      {/* 动作条：副标题搬去页头之后，这一行只剩按钮，靠右 */}
-      <div className="row" style={{ gap: 8, justifyContent: 'flex-end', marginBottom: 14 }}>
+      {/* 这一页的动作钮作为页头的 children：与来源切换同一行（见 LibraryHeader） */}
+      <LibraryHeader pane="folders" subtitle={subtitle}>
         <button type="button" className="btn" onClick={() => result.reload()}>
           <IconRefresh size={15} />
           刷新
@@ -81,7 +79,7 @@ export function FoldersView({ path }: { path: string }): React.JSX.Element {
           <IconPlay size={15} />
           播放本目录
         </button>
-      </div>
+      </LibraryHeader>
 
       {/* ── 面包屑 ── */}
       <div className="crumbs" style={{ marginBottom: 14 }}>

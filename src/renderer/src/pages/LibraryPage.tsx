@@ -171,10 +171,8 @@ function LibraryView(): React.JSX.Element {
 
   return (
     <>
-      <LibraryHeader pane="library" subtitle={subtitle} />
-
-      {/* 动作条：副标题搬去页头之后，这一行只剩按钮，靠右 */}
-      <div className="row" style={{ gap: 8, justifyContent: 'flex-end', marginBottom: 14 }}>
+      {/* 这一页的动作钮作为页头的 children：与来源切换同一行（见 LibraryHeader） */}
+      <LibraryHeader pane="library" subtitle={subtitle}>
         <button type="button" className="btn" onClick={() => list.refresh()}>
           <IconRefresh size={15} />
           刷新
@@ -189,7 +187,7 @@ function LibraryView(): React.JSX.Element {
           <IconPlay size={15} />
           播放全部
         </button>
-      </div>
+      </LibraryHeader>
 
       {/* ── 筛选区 ── */}
       <div className="row-between" style={{ gap: 14, flexWrap: 'wrap', marginBottom: 14 }}>
