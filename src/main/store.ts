@@ -214,15 +214,20 @@ export class ConfigStore {
   }
 
   /**
-   * 各服务器上登录过的账号名（walletKey → username）。
+   * 本机存着凭据的服务器 → 那台服务器上登录过的账号名（walletKey → username，可能为空串）。
    *
-   * 登录页要在服务器列表里显示「这台机器上用的是哪个账号」，但渲染层不该为了一个
-   * 标签就把 token 也一起取走 —— 所以单独开一条只回账号名的读路径。
+   * 登录页要在服务器列表里显示两件事：「这台机器上用的是哪个账号」，以及**哪些服务器还有
+   * 凭据**（没有的那几台不该算「已保存的登录」）。但渲染层不该为了一个标签就把 token 也
+   * 一起取走 —— 所以单独开一条只回账号名的读路径。
+   *
+   * ★ 因此**键集本身就是信息**：有键 = 有凭据；值空 = 有凭据但没记下账号名
+   *   （正常情况下不会出现：登录时一定把 username 一起写进来）。别改回「只收有账号名的」——
+   *   那样「哪些还有凭据」就无从判断，退出登录后的服务器会继续挂在登录页的「已保存的登录」里。
    */
   listAccounts(): Record<string, string> {
     const accounts: Record<string, string> = {}
     for (const [key, creds] of Object.entries(this.data.credentials)) {
-      if (creds.username) accounts[key] = creds.username
+      accounts[key] = creds.username ?? ''
     }
     return accounts
   }

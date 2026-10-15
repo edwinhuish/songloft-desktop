@@ -10,8 +10,9 @@
  *   1. **服务器地址是一等公民** —— songloft 后端不是云服务，地址必须手填；
  *   2. **探测按钮**：填完地址先点一下，能立刻分出「地址错了」「服务没起来」
  *      「地址对但需要 TLS 放行」三种情况，而不是登录失败后盲猜；
- *   3. **已保存的登录列表**：登录按钮下面列出用过的服务器（含各自的账号名），
- *      点一条就用本机凭据直接进去 —— 多台 NAS 之间切换，不该每次重敲地址与密码。
+ *   3. **已保存的登录列表**：登录按钮下面列出**本机还存着凭据**的那几台服务器（含各自的
+ *      账号名），点一条就用本机凭据直接进去 —— 多台 NAS 之间切换，不该每次重敲地址与密码。
+ *      退出登录会连同凭据一起把那一行摘掉（条目还留着，地址仍预填在表单里，见 savedLogins）。
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -84,7 +85,15 @@ export function LoginPage(): React.JSX.Element {
     setUrl((current) => (current === DEFAULT_URL && servers[0] ? servers[0].url : current))
   }, [servers])
 
-  // 列表一变就重读账号名：刚移除或刚在某台服务器上登录过之后，这里不该还是旧的一份
+  /*
+   * 账号名那一份快照的重读时机。
+   *
+   * ★ 它同时是「哪些服务器还有凭据」的判据（键集即信息，见 main/store.ts 的 listAccounts），
+   *   所以**退出登录之后必须重读一次** —— 那一下把凭据抹掉了，而 `servers` 并不会变，
+   *   只按 `servers` 重读的话，刚退出的那台服务器还会以「已保存的登录」挂在页面下方。
+   *   退出登录会把人送到这一页（这一页因此是**重新挂上**的），挂载那次读就已经够；
+   *   `servers` 那一档管的是另一头：移除服务器、或刚在某台上登录过（列表要跟着变）。
+   */
   useEffect(() => {
     void window.songloft.servers
       .accounts()
@@ -157,6 +166,17 @@ export function LoginPage(): React.JSX.Element {
   }
 
   const message = localError ?? error
+
+  /**
+   * 「已保存的登录」到底有哪几条。
+   *
+   * ★ 判据是**本机还有没有那台服务器的凭据**，不是 `servers` 里有没有它：退出登录会把凭据
+   *   抹掉，但**服务器条目留着**（地址与备注名还有用 —— 表单里就预填着它，重登不必重敲）。
+   *   只认 `servers` 的话，刚退出的那台会继续挂在这儿，而那一块自己写着「点一条就用本机凭据
+   *   直接进入」—— 点下去只会把表单填好、进不去，等于撒了个谎。
+   *   `accounts` 的键集就是「还有凭据的服务器」（见 main/store.ts 的 listAccounts）。
+   */
+  const savedLogins = servers.filter((server) => server.url in accounts)
 
   /**
    * 指针到右边缘没有。`clientX` 与 `rect.right` 都算窗口内的绝对坐标，与页面滚到哪儿无关；
@@ -346,7 +366,7 @@ export function LoginPage(): React.JSX.Element {
             {busy ? '正在登录…' : '登录'}
           </button>
 
-          {servers.length > 0 ? (
+          {savedLogins.length > 0 ? (
             <>
               <div className="divider" />
               <div className="saved-logins">
@@ -355,7 +375,7 @@ export function LoginPage(): React.JSX.Element {
                   <div className="field-hint">点一条就用本机凭据直接进入，不用再输密码</div>
                 </div>
                 <div className="saved-server-list">
-                  {servers.map((server) => {
+                  {savedLogins.map((server) => {
                     const account = accounts[server.url]
                     return (
                       <div key={server.url} className="saved-server">
@@ -368,7 +388,7 @@ export function LoginPage(): React.JSX.Element {
                         >
                           <span className="saved-server-title">
                             <span className="truncate">{server.name}</span>
-                            <span className="badge">{account ?? '未记录账号'}</span>
+                            <span className="badge">{account || '未记录账号'}</span>
                           </span>
                           <span className="saved-server-url truncate">{server.url}</span>
                         </button>
