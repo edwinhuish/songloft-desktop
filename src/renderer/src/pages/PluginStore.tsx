@@ -55,7 +55,13 @@ export function PluginStore(): React.JSX.Element {
   /** 已经翻到底了（某页空着回来）。它比 `entries.length < total` 更硬，见下面那处 setExhausted */
   const [exhausted, setExhausted] = useState(false)
   const [warnings, setWarnings] = useState<string[]>([])
-  const [loading, setLoading] = useState(false)
+  /**
+   * ★ 初值跟着 client 走，不是写死 false：这一页的**第一帧**就该是骨架屏。
+   *   写死 false 的话，effect 里那句 setLoading(true) 跑在首次绘制之后 ——
+   *   会先闪一下「商店里还没有扩展」的空态、再变成骨架，正是这一屏要消掉的那种跳动。
+   *   没有会话（client 为 null）时压根不会发请求，也就不该摆骨架，照旧走空态的引导。
+   */
+  const [loading, setLoading] = useState(client !== null)
   const [error, setError] = useState<string | null>(null)
   /** 正在安装的那一行（按 registryRowKey）。同一时刻只允许一个，避免重复点出两次安装 */
   const [pending, setPending] = useState<string | null>(null)
@@ -366,11 +372,10 @@ export function PluginStore(): React.JSX.Element {
         </ul>
       ) : null}
 
-      {!error && loading && entries.length === 0 ? (
-        <div className="empty">
-          <IconLoader size={22} />
-        </div>
-      ) : null}
+      {/* 头一页还在路上：摆与真实卡片同构的骨架屏（见 StoreGridSkeleton）。
+          转圈图标只说得清「在忙」，说不清「待会儿这儿会长出什么」——数据一回来卡片凭空冒出来，
+          视线得重新找一遍位置 */}
+      {!error && loading && entries.length === 0 ? <StoreGridSkeleton /> : null}
 
       {/* 续页时只在列表底部放一枚转圈的指示，不摆骨架屏：骨架会把已有的行往下推 */}
       {!error && loading && entries.length > 0 ? (
@@ -536,6 +541,95 @@ function StoreCard({ entry, pending, disabled, onInstall }: StoreCardProps): Rea
         ) : null}
       </div>
     </li>
+  )
+}
+
+/* ─────────────────────────── 卡片网格的骨架屏 ─────────────────────────── */
+
+/**
+ * 首屏摆几张骨架卡。
+ *
+ * 不能拿 PAGE_SIZE（20）来摆 —— 那是「一次请求拉多少」，不是「一屏看得见多少」：
+ * 20 张能把首屏撑成七行，而商店里只有三条时数据一回来页面立刻缩掉一大半。
+ * 6 张在 1 / 2 / 3 列下都排得整齐，也差不多是首屏一屏的量。
+ */
+const SKELETON_CARDS = 6
+
+/**
+ * 商店卡片的骨架屏。
+ *
+ * ★ 它**复用 StoreCard 那一套类名**（.store-grid / .store-card / .store-card-top /
+ *   .store-card-desc / .store-card-tags / .store-card-foot），而不是自己摆一套尺寸：
+ *   占位块的位置因此由**同一份 CSS** 决定 —— 卡片高度、内边距、区块间距、图标尺寸
+ *   天然对齐，数据回来时只是灰条换成文字。自己另写一套尺寸的话，将来改卡片样式必然
+ *   忘了改这里，两者会慢慢错开；而错开的表现，正是这一屏要消掉的那种跳动。
+ *
+ * ★ 只有一处刻意不等真：描述那一块不论真实文本是几行，都只摆两行灰条。
+ *   真实的 .store-card-desc 本来就有 min-height: 39px 兜底（见 components.css 里那段
+ *   「描述固定两行的高度」），所以一条描述与两条描述的卡片一样高，骨架照这个高度摆也对得上。
+ */
+function StoreCardSkeleton(): React.JSX.Element {
+  return (
+    <li className="store-card" aria-hidden="true" style={{ pointerEvents: 'none' }}>
+      <div className="store-card-top">
+        {/* 图标：与 StoreIcon 那 40px 同尺寸（.store-card .plugin-icon） */}
+        <div
+          className="skeleton"
+          style={{ flex: 'none', width: 40, height: 40, borderRadius: 8 }}
+        />
+        {/* 名称这一格是顶行唯一可伸缩的（.store-card-name 的 flex: 1 + min-width: 0），
+            所以占位块挂在它**里面**，而不是拿灰条顶掉这一格 */}
+        <span className="store-card-name">
+          <div className="skeleton" style={{ height: 13, width: '58%' }} />
+        </span>
+        {/* 动作按钮：.btn[data-size='sm'] 是 29px 高，「安装」两个字量下来约 84 宽 */}
+        <div
+          className="skeleton"
+          style={{ flex: 'none', width: 84, height: 29, borderRadius: 'var(--r-sm)' }}
+        />
+      </div>
+
+      {/* 描述：两条灰条。行距按 .store-card-desc 的行高摆（12.5px × 1.55 ≈ 19，减掉条高 12） */}
+      <div className="store-card-desc" style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        <div className="skeleton" style={{ height: 12, width: '100%' }} />
+        <div className="skeleton" style={{ height: 12, width: '62%' }} />
+      </div>
+
+      {/* 标签行：来源徽标 + entryPath 两枚。★ 两者高度**不一样**、要各按各的来：
+          徽标是 .badge 的 18px，而 entryPath 那块（.store-card-code）是 11px 的字乘上
+          继承来的 1.5 行高、再加它自己的上下 2px 内边距 = 20.5 —— 照着 18 摆，整行会矮
+          2.5px，全店的卡片跟着矮一截 */}
+      <div className="store-card-tags">
+        <div className="skeleton" style={{ width: 70, height: 18, borderRadius: 'var(--r-xs)' }} />
+        <div
+          className="skeleton"
+          style={{ width: 104, height: 20.5, borderRadius: 'var(--r-xs)' }}
+        />
+      </div>
+
+      {/*
+        底行。两处不显然，都是为了让外框与真实底行一样高：
+        * 两段用 span 而不是 div：.store-card-foot > span 那条 `flex: 1` 正是真实底行的分栏
+          方式（左边「作者 · 版本」占满、右边「主页」贴尾），用 div 就得再抄一遍；
+        * minHeight 用 1lh：真实底行的高度是**文字的行盒**撑起来的（11.5px × 继承来的
+          行高 1.5 ≈ 17px），灰条只有 12px —— 不把行盒补回来，每张骨架卡会矮 5px，
+          数据一回来整片卡片往下长一截。写 1lh 而不是 17：字号变了它跟着变。
+      */}
+      <div className="store-card-foot" style={{ minHeight: '1lh' }}>
+        <span className="skeleton" style={{ height: 12 }} />
+        <span className="skeleton" style={{ flex: 'none', width: 26, height: 12 }} />
+      </div>
+    </li>
+  )
+}
+
+function StoreGridSkeleton(): React.JSX.Element {
+  return (
+    <ul className="store-grid" aria-hidden="true">
+      {Array.from({ length: SKELETON_CARDS }, (_, index) => (
+        <StoreCardSkeleton key={index} />
+      ))}
+    </ul>
   )
 }
 
