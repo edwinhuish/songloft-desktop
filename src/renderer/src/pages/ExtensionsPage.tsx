@@ -585,25 +585,34 @@ function ExtensionRow({
               运行异常
             </span>
           ) : null}
-          {/*
-            主页。放在「名字 + 徽标」这一串的**末尾**而不是名字与徽标之间：它是这一行的一个动作，
-            插在中间会把「名字配着哪个版本」这一组拆开。
-            外链交给系统浏览器（渲染层自己开窗会被主进程的导航围栏拦下，与商店卡片那颗同一条）。
-            aria-label 补全语境 —— 一列行里光念「主页」不知道是谁的主页。
-          */}
-          {plugin.homepage ? (
-            <button
-              type="button"
-              className="link"
-              aria-label={`打开 ${name} 的主页`}
-              onClick={() => void window.songloft.shell.openExternal(plugin.homepage)}
-            >
-              主页
-            </button>
-          ) : null}
         </div>
-        {/* 作者。两者都没有时整行不渲染 —— 否则会留一道空行，把行高撑得比有作者的那些还高 */}
-        {plugin.author ? <div className="extension-meta truncate">{plugin.author}</div> : null}
+        {/*
+          第二行：作者 + 主页。
+
+          ★ 主页挂在**作者右边**而不是名字那一行：名字那行要留给「名字 + 版本 + 运行异常」这一组
+            （扫列表时最要比的就是它们），插一个动作进去会把这一组拆开；而这一行只有一段次要
+            文字，右边本来就空着。
+          ★ 作者那段负责收窄出省略号、链接一律不压缩（见 .link 的 flex: none）—— 同一行里
+            链接比作者的名字更要紧，宁可把作者截短。
+          ★ 两者都没有时整行不渲染 —— 否则会留一道空行，把行高撑得比有作者的那些还高。
+          ★ 外链交给系统浏览器（渲染层自己开窗会被主进程的导航围栏拦下，与商店卡片那颗同一条）。
+            aria-label 补全语境 —— 一列行里光念「主页」不知道是谁的主页。
+        */}
+        {plugin.author || plugin.homepage ? (
+          <div className="extension-meta">
+            {plugin.author ? <span className="truncate">{plugin.author}</span> : null}
+            {plugin.homepage ? (
+              <button
+                type="button"
+                className="link"
+                aria-label={`打开 ${name} 的主页`}
+                onClick={() => void window.songloft.shell.openExternal(plugin.homepage)}
+              >
+                主页
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {/*
           说明单独成块、最多两行（.extension-desc 的 line-clamp），不再与作者挤在同一个截断行里：
           那个写法下作者占掉的那一段会把说明的第一行吃掉，「描述能看两行」当场不成立。
