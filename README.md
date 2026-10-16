@@ -134,12 +134,14 @@ Songloft 是「客户端 + 自建 Go 后端」的结构：后端管曲库、标�
 | 平台 | 产物 | 说明 |
 |---|---|---|
 | Windows x64 | `.exe`（NSIS 安装包） | 可选安装目录；按**当前用户**安装，不弹 UAC；安装界面中文 / 英文；卸载时保留用户数据 |
+| Windows x64 | `.zip`（免安装「绿色版」） | 解压即用，不写注册表、不装到系统目录。**配置与缓存就在解压目录的 `data\` 下** —— 整个文件夹拷到 U 盘（或另一台机器）就带走了全部配置。不注册文件关联，要让音频文件双击后用本应用打开，在「打开方式」里手动指一次 |
 | macOS arm64 / x64 | `.dmg` / `.zip` | dmg 供人工安装，zip 给不便挂载 dmg 的场景。**未签名、未公证**，首次打开会被 Gatekeeper 拦下（见下） |
 | Linux x64 | `.deb` / `AppImage` / `.tar.gz` | deb 适配 Debian / Ubuntu；AppImage 免安装、双击即用（已内置静态 runtime，不依赖 `libfuse2`）；tar.gz 解压即用 |
 
 三平台的文件名是同一个式样：`Songloft-Desktop-<版本>-<系统>-<架构>.<扩展名>`，例如
 `Songloft-Desktop-1.1.7-linux-x64.AppImage`、`Songloft-Desktop-1.1.7-windows-x64.exe`
-（系统是 `windows` / `macos` / `linux`，架构是 `x64` / `arm64`）。
+（系统是 `windows` / `macos` / `linux`，架构是 `x64` / `arm64`）。同一个平台的多份产物按**扩展名**
+区分：Windows 的 `.exe` 是安装包、`.zip` 是免安装绿色版。
 
 ### macOS：首次打开被 Gatekeeper 拦下
 

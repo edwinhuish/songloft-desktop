@@ -176,9 +176,14 @@ runner 上**并行构建**，三份全绿才创建 Release（任何一个平台�
 
 | 平台 | 产物 | 在哪构建 |
 |---|---|---|
-| Windows x64 | NSIS `.exe` | `windows-latest` —— `makensis` 与 .exe 的图标/版本资源只在 Windows 上可用 |
+| Windows x64 | NSIS `.exe` + 免安装 `.zip` | `windows-latest` —— `makensis` 与 .exe 的图标/版本资源只在 Windows 上可用 |
 | macOS arm64 / x64 | `.dmg` / `.zip` | `macos-latest` —— dmg 走系统的 `hdiutil` |
 | Linux x64 | `.deb` / `AppImage` / `.tar.gz` | `ubuntu-24.04` |
+
+Windows 那份 `.zip` 是**免安装（绿色）版**：解压即用、不写注册表，用户数据落在解压目录的
+`data\` 下（整个文件夹拷走即带走全部配置）。它靠 exe 旁边一个标记文件认自己，而安装包装完之后
+会把那个标记删掉 —— 所以 `win.extraFiles` 与 `build/installer.nsh` 是一件事的两半，缺一个都会
+静默让安装版把数据写进安装目录（详见 [AGENTS.md](../AGENTS.md) §8.18）。
 
 **跨平台打包不可行**：`pack:win` / `pack:mac` 只能在对应系统上跑，Linux 上只有 `pack:linux` 那一条
 能验证。所以改了 `electron-builder.yml` 的 `win:` / `mac:` / `nsis:` 段之后，别只跑 `pnpm run check`

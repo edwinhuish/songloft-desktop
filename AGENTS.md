@@ -53,7 +53,7 @@ pnpm run build            # 产出 out/（main + preload + renderer）
 pnpm run e2e              # 端到端 UI 巡检（起 mock 后端 + 截图 + 断言）
 pnpm run shots            # 把巡检截图整理成文档用图（docs/screenshots + docs/e2e-walkthrough.png）
 pnpm run pack:linux       # 打 deb / AppImage / tar.gz 到 release/
-pnpm run pack:win         # 打 NSIS 安装包（要在 Windows 上跑；Linux/macOS 上跑不动）
+pnpm run pack:win         # 打 NSIS 安装包与免安装 zip（要在 Windows 上跑；Linux/macOS 上跑不动）
 pnpm run pack:mac         # 打 dmg / zip（要在 macOS 上跑）
 pnpm run verify:package   # 校验打包产物的桌面集成项（只覆盖 Linux 产物）
 pnpm run icons            # 由 build/icon.svg 生成全套图标 + 托盘图
@@ -81,7 +81,7 @@ pnpm run release          # ★ 发版：升版本 + 提交 + 打 v* 标签 + �
 |---|---|
 | `preflight` | 先校验「标签 ↔ `package.json` 版本」一致（不一致就失败，不进入构建），再跑一遍 `pnpm run check` |
 | `build` | **三平台并行**构建：`pack:linux` / `pack:win` / `pack:mac`，各自 `--publish never`，只把产物放进 `release/` 再作为 artifact 上传 |
-| `release` | 三份都成功后汇总：`get-tags.sh` 查出前一个版本标签 → `generate-changelog.sh` 从提交历史按 `feat` / `fix` / … 分类生成发布说明 → 断言 deb / AppImage / tar.gz / exe / dmg 一样不缺 → 创建 Release 并上传（含 `SHA256SUMS.txt`）→ 最后再断言发布说明与资产都在 |
+| `release` | 三份都成功后汇总：`get-tags.sh` 查出前一个版本标签 → `generate-changelog.sh` 从提交历史按 `feat` / `fix` / … 分类生成发布说明 → 断言 deb / AppImage / tar.gz / exe / dmg / Windows 免安装 zip 一样不缺，且**文件名都合统一命名式** → 创建 Release 并上传（含 `SHA256SUMS.txt`）→ 最后再断言发布说明与资产都在 |
 
 为什么要「先全部构建成功、再统一上传」：任何一个平台失败时都不该留下半份已发布的 Release
 （已发布的 Release 收不回，用户可能已经下载）。
@@ -749,11 +749,34 @@ Linux 的文件关联把路径追加在 argv 里）、macOS 的 `open-file` 事�
   `LOAD_FALLBACK_MS` 一到就先把窗口亮出来。跟随者那一边这只是「条出来了」；本地会话里那一窗
   是唯一的界面，藏起来就成了「双击了文件，什么都没有」。
 
+### 8.18 Windows 免安装（绿色）版靠**一个标记文件**认自己，而安装包必须把这个标记删掉
+
+免安装 zip 版承诺的是「整个文件夹拷走就带走全部配置」—— 那要求用户数据落在 exe 旁边的
+`data\` 里，而不是 `%APPDATA%`。判据**不能**是「目录写不写得进去」：NSIS 的默认安装目录
+（`%LOCALAPPDATA%\Programs\…`）同样可写。能区分两者的只有 **exe 旁边有没有那个标记文件**
+（`portable.txt`；名字与判据在 `src/shared/user-data.ts`）。
+
+于是 `win.extraFiles` 把它放进 appOutDir（`build/portable.txt`，落点就是 exe 旁边，**不是**
+`resources/`），而这份配置是**平台级**的：zip 要留着它，NSIS 装完必须删掉它 ——
+`electron-builder.yml` 的 `nsis.include: build/installer.nsh` 干的就是这件事（`customInstall`
+的插入点在文件拷完之后）。两半是同一件事，缺一个都**静默**走错方向：
+
+| 只动了一半 | 症状 |
+|---|---|
+| 删掉 `installer.nsh` 里那句 `Delete` | 安装版把配置写进安装目录，卸载 / 换安装目录就把用户数据一起弄丢 |
+| 拿掉 `win.extraFiles` | 绿色版退化成「免安装、但配置还在 `%APPDATA%`」，拷到别的机器上配置全没了 |
+
+三档优先级（`SONGLOFT_USER_DATA` > 免安装的 `data\` > 系统默认位置）与「只读介质上要退回系统
+默认位置、不能因为目录建不出来就起不来」这条兜底都在 `src/shared/user-data.ts`，单测钉着
+（`user-data.test.ts`）。`pnpm run pack:win` 会同时产出 `.exe` 与 `.zip`，两份靠扩展名区分。
+
 ---
 
 ## 9. 不要做
 
 * 不要只改 `.desktop` 相关的三处之一（见 8.1）。
+* 不要把 `build/installer.nsh` 里那句 `Delete` 当成多余代码删掉 —— 它是免安装版与安装版的分界
+  （见 8.18），删了会让安装版把用户数据写进安装目录。
 * 不要把「窗口 icon」当成任务栏图标的解决方案：Wayland 下它传不出去，缺的永远是宿主上
   那份 `.desktop`（见 8.11）。
 * 不要让应用在启动时自行往 `~/.local/share` 之类的用户目录写桌面条目 / 图标：桌面集成走

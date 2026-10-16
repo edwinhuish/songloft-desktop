@@ -199,6 +199,11 @@ jobs:
           set -euo pipefail
           ls -la artifacts
 
+          # 命名式：Songloft-Desktop-<version>-<os>-<cpu>.<ext>。版本号取自标签（去掉 v）——
+          # preflight 已经断言过标签与 package.json 一致，所以它必然等于 ${version} 宏的展开值。
+          # 这一步跑在生成 SHA256SUMS.txt **之前**，所以 artifacts/ 里此刻只有产物本身。
+          version="${TAG#v}"
+
           missing=""
           for pattern in '*.deb' '*.AppImage' '*.tar.gz' '*.exe' '*.dmg'; do
             # 先落成判断，别在管道里用 grep（pipefail 下 SIGPIPE 会假阴性）
@@ -207,15 +212,19 @@ jobs:
             fi
           done
 
+          # ★ 免安装（绿色）版要**点名**断言，它钻的正是上面那一轮的漏：那一轮只看扩展名，而
+          #   macOS 也产 .zip —— 于是少打一个 Windows zip 完全看不出来（缺的是一份真正给人下载的
+          #   产物，不是打包配置里的一行）。名字见 electron-builder.yml 的 win.target。
+          green="Songloft-Desktop-${version}-windows-x64.zip"
+          if [ ! -f "artifacts/$green" ]; then
+            missing="$missing $green"
+          fi
+
           if [ -n "$missing" ]; then
             echo "::error::缺少这些产物：${missing# }。检查对应平台的构建 job 是否真的产出了文件。"
             exit 1
           fi
 
-          # 命名式：Songloft-Desktop-<version>-<os>-<cpu>.<ext>。版本号取自标签（去掉 v）——
-          # preflight 已经断言过标签与 package.json 一致，所以它必然等于 ${version} 宏的展开值。
-          # 这一步跑在生成 SHA256SUMS.txt **之前**，所以 artifacts/ 里此刻只有产物本身。
-          version="${TAG#v}"
           bad=""
           for file in artifacts/*; do
             name="$(basename "$file")"
@@ -312,6 +321,11 @@ jobs:
           for pattern in '\.deb$' '\.AppImage$' '\.tar\.gz$' '\.exe$' '\.dmg$' 'SHA256SUMS\.txt'; do
             grep -qE "$pattern" <<< "$assets" || missing="$missing $pattern"
           done
+
+          # 免安装（绿色）版点名查一次：上面那一轮按扩展名看，macOS 也产 .zip，少一份 Windows zip
+          # 是看不出来的（同「断言三平台产物齐全」那一步的理由）。
+          green="Songloft-Desktop-${TAG#v}-windows-x64.zip"
+          grep -qxF "$green" <<< "$assets" || missing="$missing $green"
 
           if [ -n "$missing" ]; then
             echo "::error::Release $TAG 缺少：${missing# }。实际上传的是：$(tr '\n' ' ' <<< "$assets")"

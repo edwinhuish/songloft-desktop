@@ -145,6 +145,10 @@ win:
   target:
     - target: nsis
       arch: [x64]
+    # 免安装（绿色）版：解压即用，不写注册表、不装到系统目录。见下面 extraFiles 那一段。
+    # 两份 target 的产物靠扩展名分开（.exe 是安装包、.zip 是绿色版），命名式不用另加变体段。
+    - target: zip
+      arch: [x64]
   # 见上面「产物文件名」那一段。Windows 的 .exe 没有 deb 那种 arch 重映射，但同样写死 x64 ——
   # 与 Linux 那份对齐，且本平台也只打 x64
   artifactName: Songloft-Desktop-${version}-windows-x64.${ext}
@@ -152,6 +156,15 @@ win:
   # build/icon.ico / build/icon.png，而本仓库这两份都没有 —— 那样 Windows 产物会静默退回
   # Electron 默认图标，且只有装到别人机器上才看得出来。
   icon: build/icon-source.png
+  # ★ 免安装版的标记：放在**exe 旁边**（extraFiles 的落点就是 appOutDir，不是 resources/）。
+  #   应用启动时看到它就把用户数据写在自己目录下的 data\ 里，整个文件夹拷走即带走全部配置
+  #   （判据在 src/shared/user-data.ts，那份文件解释了为什么必须有这个标记、以及它为什么
+  #   又要在安装包里被删掉）。
+  #   ⚠️ 两份产物靠同一个平台级配置：zip 里这个标记要留着，nsis 装完要删掉 ——
+  #      删的动作在下面 nsis.include 指的那个脚本里。改动这两半中的任何一个都要一起看。
+  extraFiles:
+    - from: build/portable.txt
+      to: portable.txt
 
 nsis:
   # 不做「点一下装完」：播放器不是运行时组件，用户需要能挑安装目录。
@@ -160,8 +173,11 @@ nsis:
   # 按当前用户安装，避免每次安装都弹 UAC
   perMachine: false
   installerLanguages: [zh_CN, en_US]
-  # 卸载时保留用户数据：设置 / 凭据 / 服务器列表都在 %APPDATA%，删掉等于让用户重登一遍
+  # 卸载时保留用户数据：设置 / 凭据 / 服务器列表都在 %APPDATA%（免安装版则是 exe 旁边的
+  # data\），删掉等于让用户重登一遍
   deleteAppDataOnUninstall: false
+  # 装完之后删掉免安装版那个标记。默认值本来就是 build/installer.nsh，写出来只为让人别满仓库找它
+  include: build/installer.nsh
 
 # ── macOS ────────────────────────────────────────────────────────────────────
 mac:

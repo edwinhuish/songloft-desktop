@@ -7,6 +7,9 @@
  *   * 承载界面的窗口 contextIsolation + sandbox 全开。
  */
 
+import { existsSync, mkdirSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+
 import { BrowserWindow, app, ipcMain, session, shell } from 'electron'
 
 import type { StoredCredentials } from '@shared/bridge-types'
@@ -51,6 +54,7 @@ import {
 import { fetchCoverBytes, probeServer } from './probe'
 import { LOCAL_FILE_SCHEME } from '@shared/local-file'
 import { PLUGIN_PARTITION } from '@shared/plugin'
+import { PORTABLE_MARKER_FILE, chooseUserDataDir, portableDataDir } from '@shared/user-data'
 import { ConfigStore } from './store'
 import { createTray, destroyTray, render as renderTray, type TrayDeps } from './tray'
 import { applyWindowOnTop, createMainWindow } from './windows'
@@ -86,13 +90,43 @@ app.setDesktopName('io.github.edwinhuish.songloft-desktop')
 registerLocalFileScheme()
 
 /**
- * 允许把配置目录挪走。两个用途：
- *   1. 自动化冒烟测试给一份预置凭据的配置，不去碰用户真实的 ~/.config/songloft-desktop；
- *   2. 用户想同时挂两套服务器配置时，可以自己指定。
- * 必须在任何 app.getPath('userData') 被读取之前调用，所以放在 ConfigStore 实例化之前。
+ * 免安装（绿色）版该用的数据目录 —— 拿不到就返回 null。
+ *
+ * 判据两件事都要满足：exe 旁边有标记文件（见 shared/user-data.ts 的 PORTABLE_MARKER_FILE），
+ * 且那个目录**真建得出来**。只读介质上（U 盘写了保护、解压到 Program Files）落不了数据，
+ * 这时宁可退回系统默认位置，也不能让应用因为一个目录建不出来就起不来。
+ * ★ 判「能不能写」用的是真去建一次目录，不是 fs.accessSync(W_OK) —— 后者在 Windows 上
+ *   只看文件属性里的只读位，目录权限不足时它照样说能写。
  */
-const userDataOverride = process.env.SONGLOFT_USER_DATA
-if (userDataOverride) app.setPath('userData', userDataOverride)
+function portableUserDataDir(): string | null {
+  const exeDir = dirname(app.getPath('exe'))
+  const dir = portableDataDir(exeDir, existsSync(join(exeDir, PORTABLE_MARKER_FILE)))
+  if (!dir) return null
+
+  try {
+    mkdirSync(dir, { recursive: true })
+    return dir
+  } catch (error) {
+    console.warn(`[songloft] 免安装版的数据目录建不出来（${dir}），改用系统默认位置`, error)
+    return null
+  }
+}
+
+/**
+ * 配置目录落在哪儿，三档里挑一个（优先级见 shared/user-data.ts 的 chooseUserDataDir）：
+ *   1. `SONGLOFT_USER_DATA` 显式指定 —— 自动化冒烟测试给一份预置凭据的配置，不去碰用户真实的
+ *      ~/.config/songloft-desktop；用户想同时挂两套服务器配置时也可以自己指定；
+ *   2. 免安装（绿色）版：数据放在 exe 旁边，整个文件夹拷走就带走全部配置；
+ *   3. 系统默认位置（`%APPDATA%\Songloft Desktop` / `~/.config/…` / `~/Library/Application Support/…`）。
+ * 必须在任何 app.getPath('userData') 被读取之前定下来，所以放在 ConfigStore 实例化之前。
+ */
+const systemUserDataDir = app.getPath('userData')
+const userDataDir = chooseUserDataDir({
+  override: process.env.SONGLOFT_USER_DATA ?? '',
+  portableDir: portableUserDataDir(),
+  fallback: systemUserDataDir
+})
+if (userDataDir !== systemUserDataDir) app.setPath('userData', userDataDir)
 
 /**
  * Linux 下改用 X11 后端（XWayland）—— **只在显式要求时**（`SONGLOFT_OZONE=x11`），默认不动。
