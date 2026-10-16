@@ -789,9 +789,9 @@ Linux 的文件关联把路径追加在 argv 里）、macOS 的 `open-file` 事�
 * 不要靠换码率 / 关音量归一化来「换源」：那是换读取方式，换不了源；重新向后端要地址才是（见 8.15）。
 * 不要在 DOM 元素上写 `title=` 当提示：那是浏览器自带的黑框，配色不跟主题、出现时机也不受控。
   一律写 `data-tip="…"`，由 `components/Tooltip.tsx` 的全局浮层统一显示（图标按钮仍要留
-  `aria-label`，浮层是 `aria-hidden` 的，不承担可访问名）。浮层默认摆在上方，按
-  上→下→左→右 的顺序找第一个装得下的方位；只有折叠侧栏例外（`data-tip-place="right"`），
-  因为那里条目竖排，往右才不遮邻居。
+  `aria-label`，浮层是 `aria-hidden` 的，不承担可访问名）。浮层跟着指针走（起在指针右下方，
+  放不下就翻到另一侧，四边再夹进视口），所以没有「按元素挑方位」这一档，也就不存在
+  `data-tip-place` 之类的方位属性。
 * 不要把 `build/` 当运行期资源目录。
 * 不要在 `shared/` 里引入副作用或 electron 依赖。
 * 不要为了让 `format:check` 通过而给文件加 `prettier-ignore` —— 直接跑 `pnpm run format`。

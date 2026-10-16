@@ -35,7 +35,7 @@ import { useSettings } from '@/state/useSettings'
 import { useUi } from '@/state/useUi'
 import { useToasts } from '@/state/useToasts'
 import { Cover } from './primitives'
-import { TIP_ATTR, TIP_PLACE_ATTR } from './Tooltip'
+import { TIP_ATTR } from './Tooltip'
 
 export function Sidebar(): React.JSX.Element {
   // 读原生面的路由（不是「当前显示的那一面」）：这一栏只服务原生面，
@@ -47,9 +47,8 @@ export function Sidebar(): React.JSX.Element {
    *
    * 浮层与全应用其余提示是同一套（`data-tip`），行为与配色只有一份。
    */
-  const tip = (label: string): { [TIP_ATTR]?: string; [TIP_PLACE_ATTR]?: string } =>
-    // 侧栏是唯一例外：往右弹（见 PLACE_ORDER 的说明），所以显式指定方位
-    sidebarCollapsed ? { [TIP_ATTR]: label, [TIP_PLACE_ATTR]: 'right' } : {}
+  const tip = (label: string): { [TIP_ATTR]?: string } =>
+    sidebarCollapsed ? { [TIP_ATTR]: label } : {}
   const { playlists, load, create } = usePlaylists()
   const { patch } = useSettings()
   const push = useToasts((s) => s.push)
@@ -376,7 +375,6 @@ export function Sidebar(): React.JSX.Element {
         className="icon-btn sidebar-toggle"
         aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
         data-tip={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
-        data-tip-place={sidebarCollapsed ? 'right' : undefined}
         onClick={() => {
           const next = !sidebarCollapsed
           toggleSidebar()

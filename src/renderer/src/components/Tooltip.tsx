@@ -14,44 +14,26 @@
  *    出现「这一处能弹、那一处不弹」。（顺带把浏览器自带黑框换掉了：它的出现时机、
  *    停留时长、配色都不受应用控制，在浅色主题下尤其突兀。）
  *
- * 外观见 styles/components.css 的 `.tip`：颜色全走主题 token，浅色/深色各自成立。
+ * 3. **跟着指针走，不贴在被提示元素上。**
+ *    贴元素那套要按可用空间挑方位（原先有上下左右四个候选、一套 fitsAt/placeAt，还要为
+ *    折叠侧栏单开一个 `data-tip-place="right"`）—— 而「往哪边弹」这件事，指针位置本身就
+ *    知道：默认右下方，放不下翻到另一侧，四边夹进视口。更实际的理由是**不遮住要看的东西**：
+ *    提示多数挂在某一行上，而那一行正是用户在看的内容，一块三百多像素宽的浮层贴在它旁边
+ *    （尤其是插件管理那种五行信息的提示）会正好盖住它。
+ *
+ * 外观见 styles/components.css 的 `.tip`：颜色全走主题 token，浅色/深色各自成立；
+ * 位置与显形由这里的 placeTip 直接写 DOM（见那里的说明）。
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect } from 'react'
 import { create } from 'zustand'
 
 /** 提示文案写在这个属性上：`<button data-tip="收起面板">` */
 export const TIP_ATTR = 'data-tip'
-/** 单独指定摆放方位的属性，只给侧栏用（见 PLACE_ORDER）：`data-tip-place="right"` */
-export const TIP_PLACE_ATTR = 'data-tip-place'
-/** 提示框与被提示元素之间的间隙 */
-const GAP = 10
+/** 提示框与指针之间的间隙 */
+const POINTER_GAP = 16
 /** 与视口边缘至少留出来的空隙 */
 const MARGIN = 8
-
-type TipPlace = 'top' | 'bottom' | 'left' | 'right'
-
-/**
- * 各类提示的候选方位，按优先级排，取第一个装得下的。
- *
- * `auto`（默认，除侧栏外都用它）：**上 → 下 → 左 → 右**。
- * 触发器几乎都长在「行」里或某条「栏」上，上方是内容区，放上方最不挡它自己要看的东西；
- * 上方没空间（贴着窗口上缘的标题栏、表格首行、面板顶部）就退到下方，依次类推。
- *
- * `right` 只给折叠侧栏：那里条目竖着排成一列，上下都是别的条目，往右弹到列表外侧的空白
- * 才是唯一不遮住邻居的方向。侧栏贴着窗口左缘，右侧永远有空间，不需要更多退路。
- *
- * 判定要等框量出来（宽度只有渲染后才知道），所以这一步在 TooltipHost 的 layout effect 里做。
- */
-const PLACE_ORDER = {
-  auto: ['top', 'bottom', 'left', 'right'],
-  right: ['right', 'left']
-} as const satisfies Record<string, readonly TipPlace[]>
-
-/** 属性值只认 'right'（侧栏的那一套），其余一律按默认的 auto */
-function anchorPlaceOf(anchor: HTMLElement): keyof typeof PLACE_ORDER {
-  return anchor.getAttribute(TIP_PLACE_ATTR) === 'right' ? 'right' : 'auto'
-}
 
 /**
  * 悬停多久才弹。
@@ -63,35 +45,20 @@ function anchorPlaceOf(anchor: HTMLElement): keyof typeof PLACE_ORDER {
  */
 const SHOW_DELAY = 400
 
-/** 被提示元素的视口矩形（量一次记下来，定位时不再反复读布局） */
-interface TipRect {
-  left: number
-  top: number
-  width: number
-  height: number
-  right: number
-  bottom: number
-}
-
 interface TipState {
   text: string
-  rect: TipRect | null
   /** 被提示的元素。宿主靠它判断指针是不是还停在上面 */
   anchor: HTMLElement | null
-  /** 候选方位表的名字（见 PLACE_ORDER） */
-  place: keyof typeof PLACE_ORDER
-  show: (rect: TipRect, text: string, anchor: HTMLElement, place: TipState['place']) => void
+  show: (text: string, anchor: HTMLElement) => void
   hide: () => void
 }
 
 export const useTooltip = create<TipState>((set) => ({
   text: '',
-  rect: null,
   anchor: null,
-  place: 'auto',
-  show: (rect, text, anchor, place) => set({ text, rect, anchor, place }),
+  show: (text, anchor) => set({ text, anchor }),
   // 已经收起来时返回原状态对象：滚动等高频事件会反复喊 hide，不该每次都惊动订阅者
-  hide: () => set((state) => (state.text === '' ? state : { text: '', rect: null, anchor: null }))
+  hide: () => set((state) => (state.text === '' ? state : { text: '', anchor: null }))
 }))
 
 /** 待弹的那一次。同一时刻最多只有一个（鼠标只可能停在一个地方） */
@@ -112,48 +79,38 @@ function hideTip(): void {
   useTooltip.getState().hide()
 }
 
-/** 这一侧够不够放：四边都按「与视口边缘至少留 MARGIN」算 */
-function fitsAt(place: TipPlace, rect: TipRect, size: { width: number; height: number }): boolean {
-  switch (place) {
-    case 'top':
-      return rect.top - GAP - size.height >= MARGIN
-    case 'bottom':
-      return rect.bottom + GAP + size.height <= window.innerHeight - MARGIN
-    case 'left':
-      return rect.left - GAP - size.width >= MARGIN
-    case 'right':
-      return rect.right + GAP + size.width <= window.innerWidth - MARGIN
-  }
-}
+/**
+ * 指针当前在哪（视口坐标）。
+ *
+ * 全局一份、由 pointermove 一直刷新 —— 浮层要跟着它走，而「等 400ms 再弹」这段时间里
+ * 指针可能已经挪开了，所以不能等到弹的那一刻才临时去问。
+ */
+let pointer = { x: 0, y: 0 }
 
-/** 按方位算出浮层的左上角；与元素相邻的那条边贴住 GAP，另一轴居中 */
-function placeAt(
-  place: TipPlace,
-  rect: TipRect,
-  size: { width: number; height: number }
-): { left: number; top: number } {
-  if (place === 'top' || place === 'bottom') {
-    return {
-      left: rect.left + rect.width / 2 - size.width / 2,
-      top: place === 'top' ? rect.top - GAP - size.height : rect.bottom + GAP
-    }
-  }
-  return {
-    left: place === 'left' ? rect.left - GAP - size.width : rect.right + GAP,
-    top: rect.top + rect.height / 2 - size.height / 2
-  }
-}
+/**
+ * 浮层那个 div。放在模块级而不是 ref 里，是因为要动它的是**全局**监听（见 bindGlobalListeners），
+ * 那里够不着组件内部的 ref。
+ */
+let tipElement: HTMLElement | null = null
 
-function rectOf(element: HTMLElement): TipRect {
-  const rect = element.getBoundingClientRect()
-  return {
-    left: rect.left,
-    top: rect.top,
-    width: rect.width,
-    height: rect.height,
-    right: rect.right,
-    bottom: rect.bottom
-  }
+/**
+ * 浮层要摆到哪儿。
+ *
+ * 默认是**指针的右下方**，右边或下边装不下就翻到另一侧；四边都按「与视口至少留 MARGIN」
+ * 夹一下 —— 指针贴着窗口边缘时，宁可压着指针也别把浮层推出屏幕。
+ *
+ * ★ 位置与显形都是**直接写 DOM**，不走 React state：指针每秒动上百次，走 state 就是每帧
+ *   重渲染一次这个浮层。React 那边只管文本，位置由这里独家负责（初始不可见写在 .tip 里）。
+ */
+function placeTip(element: HTMLElement): void {
+  const flipX = pointer.x + POINTER_GAP + element.offsetWidth > window.innerWidth - MARGIN
+  const flipY = pointer.y + POINTER_GAP + element.offsetHeight > window.innerHeight - MARGIN
+  const left = flipX ? pointer.x - POINTER_GAP - element.offsetWidth : pointer.x + POINTER_GAP
+  const top = flipY ? pointer.y - POINTER_GAP - element.offsetHeight : pointer.y + POINTER_GAP
+
+  element.style.left = `${Math.max(MARGIN, left)}px`
+  element.style.top = `${Math.max(MARGIN, top)}px`
+  element.style.visibility = 'visible'
 }
 
 /**
@@ -187,10 +144,9 @@ function scheduleShow(anchor: HTMLElement): void {
   armedAnchor = anchor
   showTimer = setTimeout(() => {
     showTimer = null
-    // ★ 到点再量坐标：等待期间侧栏可能正好在展开/收起，进入那一刻量的位置已经不作数了。
-    //   元素若已不在文档里（列表被重渲染）就什么也不弹 —— 量出来会是全 0，浮层会跑到左上角。
+    // ★ 元素若已不在文档里（列表被重渲染）就什么也不弹 —— 它随时可能已经消失
     if (!anchor.isConnected) return
-    useTooltip.getState().show(rectOf(anchor), text, anchor, anchorPlaceOf(anchor))
+    useTooltip.getState().show(text, anchor)
   }, SHOW_DELAY)
 }
 
@@ -214,6 +170,38 @@ function bindGlobalListeners(): void {
     hideTip()
   })
 
+  /*
+   * 指针位置一直记着（见 pointer），浮层跟着它走。
+   *
+   * ★ 一条监听同时干三件事，因为它们要的输入是同一个「指针现在在哪」：记位置、判断指针
+   *   是否还停在被提示的元素上（要收掉）、把浮层重新摆一次。
+   * ★ 每帧都在跑，所以这里只做常数级的事：不重排布局（不读 getBoundingClientRect），
+   *   而是直接写 left/top —— 写样式不会触发同步布局。
+   */
+  document.addEventListener('pointermove', (event) => {
+    pointer = { x: event.clientX, y: event.clientY }
+
+    const { anchor } = useTooltip.getState()
+    if (!anchor) return
+
+    /*
+     * 指针离开锚点就收掉。★ 光有 pointerout 不够，原因是「leave 不一定会来」：
+     *   1. 布局一变（窗口变宽触发的侧栏自动展开）元素就从指针底下挪走了，这不派发 out；
+     *   2. 指针停在 disabled 控件上时事件目标是它的父节点，拿 target 判包含关系会误判。
+     *   所以按坐标算指针在不在锚点里，不在就收。
+     */
+    const underPointer = document.elementFromPoint(event.clientX, event.clientY)
+    const inside =
+      (event.target instanceof Node && anchor.contains(event.target)) ||
+      (underPointer !== null && anchor.contains(underPointer))
+    if (!inside) {
+      hideTip()
+      return
+    }
+
+    if (tipElement) placeTip(tipElement)
+  })
+
   // relatedTarget 为空 = 指针离开了窗口（去点别的应用）。这一下不会派发 pointerover，
   // 没有它的话浮层会一直挂在屏幕上
   document.addEventListener('pointerout', (event) => {
@@ -233,70 +221,31 @@ function bindGlobalListeners(): void {
 
 export function TooltipHost(): React.JSX.Element | null {
   const text = useTooltip((state) => state.text)
-  const rect = useTooltip((state) => state.rect)
-  const anchor = useTooltip((state) => state.anchor)
-  const place = useTooltip((state) => state.place)
-  const ref = useRef<HTMLDivElement | null>(null)
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
 
   useEffect(() => bindGlobalListeners(), [])
 
   /**
-   * 先挂载再定位：框多大只有渲染出来才知道，方位与坐标都要等这个尺寸。
-   * 在 layout effect 里量完再摆，发生在浏览器绘制之前，所以既不会闪一下，
-   * 也不会出现「先摆右下角、再跳到上方」。
+   * 先挂载再摆位置：框多大只有渲染出来才知道（要不要翻到指针另一侧就靠它）。
+   * 在 layout effect 里量完再摆，发生在浏览器绘制之前，所以不会闪一下。
+   *
+   * ★ 位置与显形都直接写 DOM（见 placeTip），这里只是「新文本渲染出来之后摆一次」；
+   *   在此之前指针每动一下都由全局 pointermove 重摆，不经过 React。
    */
   useLayoutEffect(() => {
-    const element = ref.current
-    if (!element || !rect) return
-    const size = { width: element.offsetWidth, height: element.offsetHeight }
-    const order = PLACE_ORDER[place]
-    // 按候选顺序挑第一个装得下的；一个都装不下（触发器又宽又贴边）就按第一候选来，
-    // 随后被夹进视口 —— 宁可压着元素，也好过跑出屏幕看不见
-    const chosen = order.find((candidate) => fitsAt(candidate, rect, size)) ?? order[0]
-    const want = placeAt(chosen, rect, size)
-    setPos({
-      left: Math.min(
-        Math.max(MARGIN, want.left),
-        Math.max(MARGIN, window.innerWidth - MARGIN - size.width)
-      ),
-      top: Math.min(
-        Math.max(MARGIN, want.top),
-        Math.max(MARGIN, window.innerHeight - MARGIN - size.height)
-      )
-    })
-  }, [rect, text, place])
-
-  /**
-   * 浮层只该在指针仍停在被提示元素上时存在。
-   *
-   * ★ 光有 pointerout 不够，原因是「leave 不一定会来」：
-   *   1. 布局一变（窗口变宽触发的侧栏自动展开）元素就从指针底下挪走了，这不派发 out；
-   *   2. 指针停在 disabled 控件上时事件目标是它的父节点，拿 target 判包含关系会误判。
-   *   所以再加一道与「有没有 out」无关的兜底：按坐标算指针在不在锚点里，不在就收。
-   */
-  useEffect(() => {
-    if (!anchor) return
-    const onPointerMove = (event: PointerEvent): void => {
-      if (!anchor.isConnected) return hideTip()
-      if (event.target instanceof Node && anchor.contains(event.target)) return
-      const underPointer = document.elementFromPoint(event.clientX, event.clientY)
-      if (underPointer && anchor.contains(underPointer)) return
-      hideTip()
-    }
-    window.addEventListener('pointermove', onPointerMove)
-    return () => window.removeEventListener('pointermove', onPointerMove)
-  }, [anchor])
+    if (tipElement) placeTip(tipElement)
+  }, [text])
 
   if (!text) return null
   // aria-hidden：这一层纯粹是补视觉。名字该由元素自己的 aria-label 承担
   // （转换前挂在 title 上的那批，都补了 aria-label）
+  // 初始不可见写在 .tip 里：要等 placeTip 量完尺寸才亮，否则会先在左上角闪一下
   return (
     <div
-      ref={ref}
+      ref={(element) => {
+        tipElement = element
+      }}
       className="tip"
       aria-hidden="true"
-      style={pos ? { left: pos.left, top: pos.top } : { left: 0, top: 0, visibility: 'hidden' }}
     >
       {text}
     </div>

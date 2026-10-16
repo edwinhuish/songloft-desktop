@@ -3052,6 +3052,12 @@ select.input option {
  */
 .tip {
   position: fixed;
+  /*
+   * 初始不可见，等 placeTip 量完尺寸再亮（见 Tooltip.tsx）：框多大决定要不要翻到指针另一侧，
+   * 而尺寸只有渲染出来才知道 —— 不等它就必然先在左上角闪一下。
+   * 用 visibility 而不是 display：它得**有布局**才量得出宽高。
+   */
+  visibility: hidden;
   /* 高于提示条(300)与右键菜单(200)：它只是个装饰，不该被别的浮层压住 */
   z-index: 400;
   padding: 5px 9px;

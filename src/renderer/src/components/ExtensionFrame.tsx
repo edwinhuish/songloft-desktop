@@ -27,7 +27,7 @@ import { IconChevronLeft, IconChevronRight, IconMusic, IconSliders, IconStore } 
 import { openMenuFromEvent } from './ContextMenu'
 import { PluginIcon } from './PluginIcon'
 import { PluginSurface } from './PluginSurface'
-import { TIP_ATTR, TIP_PLACE_ATTR } from './Tooltip'
+import { TIP_ATTR } from './Tooltip'
 import { ExtensionsPage } from '@/pages/ExtensionsPage'
 import { PluginStore } from '@/pages/PluginStore'
 import { useDisplayablePlugins, useExtensionRuntime, usePlugins } from '@/state/usePlugins'
@@ -91,11 +91,10 @@ function ExtensionSidebar({
   const patch = useSettings((state) => state.patch)
 
   /**
-   * 折叠态只剩图标，名字改由全局浮层交代（与主导航同一套：浮层往右弹）。
+   * 折叠态只剩图标，名字改由全局浮层交代（与主导航同一套）。
    * 展开态文字就摆在那儿，什么都不挂。
    */
-  const tip = (label: string): { [TIP_ATTR]?: string; [TIP_PLACE_ATTR]?: string } =>
-    collapsed ? { [TIP_ATTR]: label, [TIP_PLACE_ATTR]: 'right' } : {}
+  const tip = (label: string): { [TIP_ATTR]?: string } => (collapsed ? { [TIP_ATTR]: label } : {})
 
   return (
     <nav className="sidebar ext-sidebar" data-collapsed={collapsed} aria-label="扩展导航">
@@ -158,7 +157,6 @@ function ExtensionSidebar({
         className="icon-btn sidebar-toggle"
         aria-label={collapsed ? '展开侧栏' : '收起侧栏'}
         data-tip={collapsed ? '展开侧栏' : '收起侧栏'}
-        data-tip-place={collapsed ? 'right' : undefined}
         onClick={() => void patch({ extensionSidebarState: collapsed ? 'expanded' : 'collapsed' })}
       >
         {/* 12px：那颗钮只有 13px 宽（见 .sidebar-toggle），图标再大就顶出去了 */}
@@ -189,7 +187,7 @@ function ExtensionNavItem({ plugin, collapsed, active }: ExtensionNavItemProps):
       className="nav-item"
       aria-current={active ? true : undefined}
       // 名称被省略号截断时，浮层里还能读到全名
-      {...(collapsed ? { [TIP_ATTR]: name, [TIP_PLACE_ATTR]: 'right' } : {})}
+      {...(collapsed ? { [TIP_ATTR]: name } : {})}
       onClick={() => navigate({ name: 'plugin', entryPath })}
       // 右键只放「静音」：这是宿主对扩展唯一能做的干预（见 PluginSurface —— guest 的
       // 音频只能整台静音，做不到按轨道调音量）。
