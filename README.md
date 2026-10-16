@@ -137,6 +137,10 @@ Songloft 是「客户端 + 自建 Go 后端」的结构：后端管曲库、标�
 | macOS arm64 / x64 | `.dmg` / `.zip` | dmg 供人工安装，zip 给不便挂载 dmg 的场景。**未签名、未公证**，首次打开会被 Gatekeeper 拦下（见下） |
 | Linux x64 | `.deb` / `AppImage` / `.tar.gz` | deb 适配 Debian / Ubuntu；AppImage 免安装、双击即用（已内置静态 runtime，不依赖 `libfuse2`）；tar.gz 解压即用 |
 
+三平台的文件名是同一个式样：`Songloft-Desktop-<版本>-<系统>-<架构>.<扩展名>`，例如
+`Songloft-Desktop-1.1.7-linux-x64.AppImage`、`Songloft-Desktop-1.1.7-windows-x64.exe`
+（系统是 `windows` / `macos` / `linux`，架构是 `x64` / `arm64`）。
+
 ### macOS：首次打开被 Gatekeeper 拦下
 
 CI 里没有签名证书，所以 macOS 产物**未签名、未公证**：首次打开会被拦下（提示「已损坏」或
@@ -161,7 +165,7 @@ GNOME（Wayland）画任务栏图标只认**宿主上**的 `.desktop` 条目：�
   * 用 AppImageLauncher / Gear Lever 之类的集成工具接管这个 AppImage（产物里已经带了合规的
     条目与 hicolor 图标）；
   * 或者在本仓库里跑一次 `pnpm run desktop:install`（`bash scripts/desktop-integration.sh
-    install /path/to/Songloft.Desktop-x.AppImage` 可指向某个 AppImage；卸载用
+    install /path/to/Songloft-Desktop-<版本>-linux-x64.AppImage` 可指向某个 AppImage；卸载用
     `pnpm run desktop:uninstall`）。它只写 `~/.local/share` 下两份文件，并把路径打出来。
 
 **三端都没有自动更新**（也没接崩溃上报），升级需要手动下载新安装包替换。自行构建的方式见

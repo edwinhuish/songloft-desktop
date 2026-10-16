@@ -70,6 +70,20 @@ fileAssociations:
     role: Viewer
     mimeType: audio/x-wav
 
+# ── 产物文件名（三平台统一）────────────────────────────────────────────────────
+# 统一成 `Songloft-Desktop-<version>-<os>-<cpu>.<ext>`。三个平台各写一行，而不是共用一条顶层
+# artifactName：Linux 那一份不能走 `${arch}` 宏（见下面 linux 段），macOS 那一份又必须走它。
+#
+# 为什么不留各自的默认名：三平台的默认式本来就各不相同 —— deb 是
+# `songloft-desktop_<version>_amd64.deb`、AppImage / tar.gz 是 `${productName}-…`、Windows 是
+# `${productName} Setup ….exe`。而 GitHub 还会把资产名里的**空格换成 `.`**，于是「本地产出的
+# 文件名」与「Release 页面上看到的文件名」是两个样子：
+#   Songloft Desktop-1.1.6.AppImage  →  下载下来叫 Songloft.Desktop-1.1.6.AppImage
+# 统一之后三平台一个式样，且一律不含空格。断言在 release.yml 的「断言三平台产物齐全」那一步。
+#
+# ★ `<os>` 写 windows / macos / linux 这三个词，而**不用 `${os}` 宏**：那个宏展开成
+#   electron-builder 自己的配置键（win / mac / linux），与 README / docs 里的叫法对不上。
+# ★ `<version>` 取的是 package.json 的版本（`${version}` → `1.1.7`，**不带 `v`**）；带 v 的是标签。
 linux:
   target:
     - target: deb
@@ -78,6 +92,15 @@ linux:
       arch: [x64]
     - target: tar.gz
       arch: [x64]
+  # ★ 这里**写死 x64**，不用 `${arch}` 宏：那个宏不是恒定的 —— 同样一个 x64，在 deb 下会展开成
+  #   `amd64`、在 AppImage 下成 `x86_64`、在 tar.gz 下才是 `x64`（builder-util 的
+  #   getArtifactArchName 按**扩展名**重映射），三份 Linux 产物于是凑不出一致的后缀。
+  #   写死在这里是安全的：本平台的 target 本来就只打 x64（见上面三处 arch: [x64]）。
+  #   ⚠️ 哪天给 Linux 加 arm64，这一行必须换成能区分架构的写法（或退回 `${arch}`），
+  #      否则两种架构的产物会重名、后打的那份把先打的覆盖掉。
+  #   （文件名里的 cpu 与 deb 包**内部** control 的 `Architecture:` 无关：后者按 Debian 规范
+  #    仍是 amd64，那是 dpkg/apt 认的字段，改文件名不影响它。）
+  artifactName: Songloft-Desktop-${version}-linux-x64.${ext}
   executableName: songloft-desktop
   # ★ 指**目录**（scripts/make-icons.sh 生成的 16…512 全套），不要指单张母版：
   #   electron-builder 会把目录里每个文件按它自己声明的尺寸投进
@@ -122,6 +145,9 @@ win:
   target:
     - target: nsis
       arch: [x64]
+  # 见上面「产物文件名」那一段。Windows 的 .exe 没有 deb 那种 arch 重映射，但同样写死 x64 ——
+  # 与 Linux 那份对齐，且本平台也只打 x64
+  artifactName: Songloft-Desktop-${version}-windows-x64.${ext}
   # electron-builder 会把这个 1024×1024 的 PNG 转成 .ico。**必须显式写**：不写时它去找
   # build/icon.ico / build/icon.png，而本仓库这两份都没有 —— 那样 Windows 产物会静默退回
   # Electron 默认图标，且只有装到别人机器上才看得出来。
@@ -139,6 +165,11 @@ nsis:
 
 # ── macOS ────────────────────────────────────────────────────────────────────
 mac:
+  # 见上面「产物文件名」那一段。★ 三份里**只有这一份**用 `${arch}`：macOS 要出 arm64 与 x64
+  # 两套，而 `${arch}` 在 dmg / zip 这两种扩展名下正好就是 `arm64` / `x64`（deb 那种重映射
+  # 只发生在 Linux 的扩展名上，见 linux 段）。四份产物于是是
+  #   …-macos-arm64.dmg / …-macos-x64.dmg / …-macos-arm64.zip / …-macos-x64.zip
+  artifactName: Songloft-Desktop-${version}-macos-${arch}.${ext}
   target:
     # dmg 供人工下载安装；zip 供不便挂载 dmg 的场景（脚本化分发 / 后续自动更新）
     - target: dmg

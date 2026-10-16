@@ -188,7 +188,13 @@ jobs:
 
       # 「三个平台都绿了」不等于「三份产物都在」——比如某个平台的 target 配错了、
       # 构建过程没报错但没产出文件。这是跨平台发布最典型的静默失败，所以断言到扩展名一级。
-      - name: 断言三平台产物齐全
+      #
+      # ★ 名字也一并断言（两级判据缺一不可）：某个 target 漏了 artifactName 时，产物照样齐全、
+      #   扩展名照样对，**只有名字**会露馅。而那正是「三平台一个式样」的全部内容 ——
+      #   命名式与三份模板见 electron-builder.yml 的「产物文件名」那一段。
+      - name: 断言三平台产物齐全、命名统一
+        env:
+          TAG: ${{ needs.preflight.outputs.tag }}
         run: |
           set -euo pipefail
           ls -la artifacts
@@ -206,7 +212,24 @@ jobs:
             exit 1
           fi
 
-          echo "✅ 三平台产物齐全"
+          # 命名式：Songloft-Desktop-<version>-<os>-<cpu>.<ext>。版本号取自标签（去掉 v）——
+          # preflight 已经断言过标签与 package.json 一致，所以它必然等于 ${version} 宏的展开值。
+          # 这一步跑在生成 SHA256SUMS.txt **之前**，所以 artifacts/ 里此刻只有产物本身。
+          version="${TAG#v}"
+          bad=""
+          for file in artifacts/*; do
+            name="$(basename "$file")"
+            if [[ ! "$name" =~ ^Songloft-Desktop-"$version"-(linux|windows|macos)-(x64|arm64)\.[A-Za-z0-9.]+$ ]]; then
+              bad="$bad $name"
+            fi
+          done
+
+          if [ -n "$bad" ]; then
+            echo "::error::这些产物的名字不符合统一命名式 Songloft-Desktop-<version>-<os>-<cpu>.<ext>：${bad# }"
+            exit 1
+          fi
+
+          echo "✅ 三平台产物齐全，命名统一"
 
       # 前一个版本标签由脚本查，而不是在 workflow 里塞一行 `git describe`：版本号比较有几种
       # 特殊情形 —— `X.Y.0` 要跨越到上一个 minor 系列（v0.2.0 的说明应当涵盖 v0.1.x 的全部
