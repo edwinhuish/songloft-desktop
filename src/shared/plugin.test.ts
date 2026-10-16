@@ -8,6 +8,7 @@ import {
   pluginFallbackHue,
   pluginIconPath,
   pluginPageUrl,
+  pluginTipText,
   toPlugin,
   toPluginList,
   type JSPlugin
@@ -158,6 +159,60 @@ describe('展示辅助', () => {
 
   it('entryPathsOf 丢掉空 entryPath', () => {
     expect(entryPathsOf([plugin('a'), plugin(''), plugin('b')])).toEqual(['a', 'b'])
+  })
+})
+
+/**
+ * 悬停提示的文案。
+ *
+ * 锁它的理由与展示名相同：这是**唯一**能看到完整信息的地方（列表里名字与描述都被截断），
+ * 而它的错法全是安静的那种 —— 少一行、留一个空的「作者 」、或者把「点名字进它的页面」
+ * 说给一个根本点不开的插件听。
+ */
+describe('pluginTipText', () => {
+  const full = plugin('demo', {
+    name: '歌词补全',
+    version: '1.2.0',
+    author: 'edwin',
+    license: 'MIT',
+    description: '从公开源补全缺失的歌词与翻译',
+    homepage: 'https://example.com/lyric-plus'
+  })
+
+  it('一行一个字段，顺序固定', () => {
+    expect(pluginTipText(full).split('\n')).toEqual([
+      '歌词补全 · v1.2.0',
+      '作者 edwin · 许可 MIT',
+      '点名字进它的页面',
+      '从公开源补全缺失的歌词与翻译',
+      '主页 https://example.com/lyric-plus'
+    ])
+  })
+
+  it('空字段整行不出现，不留半截', () => {
+    const bare = plugin('demo', { name: '豆瓣标签', version: '', author: '', license: '' })
+    expect(pluginTipText(bare).split('\n')).toEqual(['豆瓣标签', '点名字进它的页面'])
+  })
+
+  it('只有作者没有许可时，那一行也成立', () => {
+    expect(pluginTipText(plugin('demo', { author: 'edwin' })).split('\n')[1]).toBe('作者 edwin')
+  })
+
+  it('进不去的插件说的是原因，不是「点名字」', () => {
+    const disabled = plugin('demo', { status: 'inactive', description: '描述' })
+    // 作者与许可都没有 → 那一行整个不出现，原因行顶上来（不是留个空行）
+    expect(pluginTipText(disabled).split('\n')).toEqual([
+      'DEMO · v1.0.0',
+      '已停用，启用后就能打开',
+      '描述'
+    ])
+    expect(pluginTipText(disabled)).not.toContain('点名字')
+
+    // 启用但没入口，是第三种说法（不是「已停用」）
+    expect(pluginTipText(plugin('')).split('\n')[1]).toBe('这个扩展没有页面入口')
+    expect(pluginTipText(plugin('', { status: 'error' })).split('\n')[1]).toBe(
+      '运行异常，暂时打不开（后端在重试）'
+    )
   })
 })
 

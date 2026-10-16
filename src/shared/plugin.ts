@@ -156,6 +156,50 @@ export function isDisplayable(plugin: JSPlugin): boolean {
 }
 
 /**
+ * 这一条插件「进不去」的原因。
+ *
+ * 只对进不去的说；能进的那一档由 pluginTipText 说另一句。
+ *
+ * ★ 分三种说法而不是一律「暂不可用」：这三种的**下一步**完全不同 —— 停用的去按开关、
+ * 运行异常的等后端自愈、没有入口的是这个包本身的问题。含糊过去，用户会拿着同一种办法
+ * 去试一件根本不成立的事。
+ */
+export function pluginBlockedReason(plugin: JSPlugin): string {
+  if (plugin.status === 'error') return '运行异常，暂时打不开（后端在重试）'
+  if (plugin.status !== 'active') return '已停用，启用后就能打开'
+  return '这个扩展没有页面入口'
+}
+
+/**
+ * 悬停插件管理页里那一行时给人的**一整份**信息（多行文本，一行一个字段）。
+ *
+ * 为什么要有它：那一行是列表，名字与描述都可能被截断（描述最多两行），光看行里认不全。
+ * 于是把「这一行装不下的」和「这一行压根没显示的」一起交代掉。
+ *
+ * ★ 返回纯文本而不是 JSX：提示层是**字符串**属性驱动的（见 components/Tooltip.tsx 的
+ *   data-tip），只认文本。多行靠 `\n`，样式那边用 white-space: pre-line 保留换行。
+ * ★ 空字段整行不出现，不留「作者 」这种半截；顺序固定，便于扫读时形成肌肉记忆。
+ */
+export function pluginTipText(plugin: JSPlugin): string {
+  const version = plugin.version ? `v${plugin.version}` : ''
+  const credit = [
+    plugin.author ? `作者 ${plugin.author}` : '',
+    plugin.license ? `许可 ${plugin.license}` : ''
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  const lines = [
+    [pluginDisplayName(plugin), version].filter(Boolean).join(' · '),
+    credit,
+    isDisplayable(plugin) ? '点名字进它的页面' : pluginBlockedReason(plugin),
+    plugin.description,
+    plugin.homepage ? `主页 ${plugin.homepage}` : ''
+  ]
+  return lines.filter(Boolean).join('\n')
+}
+
+/**
  * 按持久化的 entryPath 顺序重排。
  *
  * 四条语义照搬上游 plugin_order.dart（后端 `plugin_order` 存的正是这份列表）：

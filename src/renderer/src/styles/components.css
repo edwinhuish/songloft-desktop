@@ -3069,6 +3069,12 @@ select.input option {
      而不是一条横穿屏幕的长条。长路径中间没有空格，得允许在任意字符处断开 */
   max-width: 340px;
   overflow-wrap: anywhere;
+  /*
+   * 提示可以是多行的：一行一个字段（见 shared/plugin.ts 的 pluginTipText，它用 `\n` 分行）。
+   * pre-line 只保留换行、空白仍按普通规则折叠 —— 所以单行的提示一个字都不变，
+   * 不会因为这一行冒出莫名的空行或缩进。
+   */
+  white-space: pre-line;
   pointer-events: none;
 }
 
@@ -4070,7 +4076,16 @@ html[data-mini='true'] .toasts {
   min-width: 0;
 }
 
-.store-card-link {
+/*
+ * 一行里的「安静链接」：商店卡片底部的「主页」、插件管理行名字旁边那颗。
+ *
+ * 原先叫 .store-card-link，第二处（插件管理）用上时提成通用名 —— 两处的骨架完全一样
+ * （无壳子、下划线、悬停变色），字号与字重各自继承所在行，差得多的那一处再单独压一档
+ * （见 .extension-name .link）。
+ */
+.link {
+  /* 谁都不许把链接挤扁：它旁边总有一个「可伸缩的那一格」（卡片底行的作者、名字行的名字），
+     收窄只能发生在那一格上 */
   flex: none;
   padding: 0;
   border: none;
@@ -4083,7 +4098,7 @@ html[data-mini='true'] .toasts {
   transition: color var(--dur-1) var(--ease);
 }
 
-.store-card-link:hover {
+.link:hover {
   color: var(--text-1);
 }
 
@@ -4171,8 +4186,8 @@ html[data-mini='true'] .toasts {
  * ★ 不给按钮壳子 —— padding / border / 底色一律清掉：它得与同一列里点不动的那些名字
  *   长得一模一样。同一条名单里做成两种字形，等于让「有没有页面」这件事看起来是个
  *   样式差异，而它其实是启用状态。
- * ★ 悬停上主题色是这一套的「这是可点的文字」信号（同 .store-card-link、.titlebar-* 的
- *   那几处）。焦点环不在这里写：base.css 有一条全局的 :focus-visible。
+ * ★ 悬停上主题色是这一套的「这是可点的文字」信号（同 .link、.titlebar-* 的那几处）。
+ *   焦点环不在这里写：base.css 有一条全局的 :focus-visible。
  */
 .extension-open {
   /* 收窄与省略号都交给 .extension-name .truncate 那两条 —— 按钮身上也挂 .truncate
@@ -4193,6 +4208,39 @@ html[data-mini='true'] .toasts {
 .extension-meta {
   font-size: 11.5px;
   color: var(--text-2);
+}
+
+/*
+ * 插件说明：**最多两行**，第 3 行起裁掉。
+ *
+ * 为什么不再与作者挤在同一个截断行里（原来是「作者 · 说明」一整行）：那样作者的宽度会把说明的
+ * 第一行吃掉，「描述能看两行」就永远不成立。
+ * 为什么必须封顶：说明的长度不可控（插件作者写多长都有可能），列表的行高不能由它决定 ——
+ * 一条写成长篇的说明会把整页撑开。全文在悬停的提示里（见 ExtensionsPage 的 data-tip）。
+ */
+.extension-desc {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+/*
+ * 名字那一行里的链接（「主页」）要退到名字后面去。
+ *
+ * 那一行是 13.5px / 580 的粗体，链接照 .link 继承下来就与名字一样抢眼，而它只是个次要出口；
+ * 所以压到次要文字那一档（同 .extension-meta 的 11.5px），只在悬停时上主题色。
+ */
+.extension-name .link {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.extension-name .link:hover {
+  color: var(--accent);
 }
 
 /* 行尾的动作组：常驻运行 / 更新 / 删除 三颗图标按钮横向平铺（原先收在一颗「⋯」里，

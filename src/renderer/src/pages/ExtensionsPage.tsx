@@ -16,7 +16,13 @@
 import { useEffect, useRef, useState } from 'react'
 
 import type { ExtensionSidebarState } from '@shared/ipc'
-import { entryPathsOf, isDisplayable, pluginDisplayName, type JSPlugin } from '@shared/plugin'
+import {
+  entryPathsOf,
+  isDisplayable,
+  pluginDisplayName,
+  pluginTipText,
+  type JSPlugin
+} from '@shared/plugin'
 import { getGithubProxy } from '@/api/endpoints'
 import {
   checkPluginUpdate,
@@ -494,19 +500,6 @@ interface ExtensionRowProps {
   onUninstall: () => void
 }
 
-/**
- * 名字点不动的原因。
- *
- * 分三种说法而不是一律「暂不可用」：这三种的**下一步**完全不同 —— 停用的去按开关、
- * 运行异常的等后端自愈、没有入口的是这个包本身的问题。含糊过去，用户会拿着同一种
- * 办法去试一件根本不成立的事。
- */
-function notOpenableReason(plugin: JSPlugin): string {
-  if (plugin.status === 'error') return '运行异常，暂时打不开（后端在重试）'
-  if (plugin.status !== 'active') return '已停用，启用后就能打开'
-  return '这个扩展没有页面入口'
-}
-
 function ExtensionRow({
   plugin,
   dragging,
@@ -527,8 +520,6 @@ function ExtensionRow({
   const enabled = plugin.status === 'active'
   /** 有没有可打开的页面（与扩展侧栏列不列它是同一条判据，见 shared/plugin.ts） */
   const openable = isDisplayable(plugin)
-  // 版本号不在这里（它挪到名字右边当标签了），所以这一行只剩作者与说明，可能整个是空的
-  const meta = [plugin.author, plugin.description].filter(Boolean).join(' · ')
 
   return (
     <li
@@ -557,7 +548,13 @@ function ExtensionRow({
 
       <PluginIcon plugin={plugin} size={34} />
 
-      <div className="extension-info">
+      {/*
+        信息区整块挂一份「完整信息」提示（见 shared/plugin.ts 的 pluginTipText）：列表是给人扫的，
+        名字会被省略号截断、描述最多两行，光看行里认不全。挂在**这一块**而不是整行上 —— 行尾那三颗
+        按钮各有自己的说明，挂在行上会让它们与这一块抢同一个提示。
+        ★ 名字自己不再挂提示：这一块已经覆盖它，两处都挂等于同一行里有两个提示互相盖。
+      */}
+      <div className="extension-info" data-tip={pluginTipText(plugin)}>
         <div className="extension-name">
           {/*
             名字长了出省略号，右侧那几枚标签一律不许被挤扁（见 .extension-name 那两条规则）。
@@ -573,9 +570,7 @@ function ExtensionRow({
               {name}
             </button>
           ) : (
-            <span className="truncate" data-tip={notOpenableReason(plugin)}>
-              {name}
-            </span>
+            <span className="truncate">{name}</span>
           )}
           {/*
             版本号是一枚**灰底标签**，紧挨着名字。
@@ -590,10 +585,31 @@ function ExtensionRow({
               运行异常
             </span>
           ) : null}
+          {/*
+            主页。放在「名字 + 徽标」这一串的**末尾**而不是名字与徽标之间：它是这一行的一个动作，
+            插在中间会把「名字配着哪个版本」这一组拆开。
+            外链交给系统浏览器（渲染层自己开窗会被主进程的导航围栏拦下，与商店卡片那颗同一条）。
+            aria-label 补全语境 —— 一列行里光念「主页」不知道是谁的主页。
+          */}
+          {plugin.homepage ? (
+            <button
+              type="button"
+              className="link"
+              aria-label={`打开 ${name} 的主页`}
+              onClick={() => void window.songloft.shell.openExternal(plugin.homepage)}
+            >
+              主页
+            </button>
+          ) : null}
         </div>
-        {/* 版本号搬去了名字那一行，这里只剩作者与说明；两者都没有时整行不渲染 ——
-            否则会留一道空行，把行高撑得比有说明的那些还高 */}
-        {meta ? <div className="extension-meta truncate">{meta}</div> : null}
+        {/* 作者。两者都没有时整行不渲染 —— 否则会留一道空行，把行高撑得比有作者的那些还高 */}
+        {plugin.author ? <div className="extension-meta truncate">{plugin.author}</div> : null}
+        {/*
+          说明单独成块、最多两行（.extension-desc 的 line-clamp），不再与作者挤在同一个截断行里：
+          那个写法下作者占掉的那一段会把说明的第一行吃掉，「描述能看两行」当场不成立。
+          全文在悬停提示里（见上面 extension-info 的 data-tip）。
+        */}
+        {plugin.description ? <div className="extension-desc">{plugin.description}</div> : null}
       </div>
 
       <Switch checked={enabled} onChange={onToggle} ariaLabel={`启用 ${name}`} />

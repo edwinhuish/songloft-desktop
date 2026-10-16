@@ -532,7 +532,7 @@ function StoreCard({ entry, pending, disabled, onInstall }: StoreCardProps): Rea
         {entry.homepage ? (
           <button
             type="button"
-            className="store-card-link"
+            className="link"
             // 外链交给系统浏览器：渲染层自己开窗会被主进程的导航围栏拦下（见 main/windows.ts）
             onClick={() => void window.songloft.shell.openExternal(entry.homepage)}
           >
