@@ -4165,6 +4165,31 @@ html[data-mini='true'] .toasts {
   flex: none;
 }
 
+/*
+ * 点得动的那个名字（只有 isDisplayable 的扩展才有页面，见 ExtensionsPage 的 ExtensionRow）。
+ *
+ * ★ 不给按钮壳子 —— padding / border / 底色一律清掉：它得与同一列里点不动的那些名字
+ *   长得一模一样。同一条名单里做成两种字形，等于让「有没有页面」这件事看起来是个
+ *   样式差异，而它其实是启用状态。
+ * ★ 悬停上主题色是这一套的「这是可点的文字」信号（同 .store-card-link、.titlebar-* 的
+ *   那几处）。焦点环不在这里写：base.css 有一条全局的 :focus-visible。
+ */
+.extension-open {
+  /* 收窄与省略号都交给 .extension-name .truncate 那两条 —— 按钮身上也挂 .truncate
+     （见 JSX），两档共用同一套截断规则，不再抄一遍 min-width */
+  padding: 0;
+  border: none;
+  background: none;
+  /* 按钮默认居中：截断到出省略号时，那一截会飘在中间，与上面几行的左对齐对不上 */
+  text-align: left;
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease);
+}
+
+.extension-open:hover {
+  color: var(--accent);
+}
+
 .extension-meta {
   font-size: 11.5px;
   color: var(--text-2);

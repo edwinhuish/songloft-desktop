@@ -6,12 +6,17 @@
  *
  * 列表顺序就是扩展侧栏里那份顺序 —— 同一个 `order`，同一个 applyPluginOrder。
  * 两处各存一份的话，「拖完没反应」或「侧栏顺序自己变了」会随机出现。
+ *
+ * ★ **名字本身就是「进这个扩展」的入口**（与扩展侧栏里那一列是同一个去处）。所以可点
+ *   与否只看 `isDisplayable`：停用与「运行异常」的**没有可打开的页面**，把名字做成按钮
+ *   只会点出一片空白（侧栏不列它们也是同一条判据）。那两种状态的名字因此仍是纯文本，
+ *   挂一句说明交代为什么点不动。
  */
 
 import { useEffect, useRef, useState } from 'react'
 
 import type { ExtensionSidebarState } from '@shared/ipc'
-import { entryPathsOf, pluginDisplayName, type JSPlugin } from '@shared/plugin'
+import { entryPathsOf, isDisplayable, pluginDisplayName, type JSPlugin } from '@shared/plugin'
 import { getGithubProxy } from '@/api/endpoints'
 import {
   checkPluginUpdate,
@@ -42,6 +47,7 @@ import { requireClient } from '@/state/useAuth'
 import { useOrderedPlugins, usePlugins } from '@/state/usePlugins'
 import { useSettings } from '@/state/useSettings'
 import { toast } from '@/state/useToasts'
+import { useUi } from '@/state/useUi'
 
 /** 扩展侧栏的三档形态，与 shared/ipc.ts 的 ExtensionSidebarState 一一对应 */
 const SIDEBAR_CHOICES: { value: ExtensionSidebarState; label: string }[] = [
@@ -56,6 +62,8 @@ export function ExtensionsPage(): React.JSX.Element {
   const error = usePlugins((state) => state.error)
   const setOrder = usePlugins((state) => state.setOrder)
   const load = usePlugins((state) => state.load)
+  /** 点名字进扩展页：走的是扩展面自己的那条路由（框架右侧那一栏换成它的 webview） */
+  const navigate = useUi((state) => state.navigate)
 
   /* 扩展侧栏的形态（展开 / 折叠 / 隐藏）。它既是「默认」也是「当前」——一个设置而已 */
   const sidebarState = useSettings((state) => state.settings.extensionSidebarState)
@@ -415,6 +423,7 @@ export function ExtensionsPage(): React.JSX.Element {
                 setDragIndex(null)
                 setOverIndex(null)
               }}
+              onOpen={() => navigate({ name: 'plugin', entryPath: plugin.entryPath })}
               onToggle={(next) => togglePlugin(plugin, next)}
               onToggleKeepAlive={() => void toggleKeepAlive(plugin)}
               onUpdate={() => void updateOne(plugin)}
@@ -477,10 +486,25 @@ interface ExtensionRowProps {
   onDragOver: () => void
   onDrop: () => void
   onDragEnd: () => void
+  /** 点名字进这个扩展的页面 */
+  onOpen: () => void
   onToggle: (next: boolean) => void
   onToggleKeepAlive: () => void
   onUpdate: () => void
   onUninstall: () => void
+}
+
+/**
+ * 名字点不动的原因。
+ *
+ * 分三种说法而不是一律「暂不可用」：这三种的**下一步**完全不同 —— 停用的去按开关、
+ * 运行异常的等后端自愈、没有入口的是这个包本身的问题。含糊过去，用户会拿着同一种
+ * 办法去试一件根本不成立的事。
+ */
+function notOpenableReason(plugin: JSPlugin): string {
+  if (plugin.status === 'error') return '运行异常，暂时打不开（后端在重试）'
+  if (plugin.status !== 'active') return '已停用，启用后就能打开'
+  return '这个扩展没有页面入口'
 }
 
 function ExtensionRow({
@@ -493,6 +517,7 @@ function ExtensionRow({
   onDragOver,
   onDrop,
   onDragEnd,
+  onOpen,
   onToggle,
   onToggleKeepAlive,
   onUpdate,
@@ -500,6 +525,8 @@ function ExtensionRow({
 }: ExtensionRowProps): React.JSX.Element {
   const name = pluginDisplayName(plugin)
   const enabled = plugin.status === 'active'
+  /** 有没有可打开的页面（与扩展侧栏列不列它是同一条判据，见 shared/plugin.ts） */
+  const openable = isDisplayable(plugin)
   // 版本号不在这里（它挪到名字右边当标签了），所以这一行只剩作者与说明，可能整个是空的
   const meta = [plugin.author, plugin.description].filter(Boolean).join(' · ')
 
@@ -532,8 +559,24 @@ function ExtensionRow({
 
       <div className="extension-info">
         <div className="extension-name">
-          {/* 名字长了出省略号，右侧那几枚标签一律不许被挤扁（见 .extension-name 那两条规则） */}
-          <span className="truncate">{name}</span>
+          {/*
+            名字长了出省略号，右侧那几枚标签一律不许被挤扁（见 .extension-name 那两条规则）。
+            ★ 它同时是「进这个扩展」的入口：点一下，框架右侧那一栏换成它的页面（与扩展侧栏
+              里那一列同一条路由）。
+            ★ 只让**名字**可点、不做整行 click：这一行还兼着拖拽排序、启用开关与三颗动作
+              按钮，整行可点会把「按住拖一下」变成「点进了扩展页」。
+            ★ 按钮上仍带着 .truncate（而不是套一层）：省略号那一套要靠它当**那个被压缩的
+              flex 子项**，多套一层就要把 min-width / 收窄规则再抄一遍。
+          */}
+          {openable ? (
+            <button type="button" className="truncate extension-open" onClick={onOpen}>
+              {name}
+            </button>
+          ) : (
+            <span className="truncate" data-tip={notOpenableReason(plugin)}>
+              {name}
+            </span>
+          )}
           {/*
             版本号是一枚**灰底标签**，紧挨着名字。
             它原先混在下面那行「作者 · 说明」里 —— 一串说明文字中间的一个版本号根本认不出来，
